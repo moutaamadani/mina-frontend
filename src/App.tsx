@@ -4,7 +4,7 @@ const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
   "https://mina-editorial-ai-api.onrender.com";
 
-// -------- Types --------
+const ADMIN_KEY = import.meta.env.VITE_MINA_ADMIN_KEY || "";
 
 type HealthPayload = {
   ok: boolean;
@@ -73,6 +73,52 @@ type LikePayload = {
   };
 };
 
+type ApiGeneration = {
+  id: string;
+  type: "image" | "motion";
+  sessionId: string;
+  customerId: string;
+  platform: string;
+  prompt: string;
+  outputUrl: string;
+  createdAt: string;
+  meta?: Record<string, any>;
+};
+
+type CreditsHistoryEntry = {
+  delta: number;
+  reason: string;
+  source: string;
+  at: string;
+};
+
+type CustomerHistory = {
+  ok: boolean;
+  customerId: string;
+  credits: {
+    balance: number;
+    history: CreditsHistoryEntry[];
+  };
+  generations: ApiGeneration[];
+  feedbacks: any[];
+};
+
+type AdminOverview = {
+  ok: boolean;
+  totals: {
+    customersWithCredits: number;
+    generations: number;
+    feedbacks: number;
+  };
+  generations: ApiGeneration[];
+  feedbacks: any[];
+  credits: {
+    customerId: string;
+    balance: number;
+    history: CreditsHistoryEntry[];
+  }[];
+};
+
 type StillItem = {
   id: string;
   url: string;
@@ -87,9 +133,26 @@ type MotionItem = {
   createdAt: string;
 };
 
-// -------- Helpers --------
+const devCustomerId = "8766256447571";
 
-const devCustomerId = "8766256447571"; // your test user, credits come from backend
+function getInitialCustomerId(): string {
+  try {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("customerId");
+      if (fromUrl && fromUrl.trim().length > 0) {
+        return fromUrl.trim();
+      }
+      const stored = window.localStorage.getItem("minaCustomerId");
+      if (stored && stored.trim().length > 0) {
+        return stored.trim();
+      }
+    }
+  } catch {
+    // ignore client storage errors
+  }
+  return devCustomerId;
+}
 
 function formatTime(ts?: string) {
   if (!ts) return "";
@@ -105,13 +168,14 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-// -------- App --------
-
 function App() {
-  // Tabs
-  const [activeTab, setActiveTab] = useState<"playground" | "profile">(
+  const [activeTab, setActiveTab] = useState<"playground" | "profile" | "admin">(
     "playground"
   );
+
+  const [customerId, setCustomerId] = useState<string>(getInitialCustomerId);
+
+  const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
 
   // Health
   const [health, setHealth] = useState<HealthPayload | null>(null);
@@ -123,12 +187,12 @@ function App() {
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
 
-  // Session (Mina session id from API)
+  // Session
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionStarting, setSessionStarting] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  // Still: inputs
+  // Still inputs
   const [productImageUrl, setProductImageUrl] = useState("");
   const [styleImageUrlsRaw, setStyleImageUrlsRaw] = useState("");
   const [brief, setBrief] = useState("");
@@ -137,51 +201,64 @@ function App() {
   const [stylePresetKey, setStylePresetKey] = useState("soft-desert-editorial");
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
 
-  // Still: generation state
+  // Still generation
   const [stillGenerating, setStillGenerating] = useState(false);
   const [stillError, setStillError] = useState<string | null>(null);
   const [lastStillPrompt, setLastStillPrompt] = useState<string | null>(null);
   const [stillItems, setStillItems] = useState<StillItem[]>([]);
   const [stillIndex, setStillIndex] = useState(0);
 
-  // Motion: inputs
+  // Motion inputs / suggestion
   const [motionDescription, setMotionDescription] = useState("");
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
     null
   );
 
-  // Motion: generation state
+  // Motion generation
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
 
-  // Profile / auto-topup (UI only for now)
+  // Profile / auto-topup (UI only)
   const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
   const [autoTopupLimit, setAutoTopupLimit] = useState("200");
   const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
 
-  // --- Derived: steps completion (Notion-like) ---
+  // History from backend
+  const [history, setHistory] = useState<CustomerHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
+  // Admin overview
+  const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(
+    null
+  );
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+
+  // Persist customerId for future visits
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("minaCustomerId", customerId);
+      }
+    } catch {
+      // ignore
+    }
+  }, [customerId]);
+
+  // --- Step dots (Notion-like) ---
   const step1Done = Boolean(health?.ok && sessionId);
-  const step2Done = Boolean(productImageUrl || styleImageUrlsRaw.trim().length);
+  const step2Done = Boolean(
+    productImageUrl.trim().length || styleImageUrlsRaw.trim().length
+  );
   const step3Done = Boolean(brief.trim().length);
   const step4Done = stillItems.length > 0;
   const step5Done = motionItems.length > 0;
 
-  // --- Start-up: check health + credits + session once ---
-
-  useEffect(() => {
-    const bootstrap = async () => {
-      await handleCheckHealth();
-      await handleFetchCredits();
-      await handleStartSession();
-    };
-    void bootstrap();
-  }, []);
-
-  // --- API calls ---
+  // --- API helpers ---
 
   const handleCheckHealth = async () => {
     try {
@@ -206,7 +283,7 @@ function App() {
       setCreditsError(null);
       const res = await fetch(
         `${API_BASE_URL}/credits/balance?customerId=${encodeURIComponent(
-          devCustomerId
+          customerId
         )}`
       );
       if (!res.ok) {
@@ -229,7 +306,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: devCustomerId,
+          customerId,
           platform,
           title: "Mina Editorial Session",
         }),
@@ -250,6 +327,62 @@ function App() {
     }
   };
 
+  const fetchHistory = async (cid: string) => {
+    try {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/history/customer/${encodeURIComponent(cid)}`
+      );
+      if (!res.ok) {
+        throw new Error(`History error: ${res.status}`);
+      }
+      const data = (await res.json()) as CustomerHistory;
+      setHistory(data);
+    } catch (err: any) {
+      setHistoryError(err?.message || "Failed to load history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const fetchAdminOverview = async () => {
+    if (!isAdmin || !ADMIN_KEY) return;
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/history/admin/overview?key=${encodeURIComponent(
+          ADMIN_KEY
+        )}`
+      );
+      if (!res.ok) {
+        throw new Error(`Admin error: ${res.status}`);
+      }
+      const data = (await res.json()) as AdminOverview;
+      setAdminOverview(data);
+    } catch (err: any) {
+      setAdminError(err?.message || "Failed to load admin overview.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // --- Bootstrap once on load ---
+  useEffect(() => {
+    const bootstrap = async () => {
+      await handleCheckHealth();
+      await handleFetchCredits();
+      await handleStartSession();
+      await fetchHistory(customerId);
+      if (isAdmin) {
+        await fetchAdminOverview();
+      }
+    };
+    void bootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleGenerateStill = async () => {
     try {
       setStillGenerating(true);
@@ -264,7 +397,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: devCustomerId,
+          customerId,
           sessionId,
           productImageUrl: productImageUrl.trim() || null,
           styleImageUrls,
@@ -315,6 +448,11 @@ function App() {
         setStillIndex(0);
         return next;
       });
+
+      void fetchHistory(customerId);
+      if (isAdmin) {
+        void fetchAdminOverview();
+      }
     } catch (err: any) {
       setStillError(err?.message || "Unexpected error generating still.");
     } finally {
@@ -334,7 +472,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: devCustomerId,
+          customerId,
           referenceImageUrl: currentStill.url,
           tone,
           platform,
@@ -387,7 +525,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: devCustomerId,
+          customerId,
           sessionId,
           lastImageUrl: currentStill.url,
           motionDescription: motionDescription.trim(),
@@ -395,7 +533,7 @@ function App() {
           platform,
           minaVisionEnabled,
           stylePresetKey,
-          durationSeconds: 5, // your default
+          durationSeconds: 5,
         }),
       });
 
@@ -436,6 +574,11 @@ function App() {
         setMotionIndex(0);
         return next;
       });
+
+      void fetchHistory(customerId);
+      if (isAdmin) {
+        void fetchAdminOverview();
+      }
     } catch (err: any) {
       setMotionError(err?.message || "Unexpected error generating motion.");
     } finally {
@@ -456,7 +599,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId: devCustomerId,
+          customerId,
           sessionId,
           generationId: item.id,
           platform,
@@ -475,11 +618,11 @@ function App() {
       const data = (await res.json()) as LikePayload;
       console.log("Like stored. Total likes:", data.totals.likesForCustomer);
     } catch {
-      // ignore like errors from UI
+      // ignore like errors
     }
   };
 
-  // -------- Render helpers --------
+  // --- Derived values ---
 
   const currentStill = stillItems[stillIndex] || null;
   const currentMotion = motionItems[motionIndex] || null;
@@ -508,11 +651,15 @@ function App() {
 
   const isConnected = Boolean(health?.ok);
 
-  // -------- JSX --------
+  const historyStills: ApiGeneration[] =
+    history?.generations.filter((g) => g.type === "image") ?? [];
+  const historyMotions: ApiGeneration[] =
+    history?.generations.filter((g) => g.type === "motion") ?? [];
+
+  // --- JSX ---
 
   return (
     <div className="mina-root">
-      {/* Header */}
       <header className="mina-header">
         <div className="mina-logo">MINA · Editorial AI</div>
         <div className="mina-header-right">
@@ -535,18 +682,28 @@ function App() {
             >
               Profile
             </button>
+            {isAdmin && (
+              <button
+                className={classNames(
+                  "tab",
+                  activeTab === "admin" && "active"
+                )}
+                onClick={() => setActiveTab("admin")}
+              >
+                Admin
+              </button>
+            )}
           </div>
           <div className="mina-credits-badge">{creditsLabel}</div>
         </div>
       </header>
 
-      {/* Main */}
       <main className="mina-main">
-        {activeTab === "playground" ? (
+        {activeTab === "playground" && (
           <div className="mina-layout">
-            {/* LEFT – Steps / inputs */}
+            {/* Left column */}
             <div className="mina-left">
-              {/* STEP 1 – Connection & session */}
+              {/* Step 1 */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -623,7 +780,7 @@ function App() {
                 </div>
               </section>
 
-              {/* STEP 2 – Product & style */}
+              {/* Step 2 */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -699,7 +856,7 @@ function App() {
                 </div>
               </section>
 
-              {/* STEP 3 – Brief & tone */}
+              {/* Step 3 */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -761,7 +918,7 @@ function App() {
                 </div>
               </section>
 
-              {/* STEP 4 & 5 – Motion */}
+              {/* Step 4 + 5 */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -770,7 +927,7 @@ function App() {
                       step4Done && step5Done && "step-done"
                     )}
                   />
-                  <span>04 · Motion loop</span>
+                <span>04 · Motion loop</span>
                 </div>
                 <div className="section-body">
                   <div className="hint small">
@@ -823,9 +980,9 @@ function App() {
               </section>
             </div>
 
-            {/* RIGHT – Output / pile */}
+            {/* Right column */}
             <div className="mina-right">
-              {/* Stills */}
+              {/* Stills pile */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -910,7 +1067,7 @@ function App() {
                 </div>
               </section>
 
-              {/* Motion */}
+              {/* Motion pile */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -925,8 +1082,8 @@ function App() {
                   <div className="output-shell">
                     {motionItems.length === 0 ? (
                       <div className="output-placeholder">
-                        No motion yet. Generate a still, let Mina suggest motion,
-                        then animate.
+                        No motion yet. Generate a still, let Mina suggest
+                        motion, then animate.
                       </div>
                     ) : (
                       <>
@@ -975,7 +1132,9 @@ function App() {
                               className="secondary-button"
                               onClick={() =>
                                 setMotionIndex((prev) =>
-                                  prev >= motionItems.length - 1 ? 0 : prev + 1
+                                  prev >= motionItems.length - 1
+                                    ? 0
+                                    : prev + 1
                                 )
                               }
                               disabled={motionItems.length <= 1}
@@ -998,8 +1157,9 @@ function App() {
               </section>
             </div>
           </div>
-        ) : (
-          // PROFILE TAB
+        )}
+
+        {activeTab === "profile" && (
           <div className="profile-layout">
             <section className="mina-section wide">
               <div className="section-title">
@@ -1009,16 +1169,21 @@ function App() {
               <div className="section-body">
                 <div className="profile-body">
                   <div>
-                    <div className="profile-label">Customer id</div>
-                    <div className="profile-value">{devCustomerId}</div>
+                    <div className="profile-label">Shopify customer id</div>
+                    <div className="profile-value">{customerId}</div>
                     <div className="profile-hint">
-                      Coming from Shopify customer. Later: real login / auth.
+                      You can link from Shopify like:
+                      <br />
+                      <code>
+                        https://mina.yourdomain.com?customerId=&#123;&#123; customer.id &#125;&#125;
+                      </code>
                     </div>
                   </div>
                   <div>
                     <div className="profile-label">Credits</div>
                     <div className="profile-value">
-                      {credits?.balance ?? 0} Machta
+                      {credits?.balance ?? history?.credits?.balance ?? 0}{" "}
+                      Machta
                     </div>
                     <div className="profile-hint">
                       Image −{imageCost} · Motion −{motionCost} credits
@@ -1065,15 +1230,53 @@ function App() {
                           onChange={(e) => setAutoTopupPack(e.target.value)}
                         >
                           <option value="MINA-50">Mina 50 Machta</option>
-                          {/* later: more packs */}
                         </select>
                       </div>
                     </div>
                     <div className="profile-hint">
-                      This is UI only for now. Later your admin dashboard will
-                      connect this to Stripe + Shopify.
+                      UI only for now. Later: real Stripe + Shopify billing
+                      limits.
                     </div>
                   </div>
+                </div>
+
+                <div className="profile-credits-history">
+                  {historyLoading && (
+                    <div className="hint small">Loading history…</div>
+                  )}
+                  {historyError && (
+                    <div className="status-error">{historyError}</div>
+                  )}
+                  {history?.credits?.history?.length ? (
+                    <>
+                      <div className="profile-label">Recent credit events</div>
+                      <ul className="credits-list">
+                        {history.credits.history
+                          .slice()
+                          .reverse()
+                          .slice(0, 5)
+                          .map((h, idx) => (
+                            <li key={idx}>
+                              <span className="credits-delta">
+                                {h.delta > 0 ? "+" : ""}
+                                {h.delta}
+                              </span>
+                              <span className="credits-reason">{h.reason}</span>
+                              <span className="credits-time">
+                                {formatTime(h.at)}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    </>
+                  ) : (
+                    !historyLoading &&
+                    !historyError && (
+                      <div className="hint small">
+                        No credit history yet for this account.
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             </section>
@@ -1085,47 +1288,162 @@ function App() {
               </div>
               <div className="section-body">
                 <div className="hint small">
-                  Next step: this will pull real history from the Mina backend.
-                  For now, only the current session lives in memory on the
-                  server.
+                  This reads from Mina’s server history for this customer id
+                  (not from your browser only).
                 </div>
                 <div className="gallery-grid">
-                  {stillItems.map((s) => (
-                    <div key={s.id} className="gallery-item">
+                  {historyStills.map((g) => (
+                    <div key={g.id} className="gallery-item">
                       <div className="gallery-media">
-                        <img src={s.url} alt="Still" loading="lazy" />
+                        <img src={g.outputUrl} alt="Still" loading="lazy" />
                       </div>
                       <div className="gallery-meta">
                         <div className="gallery-meta-top">
                           <span className="gallery-tag">Still</span>
                           <span className="gallery-date">
-                            {formatTime(s.createdAt)}
+                            {formatTime(g.createdAt)}
                           </span>
                         </div>
                       </div>
                     </div>
                   ))}
-                  {motionItems.map((m) => (
-                    <div key={m.id} className="gallery-item">
+                  {historyMotions.map((g) => (
+                    <div key={g.id} className="gallery-item">
                       <div className="gallery-media">
-                        <video src={m.url} muted playsInline />
+                        <video src={g.outputUrl} muted playsInline loop />
                       </div>
                       <div className="gallery-meta">
                         <div className="gallery-meta-top">
                           <span className="gallery-tag subtle">Motion</span>
                           <span className="gallery-date">
-                            {formatTime(m.createdAt)}
+                            {formatTime(g.createdAt)}
                           </span>
                         </div>
                       </div>
                     </div>
                   ))}
-                  {stillItems.length === 0 && motionItems.length === 0 && (
-                    <div className="hint small">
-                      No generations yet in this browser. Use Playground first.
-                    </div>
-                  )}
+                  {!historyLoading &&
+                    !historyError &&
+                    historyStills.length === 0 &&
+                    historyMotions.length === 0 && (
+                      <div className="hint small">
+                        No generations in server history yet.
+                      </div>
+                    )}
                 </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === "admin" && isAdmin && (
+          <div className="profile-layout">
+            <section className="mina-section wide">
+              <div className="section-title">
+                <span className="step-dot step-done" />
+                <span>Admin · Logs & overview</span>
+              </div>
+              <div className="section-body">
+                <div className="field-row">
+                  <div className="field">
+                    <div className="field-label">Admin key status</div>
+                    <div className="profile-value">
+                      {ADMIN_KEY ? "Configured" : "Not set"}
+                    </div>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    onClick={fetchAdminOverview}
+                    disabled={adminLoading || !ADMIN_KEY}
+                  >
+                    {adminLoading ? "Refreshing…" : "Refresh overview"}
+                  </button>
+                </div>
+                {adminError && (
+                  <div className="status-error">{adminError}</div>
+                )}
+                {adminOverview && (
+                  <>
+                    <div className="profile-body">
+                      <div>
+                        <div className="profile-label">Customers</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.customersWithCredits}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="profile-label">Generations</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.generations}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="profile-label">Feedback</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.feedbacks}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="admin-columns">
+                      <div className="admin-column">
+                        <div className="profile-label">Recent credits</div>
+                        <ul className="credits-list">
+                          {adminOverview.credits
+                            .flatMap((c) =>
+                              c.history.map((h) => ({
+                                customerId: c.customerId,
+                                ...h,
+                              }))
+                            )
+                            .sort(
+                              (a, b) =>
+                                new Date(b.at).getTime() -
+                                new Date(a.at).getTime()
+                            )
+                            .slice(0, 10)
+                            .map((entry, idx) => (
+                              <li key={idx}>
+                                <span className="credits-delta">
+                                  {entry.delta > 0 ? "+" : ""}
+                                  {entry.delta}
+                                </span>
+                                <span className="credits-reason">
+                                  {entry.reason}
+                                </span>
+                                <span className="credits-time">
+                                  #{entry.customerId} · {formatTime(entry.at)}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+
+                      <div className="admin-column">
+                        <div className="profile-label">Recent generations</div>
+                        <ul className="credits-list">
+                          {adminOverview.generations.slice(0, 10).map((g) => (
+                            <li key={g.id}>
+                              <span className="credits-reason">
+                                {g.type === "image" ? "Still" : "Motion"}
+                              </span>
+                              <span className="credits-time">
+                                #{g.customerId} · {formatTime(g.createdAt)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!adminOverview && !adminLoading && !adminError && (
+                  <div className="hint small">
+                    Set <code>ADMIN_DASHBOARD_KEY</code> on the backend and{" "}
+                    <code>VITE_MINA_ADMIN_KEY</code> on the frontend to unlock
+                    full admin overview.
+                  </div>
+                )}
               </div>
             </section>
           </div>
