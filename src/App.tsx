@@ -33,6 +33,21 @@ type EditorialResponse = {
   prompt?: string;
 };
 
+type FeedbackLikeResponse = {
+  ok: boolean;
+  message?: string;
+  error?: string;
+  totals?: {
+    likesForCustomer?: number;
+  };
+};
+
+type LikedImage = {
+  imageUrl: string;
+  prompt?: string | null;
+  likedAt: string;
+};
+
 const App: React.FC = () => {
   const [customerId, setCustomerId] = useState<string>(DEFAULT_CUSTOMER_ID);
 
@@ -57,6 +72,15 @@ const App: React.FC = () => {
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [editorialLoading, setEditorialLoading] = useState<boolean>(false);
   const [editorialError, setEditorialError] = useState<string | null>(null);
+
+  // Feedback / likes (for Mina Vision Intelligence)
+  const [feedbackComment, setFeedbackComment] = useState<string>("");
+  const [feedbackSending, setFeedbackSending] = useState<boolean>(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
+
+  // Local gallery of liked images
+  const [likedImages, setLikedImages] = useState<LikedImage[]>([]);
 
   const checkHealth = async () => {
     try {
@@ -156,6 +180,8 @@ const App: React.FC = () => {
     try {
       setEditorialLoading(true);
       setEditorialError(null);
+      setFeedbackError(null);
+      setFeedbackSuccess(null);
 
       const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
         method: "POST",
@@ -206,6 +232,62 @@ const App: React.FC = () => {
       );
     } finally {
       setEditorialLoading(false);
+    }
+  };
+
+  const handleLikeCurrent = async () => {
+    if (!previewImageUrl || !lastPrompt) {
+      setFeedbackError("Generate an image first before liking it.");
+      return;
+    }
+    try {
+      setFeedbackSending(true);
+      setFeedbackError(null);
+      setFeedbackSuccess(null);
+
+      const res = await fetch(`${API_BASE_URL}/feedback/like`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerId,
+          resultType: "image",
+          platform,
+          prompt: lastPrompt,
+          comment: feedbackComment,
+          imageUrl: previewImageUrl,
+        }),
+      });
+
+      const data = (await res.json()) as FeedbackLikeResponse;
+
+      if (!data.ok) {
+        setFeedbackError(
+          data.error || data.message || "Mina could not store your feedback."
+        );
+        return;
+      }
+
+      setFeedbackSuccess("Saved to Mina Vision Intelligence.");
+
+      // Add to local gallery if not already there
+      setLikedImages((prev) => {
+        const exists = prev.some((item) => item.imageUrl === previewImageUrl);
+        if (exists) return prev;
+        const newItem: LikedImage = {
+          imageUrl: previewImageUrl,
+          prompt: lastPrompt,
+          likedAt: new Date().toISOString(),
+        };
+        return [newItem, ...prev];
+      });
+    } catch (err: any) {
+      setFeedbackError(
+        err?.message || "Unexpected error while telling Mina what you liked."
+      );
+    } finally {
+      setFeedbackSending(false);
     }
   };
 
@@ -271,11 +353,11 @@ const App: React.FC = () => {
                 Falta Studio
               </div>
               <div
-                style={{
+                style({
                   fontSize: 28,
                   fontWeight: 600,
                   letterSpacing: 0.2,
-                }}
+                } as React.CSSProperties)}
               >
                 Mina Editorial AI
               </div>
@@ -689,12 +771,12 @@ const App: React.FC = () => {
             gap: 12,
           }}
         >
-          <span>Mina prototype UI · v0.1</span>
+          <span>Mina prototype UI · v0.2 (with likes)</span>
           {healthError && <span>Health error: {healthError}</span>}
         </div>
       </div>
 
-      {/* Right side – preview */}
+      {/* Right side – preview + feedback + liked gallery */}
       <div
         style={{
           flex: "1 1 50%",
@@ -711,43 +793,213 @@ const App: React.FC = () => {
             style={{
               width: "100%",
               maxWidth: 520,
-              aspectRatio: platform === "youtube" ? "16/9" : "9/16",
-              backgroundColor: "#d4d4d4",
-              borderRadius: 24,
-              overflow: "hidden",
-              boxShadow: "0 24px 60px rgba(8, 10, 0, 0.35)",
-              position: "relative",
+              display: "flex",
+              flexDirection: "column",
+              gap: 16,
             }}
           >
-            <img
-              src={previewImageUrl}
-              alt="Mina editorial result"
+            {/* Main still card */}
+            <div
               style={{
                 width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
+                aspectRatio: platform === "youtube" ? "16/9" : "9/16",
+                backgroundColor: "#d4d4d4",
+                borderRadius: 24,
+                overflow: "hidden",
+                boxShadow: "0 24px 60px rgba(8, 10, 0, 0.35)",
+                position: "relative",
               }}
-            />
-            {lastPrompt && (
+            >
+              <img
+                src={previewImageUrl}
+                alt="Mina editorial result"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+              />
+              {lastPrompt && (
+                <div
+                  style={{
+                    position: "absolute",
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    padding: "10px 12px",
+                    borderRadius: 999,
+                    background: "rgba(8, 10, 0, 0.68)",
+                    color: "#EEEED2",
+                    fontSize: 11,
+                    maxHeight: 60,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {lastPrompt}
+                </div>
+              )}
+            </div>
+
+            {/* Feedback row – “More of this” */}
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: 16,
+                backgroundColor: "rgba(255, 255, 255, 0.85)",
+                border: "1px solid rgba(8, 10, 0, 0.06)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+                fontSize: 13,
+              }}
+            >
               <div
                 style={{
-                  position: "absolute",
-                  left: 16,
-                  right: 16,
-                  bottom: 16,
-                  padding: "10px 12px",
-                  borderRadius: 999,
-                  background: "rgba(8, 10, 0, 0.68)",
-                  color: "#EEEED2",
-                  fontSize: 11,
-                  maxHeight: 60,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
                 }}
               >
-                {lastPrompt}
+                <span style={{ fontSize: 12, opacity: 0.8 }}>
+                  Tell Mina what you like / dislike about this still.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleLikeCurrent}
+                  disabled={feedbackSending}
+                  style={{
+                    border: "none",
+                    background: "transparent",
+                    padding: "4px 0",
+                    fontSize: 12,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    cursor: "pointer",
+                    opacity: feedbackSending ? 0.5 : 1,
+                  }}
+                >
+                  <span>{feedbackSending ? "Saving…" : "♡ More of this"}</span>
+                </button>
+              </div>
+              <textarea
+                placeholder="“I love the softness of the light, but make the background simpler next time…”"
+                value={feedbackComment}
+                onChange={(e) => setFeedbackComment(e.target.value)}
+                rows={2}
+                style={{
+                  border: "none",
+                  borderTop: "1px solid rgba(8, 10, 0, 0.08)",
+                  marginTop: 6,
+                  paddingTop: 6,
+                  background: "transparent",
+                  fontSize: 12,
+                  outline: "none",
+                  resize: "vertical",
+                }}
+              />
+              {feedbackError && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#b91c1c",
+                  }}
+                >
+                  {feedbackError}
+                </div>
+              )}
+              {feedbackSuccess && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: "#166534",
+                  }}
+                >
+                  {feedbackSuccess}
+                </div>
+              )}
+            </div>
+
+            {/* Liked “pile” gallery */}
+            {likedImages.length > 0 && (
+              <div
+                style={{
+                  marginTop: 4,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  fontSize: 11,
+                }}
+              >
+                <div
+                  style={{
+                    opacity: 0.7,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span>Mina’s liked stills (this session only)</span>
+                  <span>{likedImages.length} saved</span>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    overflowX: "auto",
+                    paddingBottom: 4,
+                  }}
+                >
+                  {likedImages.map((item) => (
+                    <button
+                      key={item.likedAt + item.imageUrl}
+                      type="button"
+                      onClick={() => {
+                        setPreviewImageUrl(item.imageUrl);
+                        if (item.prompt) setLastPrompt(item.prompt);
+                      }}
+                      style={{
+                        border: "none",
+                        padding: 0,
+                        background: "transparent",
+                        cursor: "pointer",
+                        flex: "0 0 auto",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: 80,
+                          height: 110,
+                          borderRadius: 12,
+                          overflow: "hidden",
+                          border:
+                            item.imageUrl === previewImageUrl
+                              ? "2px solid rgba(8, 10, 0, 0.75)"
+                              : "1px solid rgba(8, 10, 0, 0.18)",
+                          boxShadow:
+                            item.imageUrl === previewImageUrl
+                              ? "0 10px 25px rgba(8, 10, 0, 0.25)"
+                              : "none",
+                        }}
+                      >
+                        <img
+                          src={item.imageUrl}
+                          alt="liked still"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -773,7 +1025,8 @@ const App: React.FC = () => {
               Paste a product image URL and a short brief on the left, then tap{" "}
               <span style={{ fontWeight: 600 }}>Create editorial still</span>.
               Mina will think out loud with you, spend credits, and show the
-              first still here. Motion comes next.
+              first still here. Motion and session history will live on this
+              side too.
             </div>
           </div>
         )}
