@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL =
 import.meta.env.VITE_MINA_API_BASE_URL ??
-"[https://mina-editorial-ai-api.onrender.com](https://mina-editorial-ai-api.onrender.com)"; // fallback if env var missing
+"[https://mina-editorial-ai-api.onrender.com](https://mina-editorial-ai-api.onrender.com)";
 
 type HealthPayload = {
 ok: boolean;
@@ -27,7 +27,7 @@ url: string;
 createdAt: string;
 };
 
-const DEFAULT_CUSTOMER_ID = "8766256447571"; // you can change this to any Shopify customer.id
+const DEFAULT_CUSTOMER_ID = "8766256447571";
 
 const App: React.FC = () => {
 const [mode, setMode] = useState<Mode>("still");
@@ -59,13 +59,13 @@ const [gallery, setGallery] = useState<GalleryItem[]>([]);
 const [activeIndex, setActiveIndex] = useState(0);
 const [latestPrompt, setLatestPrompt] = useState<string | null>(null);
 
-// ---- Derived state for “Notion-like” steps ----
+// ---- Notion-like steps ----
 
 const steps = useMemo(
 () => ({
 description: brief.trim().length > 0,
 format: !!platform,
-style: tone.trim().length > 0, // we treat tone as "style feeling"
+style: tone.trim().length > 0,
 product: productImageUrl.trim().length > 0,
 refs: referencesUrl.trim().length > 0,
 vision: minaVision,
@@ -85,7 +85,7 @@ return;
 try {
   setCheckingHealth(true);
   setHealthError(null);
-  const res = await fetch(`${API_BASE_URL}/health`);
+  const res = await fetch(API_BASE_URL + "/health");
   const data: HealthPayload = await res.json();
   setHealth(data);
 } catch (err: any) {
@@ -99,14 +99,16 @@ try {
 
 async function fetchCredits(id: string) {
 if (!API_BASE_URL) return;
-if (!id.trim()) return;
+const trimmed = id.trim();
+if (!trimmed) return;
 
 ```
 try {
   setCheckingCredits(true);
   setCreditsError(null);
-  const url = new URL(`${API_BASE_URL}/credits/balance`);
-  url.searchParams.set("customerId", id.trim());
+
+  const url = new URL(API_BASE_URL + "/credits/balance");
+  url.searchParams.set("customerId", trimmed);
 
   const res = await fetch(url.toString());
   const data = (await res.json()) as CreditsPayload & {
@@ -128,19 +130,21 @@ try {
 
 }
 
-// Dev helper: give this customer big credits
+// Dev helper: give this customer a huge balance
 async function grantDevCredits() {
 if (!API_BASE_URL) return;
 
 ```
 try {
   setCreditsError(null);
-  const res = await fetch(`${API_BASE_URL}/credits/add`, {
+  const cid = (customerId.trim() || DEFAULT_CUSTOMER_ID);
+
+  const res = await fetch(API_BASE_URL + "/credits/add", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      customerId: customerId.trim() || DEFAULT_CUSTOMER_ID,
-      amount: 9_999_999,
+      customerId: cid,
+      amount: 9999999,
       reason: "dev-topup",
       source: "frontend-dev",
     }),
@@ -151,8 +155,7 @@ try {
     throw new Error(data.message || "Top-up failed");
   }
 
-  // Refresh credits after top-up
-  await fetchCredits(customerId.trim() || DEFAULT_CUSTOMER_ID);
+  await fetchCredits(cid);
 } catch (err: any) {
   setCreditsError(
     err?.message || "Dev top-up failed. Check /credits/add endpoint."
@@ -189,7 +192,7 @@ try {
     customerId: customerId.trim() || DEFAULT_CUSTOMER_ID,
   };
 
-  const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
+  const res = await fetch(API_BASE_URL + "/editorial/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -222,7 +225,6 @@ try {
   setActiveIndex(0);
   setLatestPrompt(data.prompt || null);
 
-  // refresh credits after spending
   await fetchCredits(customerId.trim() || DEFAULT_CUSTOMER_ID);
 } catch (err: any) {
   setGenerationError(err?.message || "Something went wrong.");
@@ -245,17 +247,17 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
 ```
       <nav className="mina-nav">
         <button
-          className={`mina-nav-tab ${
-            mode === "still" ? "is-active" : ""
-          }`}
+          className={
+            "mina-nav-tab " + (mode === "still" ? "is-active" : "")
+          }
           onClick={() => setMode("still")}
         >
           Still life images
         </button>
         <button
-          className={`mina-nav-tab ${
-            mode === "motion" ? "is-active" : ""
-          }`}
+          className={
+            "mina-nav-tab " + (mode === "motion" ? "is-active" : "")
+          }
           onClick={() => setMode("motion")}
         >
           Animate this
@@ -265,16 +267,20 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
 
     <div className="mina-header-right">
       <div className="mina-status-pill">
-        <span className={`mina-status-dot ${health?.ok ? "ok" : "off"}`} />
+        <span
+          className={
+            "mina-status-dot " + (health && health.ok ? "ok" : "off")
+          }
+        />
         <span className="mina-status-label">API</span>
         <span className="mina-status-value">
           {checkingHealth
             ? "Checking..."
-            : health?.ok
+            : health && health.ok
             ? "Online"
             : "Offline"}
         </span>
-        {health?.time && (
+        {health && health.time && (
           <span className="mina-status-time">
             {new Date(health.time).toLocaleString()}
           </span>
@@ -287,15 +293,15 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
           <span className="mina-credits-value">
             {checkingCredits
               ? "—"
-              : typeof credits?.balance === "number"
+              : credits && typeof credits.balance === "number"
               ? credits.balance.toLocaleString()
               : "0"}
           </span>
         </div>
         <div className="mina-credits-sub">
           <span>
-            {credits?.meta?.imageCost ?? 1} img ·{" "}
-            {credits?.meta?.motionCost ?? 5} motion
+            {(credits && credits.meta && credits.meta.imageCost) || 1} img ·{" "}
+            {(credits && credits.meta && credits.meta.motionCost) || 5} motion
           </span>
           <button
             type="button"
@@ -337,8 +343,10 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
         </div>
 
         <div className="mina-steps">
-          {/* Step 1: description */}
-          <StepRow label="Describe how you want your photo to feel." done={steps.description}>
+          <StepRow
+            label="Describe how you want your photo to feel."
+            done={steps.description}
+          >
             <textarea
               className="mina-textarea"
               placeholder="Soft desert ritual, warm light, minimal props..."
@@ -347,7 +355,6 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             />
           </StepRow>
 
-          {/* Step 2: format */}
           <StepRow label="Choose the format." done={steps.format}>
             <select
               className="mina-select"
@@ -360,7 +367,6 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             </select>
           </StepRow>
 
-          {/* Step 3: tone / style */}
           <StepRow
             label="Describe the editorial style / tone."
             done={steps.style}
@@ -373,7 +379,6 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             />
           </StepRow>
 
-          {/* Step 4: product image */}
           <StepRow
             label="+ upload / paste your product image URL."
             done={steps.product}
@@ -386,7 +391,6 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             />
           </StepRow>
 
-          {/* Step 5: references */}
           <StepRow
             label="+ upload / paste style reference URLs (comma separated)."
             done={steps.refs}
@@ -399,7 +403,6 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             />
           </StepRow>
 
-          {/* Step 6: Mina Vision */}
           <StepRow label="Mina Vision Intelligence." done={steps.vision}>
             <ToggleLine
               checked={minaVision}
@@ -457,10 +460,8 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
             {gallery.length > 1 &&
               gallery.map((item, idx) => (
                 <button
-                  key={item.createdAt + idx}
-                  className={`mina-dot ${
-                    idx === activeIndex ? "is-active" : ""
-                  }`}
+                  key={item.createdAt + "_" + idx}
+                  className={"mina-dot " + (idx === activeIndex ? "is-active" : "")}
                   onClick={() => setActiveIndex(idx)}
                 />
               ))}
@@ -491,7 +492,7 @@ return ( <div className="mina-root"> <header className="mina-header"> <div class
 );
 };
 
-// -------- Small helper components (kept in this same file) --------
+// ---- Small helper components ----
 
 interface StepRowProps {
 label: string;
@@ -501,7 +502,7 @@ children: React.ReactNode;
 
 const StepRow: React.FC<StepRowProps> = ({ label, done, children }) => {
 return ( <div className="mina-step-row">
-<div className={`mina-step-line ${done ? "is-done" : ""}`} /> <div className="mina-step-body"> <div className="mina-step-label">{label}</div> <div className="mina-step-control">{children}</div> </div> </div>
+<div className={"mina-step-line " + (done ? "is-done" : "")} /> <div className="mina-step-body"> <div className="mina-step-label">{label}</div> <div className="mina-step-control">{children}</div> </div> </div>
 );
 };
 
@@ -519,7 +520,7 @@ label,
 return (
 <button
 type="button"
-className={`mina-toggle ${checked ? "is-on" : "is-off"}`}
+className={"mina-toggle " + (checked ? "is-on" : "is-off")}
 onClick={() => onChange(!checked)}
 > <span className="mina-toggle-pill"> <span className="mina-toggle-knob" /> </span> <span className="mina-toggle-label">{label}</span> </button>
 );
