@@ -125,7 +125,7 @@ const mg = mix(g);
 const mb = mix(b);
 
 return `rgb(${mr}, ${mg}, ${mb})`;
-```
+ 
 
 } catch (err) {
 console.warn("Could not compute midtone color", err);
@@ -251,7 +251,7 @@ async (customerIdOverride?: string) => {
 const id = (customerIdOverride ?? customerId).trim();
 if (!id) return;
 
-```
+ 
   setCredits((prev) => ({
     ...prev,
     loading: true,
@@ -296,7 +296,7 @@ if (!id) return;
   }
 },
 [apiBaseUrl, customerId]
-```
+ 
 
 );
 
@@ -316,7 +316,7 @@ if (sessionId) return sessionId;
 const id = customerId.trim();
 if (!id) return null;
 
-```
+ 
   try {
     const res = await fetch(`${apiBaseUrl}/sessions/start`, {
       method: "POST",
@@ -341,7 +341,7 @@ if (!id) return null;
   }
 },
 [apiBaseUrl, customerId, sessionId]
-```
+ 
 
 );
 
@@ -380,12 +380,12 @@ e.preventDefault();
 applyUrlToField(activeUploadField, text);
 };
 
-```
+ 
 window.addEventListener("paste", handler as any);
 return () => {
   window.removeEventListener("paste", handler as any);
 };
-```
+ 
 
 }, [activeUploadField, applyUrlToField]);
 
@@ -408,7 +408,7 @@ e.preventDefault();
 setIsDragging(false);
 setUploadError(null);
 
-```
+ 
 const dt = e.dataTransfer;
 if (!dt) return;
 
@@ -429,7 +429,7 @@ if (candidate && isLikelyUrl(candidate)) {
     "Drop an image URL starting with http:// or https:// for now."
   );
 }
-```
+ 
 
 };
 
@@ -440,7 +440,7 @@ const img = e.currentTarget;
 const w = img.naturalWidth || img.width;
 const h = img.naturalHeight || img.height;
 
-```
+ 
 if (w && h) {
   if (h > w * 1.1) {
     setImageAspect("portrait");
@@ -453,7 +453,7 @@ if (w && h) {
 
 const color = computeMidtoneFromImage(img);
 setMidtoneColor(color);
-```
+ 
 
 };
 
@@ -472,7 +472,7 @@ setStillError("Backend is offline. Check Mina backend first.");
 return;
 }
 
-```
+ 
 setStillError(null);
 setMotionError(null);
 setStillLoading(true);
@@ -537,7 +537,7 @@ try {
 } finally {
   setStillLoading(false);
 }
-```
+ 
 
 };
 
@@ -556,7 +556,7 @@ setMotionError("Backend is offline. Check Mina backend first.");
 return;
 }
 
-```
+ 
 setMotionError(null);
 setMotionSuggestLoading(true);
 
@@ -597,7 +597,7 @@ try {
 } finally {
   setMotionSuggestLoading(false);
 }
-```
+ 
 
 };
 
@@ -622,7 +622,7 @@ setMotionError("Backend is offline. Check Mina backend first.");
 return;
 }
 
-```
+ 
 setMotionError(null);
 setMotionLoading(true);
 
@@ -680,7 +680,7 @@ try {
 } finally {
   setMotionLoading(false);
 }
-```
+ 
 
 };
 
@@ -689,7 +689,7 @@ const id = customerId.trim();
 if (!id || !lastStill) return;
 if (healthState !== "ok") return;
 
-```
+ 
 setLikeSending(true);
 try {
   const body = {
@@ -716,7 +716,7 @@ try {
 } finally {
   setLikeSending(false);
 }
-```
+ 
 
 };
 
@@ -725,7 +725,7 @@ const id = customerId.trim();
 if (!id || !motionResult) return;
 if (healthState !== "ok") return;
 
-```
+ 
 setMotionLikeSending(true);
 try {
   const body = {
@@ -752,7 +752,7 @@ try {
 } finally {
   setMotionLikeSending(false);
 }
-```
+ 
 
 };
 
@@ -809,7 +809,7 @@ style={{ backgroundColor: healthDotColor }}
 ? "Online"
 : "Offline"} </span> </div> </div> </div> </header>
 
-```
+ 
   <div className="mina-main">
     {/* LEFT HALF */}
     <div
@@ -1338,7 +1338,7 @@ style={{ backgroundColor: healthDotColor }}
     </div>
   </div>
 </div>
-```
+ 
 
 );
 };
