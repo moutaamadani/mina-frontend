@@ -4,7 +4,7 @@ const API_BASE_URL =
   (import.meta as any).env?.VITE_MINA_API_BASE_URL ||
   "https://mina-editorial-ai-api.onrender.com";
 
-// You can change this to any customerId you want to test with
+// Test customer – you can change this ID if you want
 const DEFAULT_CUSTOMER_ID = "8766256447571";
 
 type HealthPayload = {
@@ -79,7 +79,7 @@ const App: React.FC = () => {
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [feedbackSuccess, setFeedbackSuccess] = useState<string | null>(null);
 
-  // Local gallery of liked images
+  // Local “pile” of liked images
   const [likedImages, setLikedImages] = useState<LikedImage[]>([]);
 
   const checkHealth = async () => {
@@ -128,7 +128,7 @@ const App: React.FC = () => {
     loadCredits(customerId);
   }, [customerId]);
 
-  // Dev helper: add 9,999,999 credits to the current customer on the backend
+  // Dev helper: add 9,999,999 credits to current customer
   const handleDevMaxCredits = async () => {
     try {
       setCreditsError(null);
@@ -162,7 +162,6 @@ const App: React.FC = () => {
       if (typeof newBalance === "number") {
         setCredits(newBalance);
       } else {
-        // fallback: re-fetch balance
         await loadCredits(customerId);
       }
     } catch (err: any) {
@@ -223,7 +222,6 @@ const App: React.FC = () => {
         setLastPrompt(data.prompt);
       }
 
-      // Credits were spent, refresh from server
       await loadCredits(customerId);
     } catch (err: any) {
       setEditorialError(
@@ -271,7 +269,6 @@ const App: React.FC = () => {
 
       setFeedbackSuccess("Saved to Mina Vision Intelligence.");
 
-      // Add to local gallery if not already there
       setLikedImages((prev) => {
         const exists = prev.some((item) => item.imageUrl === previewImageUrl);
         if (exists) return prev;
@@ -319,7 +316,7 @@ const App: React.FC = () => {
           '"Schibsted Grotesk", system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
       }}
     >
-      {/* Left side – flow & form */}
+      {/* LEFT – flow & form */}
       <div
         style={{
           flex: "0 0 50%",
@@ -331,8 +328,9 @@ const App: React.FC = () => {
           gap: "24px",
         }}
       >
-        {/* Top: header + status */}
+        {/* Top: header + status + flow */}
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Header */}
           <div
             style={{
               display: "flex",
@@ -353,11 +351,11 @@ const App: React.FC = () => {
                 Falta Studio
               </div>
               <div
-                style({
+                style={{
                   fontSize: 28,
                   fontWeight: 600,
                   letterSpacing: 0.2,
-                } as React.CSSProperties)}
+                }}
               >
                 Mina Editorial AI
               </div>
@@ -423,7 +421,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Mini “flow” like Notion */}
+          {/* Mini flow like Notion */}
           <div
             style={{
               display: "flex",
@@ -496,7 +494,7 @@ const App: React.FC = () => {
               fontSize: 13,
             }}
           >
-            {/* Customer ID row */}
+            {/* Customer ID */}
             <div
               style={{
                 display: "flex",
@@ -574,7 +572,7 @@ const App: React.FC = () => {
               />
             </div>
 
-            {/* Tone & platform */}
+            {/* Tone + Format */}
             <div
               style={{
                 display: "flex",
@@ -761,7 +759,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        {/* Bottom: tiny footnote */}
+        {/* Bottom footnote */}
         <div
           style={{
             fontSize: 11,
@@ -776,7 +774,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Right side – preview + feedback + liked gallery */}
+      {/* RIGHT – preview + feedback + liked pile */}
       <div
         style={{
           flex: "1 1 50%",
@@ -798,7 +796,7 @@ const App: React.FC = () => {
               gap: 16,
             }}
           >
-            {/* Main still card */}
+            {/* Main still */}
             <div
               style={{
                 width: "100%",
@@ -843,7 +841,7 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Feedback row – “More of this” */}
+            {/* Feedback */}
             <div
               style={{
                 padding: "12px 14px",
@@ -924,7 +922,7 @@ const App: React.FC = () => {
               )}
             </div>
 
-            {/* Liked “pile” gallery */}
+            {/* Liked pile */}
             {likedImages.length > 0 && (
               <div
                 style={{
