@@ -8,9 +8,12 @@ import "./index.css";
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL || "http://localhost:3000";
 
-// Use a real Shopify customer id for testing if you want.
-// This is only mocked on the frontend side.
+// Mock customer id – this should match a real Shopify customer id
+// that has credits in your backend. For now it's constant.
 const MOCK_CUSTOMER_ID = "8766256447571";
+
+// Auto top-up local storage key
+const AUTO_TOPUP_KEY = "mina_auto_topup_settings_v1";
 
 // ===============================
 // Types
@@ -50,6 +53,12 @@ type GenerationItem = {
   sessionId?: string | null;
 };
 
+type AutoTopUpSettings = {
+  enabled: boolean;
+  monthlyLimitUsd: number;
+  packSize: number;
+};
+
 // ===============================
 // Helpers
 // ===============================
@@ -70,6 +79,47 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return (await res.json()) as T;
+}
+
+function loadAutoTopupFromStorage(): AutoTopUpSettings {
+  if (typeof window === "undefined") {
+    return {
+      enabled: false,
+      monthlyLimitUsd: 100,
+      packSize: 50,
+    };
+  }
+  try {
+    const raw = window.localStorage.getItem(AUTO_TOPUP_KEY);
+    if (!raw) {
+      return {
+        enabled: false,
+        monthlyLimitUsd: 100,
+        packSize: 50,
+      };
+    }
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: Boolean(parsed.enabled),
+      monthlyLimitUsd: Number(parsed.monthlyLimitUsd || 100),
+      packSize: Number(parsed.packSize || 50),
+    };
+  } catch {
+    return {
+      enabled: false,
+      monthlyLimitUsd: 100,
+      packSize: 50,
+    };
+  }
+}
+
+function saveAutoTopupToStorage(settings: AutoTopUpSettings) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(AUTO_TOPUP_KEY, JSON.stringify(settings));
+  } catch {
+    // ignore
+  }
 }
 
 // ===============================
@@ -126,6 +176,17 @@ function App() {
 
   // Local history (this browser only)
   const [history, setHistory] = useState<GenerationItem[]>([]);
+
+  // Auto top-up (local-only for now)
+  const [autoTopupEnabled, setAutoTopupEnabled] = useState(
+    () => loadAutoTopupFromStorage().enabled,
+  );
+  const [autoMonthlyLimit, setAutoMonthlyLimit] = useState<string>(() =>
+    String(loadAutoTopupFromStorage().monthlyLimitUsd),
+  );
+  const [autoPackSize, setAutoPackSize] = useState<string>(() =>
+    String(loadAutoTopupFromStorage().packSize),
+  );
 
   // ===============================
   // API calls
@@ -466,6 +527,19 @@ function App() {
     void handleCheckHealth();
     void handleLoadCredits();
   }, []);
+
+  useEffect(() => {
+    const limit = Number(autoMonthlyLimit || "0");
+    const pack = Number(autoPackSize || "0");
+
+    const settings: AutoTopUpSettings = {
+      enabled: autoTopupEnabled,
+      monthlyLimitUsd: Number.isFinite(limit) && limit > 0 ? limit : 100,
+      packSize: Number.isFinite(pack) && pack > 0 ? pack : 50,
+    };
+
+    saveAutoTopupToStorage(settings);
+  }, [autoTopupEnabled, autoMonthlyLimit, autoPackSize]);
 
   // ===============================
   // Render
@@ -822,6 +896,7 @@ function App() {
           // PROFILE TAB
           // =====================
           <div className="profile-layout">
+            {/* Profile & balance */}
             <section className="mina-section wide">
               <div className="section-title">
                 <span className="step-dot step-done" />
@@ -829,26 +904,110 @@ function App() {
               </div>
               <div className="section-body profile-body">
                 <div>
-                  <div className="profile-label">Mock customer id</div>
+                  <div className="profile-label">Customer id (mock)</div>
                   <div className="profile-value">{MOCK_CUSTOMER_ID}</div>
+                  <div className="profile-hint">
+                    Later this will be your real Shopify / Mina account id.
+                  </div>
                 </div>
                 <div>
                   <div className="profile-label">Credits</div>
                   <div className="profile-value">
                     {credits ? `${credits.balance} Machta` : "—"}
                   </div>
+                  <div className="profile-hint">
+                    1 still ≈ {credits?.meta.imageCost ?? 1} Machta · 1 motion ≈{" "}
+                    {credits?.meta.motionCost ?? 5} Machta
+                  </div>
                 </div>
                 <div>
                   <div className="profile-label">
-                    History in this browser only
+                    This browser’s gallery only
                   </div>
                   <div className="profile-value">
                     {history.length} generations
+                  </div>
+                  <div className="profile-hint">
+                    For now gallery is local. Later we’ll sync with your account.
                   </div>
                 </div>
               </div>
             </section>
 
+            {/* Auto top-up settings (local proto) */}
+            <section className="mina-section wide">
+              <div className="section-title">
+                <span className="step-dot" />
+                <span>Auto top-up (prototype)</span>
+              </div>
+              <div className="section-body profile-body">
+                <div className="auto-topup-row">
+                  <label className="field-toggle">
+                    <input
+                      type="checkbox"
+                      checked={autoTopupEnabled}
+                      onChange={(e) => setAutoTopupEnabled(e.target.checked)}
+                    />
+                    <span
+                      className={
+                        autoTopupEnabled
+                          ? "toggle-label on"
+                          : "toggle-label off"
+                      }
+                    >
+                      Automatically buy credits when I’m empty
+                    </span>
+                  </label>
+                  <div className="profile-hint">
+                    Saved only in this browser. Later this will connect to
+                    Stripe + real billing.
+                  </div>
+                </div>
+
+                <div className="auto-topup-grid">
+                  <label className="field">
+                    <div className="field-label">
+                      Top-up pack size <span className="field-unit">Machta</span>
+                    </div>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={autoPackSize}
+                      onChange={(e) => setAutoPackSize(e.target.value)}
+                    />
+                  </label>
+
+                  <label className="field">
+                    <div className="field-label">
+                      Monthly limit{" "}
+                      <span className="field-unit">USD (for you)</span>
+                    </div>
+                    <input
+                      className="field-input"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={autoMonthlyLimit}
+                      onChange={(e) => setAutoMonthlyLimit(e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="profile-hint">
+                  Not charging anything yet – this is just to shape the
+                  experience like the OpenAI API: a monthly ceiling and an
+                  auto-refill pack.{" "}
+                  <span className="profile-hint-strong">
+                    Your backend logic will later read these values and decide
+                    when to call Stripe.
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {/* Gallery */}
             <section className="mina-section wide">
               <div className="section-title">
                 <span className="step-dot" />
@@ -858,7 +1017,7 @@ function App() {
                 {history.length === 0 ? (
                   <div className="hint">
                     Generate stills or motions in the Playground and they will
-                    appear here.
+                    appear here as your Mina grid.
                   </div>
                 ) : (
                   <div className="gallery-grid">
@@ -872,10 +1031,17 @@ function App() {
                           )}
                         </div>
                         <div className="gallery-meta">
-                          <span className="gallery-tag">{item.kind}</span>
-                          <span className="gallery-date">
+                          <div className="gallery-meta-top">
+                            <span className="gallery-tag">
+                              {item.kind === "motion" ? "Motion" : "Still"}
+                            </span>
+                            <span className="gallery-tag subtle">
+                              {item.platform.toUpperCase()}
+                            </span>
+                          </div>
+                          <div className="gallery-date">
                             {new Date(item.createdAt).toLocaleString()}
-                          </span>
+                          </div>
                         </div>
                       </div>
                     ))}
