@@ -1,604 +1,295 @@
-/* MINA – Editorial beige/black theme
-Works with existing App.tsx (Playground/Profile, steps 01–04, Stills/Motion piles)
+/* MINA – only two colors:
+   - background: #EEEED2
+   - text:       #080A00
+   Everything else is just opacity of the text color.
 */
 
-/* --------- Base + colors --------- */
-
 :root {
---mina-bg: #f3efe3;              /* page background – warm beige */
---mina-surface: #f9f6ee;         /* cards */
---mina-surface-soft: #f5f0e5;
---mina-text: #11100d;            /* main text – almost black */
---mina-border-subtle: rgba(17, 16, 13, 0.18);
---mina-border-strong: rgba(17, 16, 13, 0.35);
---mina-muted: rgba(17, 16, 13, 0.55);
---mina-hint: rgba(17, 16, 13, 0.6);
---mina-danger: #b02a2a;
+  --mina-bg: #EEEED2;
+  --mina-text: #080A00;
+  --mina-border-soft: rgba(8, 10, 0, 0.16);
+  --mina-border-strong: rgba(8, 10, 0, 0.32);
+  --mina-muted: rgba(8, 10, 0, 0.6);
 }
 
-/* Reset-ish */
+/* Reset */
 
 *,
 *::before,
 *::after {
-box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 html,
 body,
 #root {
-margin: 0;
-padding: 0;
-height: 100%;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--mina-bg);
+  color: var(--mina-text);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI", sans-serif;
 }
 
-body {
-font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-"Segoe UI", sans-serif;
-background: var(--mina-bg);
-color: var(--mina-text);
+/* Kill any leftover dark backgrounds */
+
+body,
+#root,
+.mina-root,
+.mina-main,
+.mina-layout,
+.mina-left,
+.mina-right {
+  background-color: var(--mina-bg);
 }
 
-/* --------- Root layout --------- */
+/* Header */
 
-.mina-root {
-min-height: 100vh;
-display: flex;
-flex-direction: column;
-}
-
-/* --------- Header --------- */
-
-.mina-header {
-display: flex;
-align-items: center;
-justify-content: space-between;
-gap: 16px;
-padding: 14px 22px;
-border-bottom: 1px solid var(--mina-border-subtle);
-background: var(--mina-surface-soft);
-position: sticky;
-top: 0;
-z-index: 10;
+.mina-header,
+header {
+  background-color: var(--mina-bg);
+  border-bottom: 1px solid var(--mina-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
 }
 
 .mina-logo {
-font-size: 18px;
-font-weight: 600;
-letter-spacing: 0.04em;
-text-transform: uppercase;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.mina-header-right {
-display: flex;
-align-items: center;
-gap: 18px;
-}
+/* Tabs + credits */
 
 .mina-tabs {
-display: inline-flex;
-border-radius: 999px;
-padding: 2px;
-background: rgba(255, 255, 255, 0.7);
+  display: inline-flex;
+  gap: 4px;
+  border-radius: 999px;
+  padding: 2px;
+  border: 1px solid var(--mina-border-soft);
 }
 
 .tab {
-border: none;
-background: transparent;
-padding: 6px 14px;
-border-radius: 999px;
-font-size: 13px;
-cursor: pointer;
-color: var(--mina-text);
-opacity: 0.55;
-transition: background 0.12s ease-out, opacity 0.12s ease-out;
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--mina-muted);
 }
 
 .tab.active {
-background: #ffffff;
-opacity: 1;
-}
-
-.tab:focus-visible {
-outline: 1px solid var(--mina-text);
-outline-offset: 2px;
+  background-color: rgba(8, 10, 0, 0.06);
+  color: var(--mina-text);
 }
 
 .mina-credits-badge {
-border-radius: 999px;
-padding: 4px 10px;
-border: 1px solid var(--mina-border-subtle);
-background: rgba(255, 255, 255, 0.9);
-font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--mina-border-soft);
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
-/* --------- Main layout --------- */
+/* Main layout */
 
 .mina-main {
-flex: 1;
-display: flex;
-justify-content: center;
-padding: 18px;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
 }
 
 .mina-layout {
-display: grid;
-grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-gap: 16px;
-width: 100%;
-max-width: 1400px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 16px;
+  width: 100%;
+  max-width: 1400px;
 }
 
-.mina-left,
-.mina-right {
-min-height: calc(100vh - 110px);
-display: flex;
-flex-direction: column;
-gap: 12px;
-}
+/* Sections / cards */
 
-/* --------- Sections --------- */
-
-.mina-section {
-background: var(--mina-surface);
-border-radius: 0;
-border: 1px solid var(--mina-border-subtle);
-padding: 12px 14px 16px;
-}
-
-.mina-section.wide {
-max-width: 1400px;
-margin: 0 auto 12px;
+.mina-section,
+.output-shell,
+.profile-layout,
+.admin-layout {
+  background-color: var(--mina-bg);
+  border: 1px solid var(--mina-border-soft);
+  padding: 12px 14px;
 }
 
 .section-title {
-display: flex;
-align-items: center;
-gap: 8px;
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.14em;
-opacity: 0.8;
-margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin-bottom: 4px;
 }
 
 .step-dot {
-width: 10px;
-height: 10px;
-border-radius: 50%;
-border: 1px solid var(--mina-border-strong);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--mina-border-strong);
 }
 
 .step-dot.step-done {
-background: var(--mina-text);
+  background-color: rgba(8, 10, 0, 0.85);
 }
 
-.section-body {
-padding-top: 4px;
-display: flex;
-flex-direction: column;
-gap: 10px;
-}
+/* Fields */
 
-/* --------- Status + pills --------- */
-
-.status-row {
-display: flex;
-align-items: center;
-gap: 8px;
-font-size: 11px;
-}
-
-.status-pill {
-padding: 2px 8px;
-border-radius: 999px;
-border: 1px solid var(--mina-border-subtle);
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.15em;
-}
-
-.status-pill.ok {
-border-color: var(--mina-border-strong);
-}
-
-.status-pill.error {
-border-color: var(--mina-danger);
-color: var(--mina-danger);
-}
-
-.status-error {
-font-size: 11px;
-color: var(--mina-danger);
-}
-
-.status-ok {
-font-size: 11px;
-color: var(--mina-muted);
-}
-
-/* --------- Inputs / fields --------- */
-
-.field {
-display: flex;
-flex-direction: column;
-gap: 4px;
-font-size: 12px;
+.field,
+.field-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
 }
 
 .field-row {
-display: flex;
-flex-wrap: wrap;
-gap: 10px;
-}
-
-.field-inline {
-flex: 1;
-min-width: 140px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .field-label {
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.16em;
-opacity: 0.75;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--mina-muted);
 }
 
 .field-unit {
-font-size: 10px;
-opacity: 0.65;
-letter-spacing: 0;
+  font-size: 10px;
+  color: var(--mina-muted);
 }
 
 .field-input,
 .field-textarea,
 select {
-border-radius: 0;
-border: 1px solid var(--mina-border-subtle);
-padding: 7px 9px;
-font-size: 13px;
-background: rgba(255, 255, 255, 0.97);
-color: var(--mina-text);
-outline: none;
+  border-radius: 0;
+  border: 1px solid var(--mina-border-soft);
+  padding: 7px 9px;
+  font-size: 13px;
+  background-color: var(--mina-bg);
+  color: var(--mina-text);
+  outline: none;
 }
 
 .field-textarea {
-min-height: 70px;
-resize: vertical;
+  min-height: 70px;
+  resize: vertical;
 }
 
 .field-input:focus-visible,
 .field-textarea:focus-visible,
 select:focus-visible {
-border-color: var(--mina-border-strong);
+  border-color: var(--mina-border-strong);
 }
 
+/* Toggle */
+
 .field-toggle {
-display: flex;
-align-items: center;
-gap: 8px;
-font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
 }
 
 .field-toggle input[type="checkbox"] {
-width: 16px;
-height: 16px;
-cursor: pointer;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .toggle-label {
-opacity: 0.6;
+  color: var(--mina-muted);
 }
 
 .toggle-label.on {
-opacity: 1;
+  color: var(--mina-text);
 }
 
-.toggle-label.off {
-opacity: 0.35;
-}
-
-/* Customer ID pill in header/profile */
-
-.customer-label {
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.14em;
-opacity: 0.6;
-}
-
-.customer-input {
-border: 1px solid var(--mina-border-subtle);
-background: rgba(255, 255, 255, 0.9);
-padding: 5px 8px;
-font-size: 12px;
-min-width: 170px;
-}
-
-.customer-pill {
-border-radius: 999px;
-border: 1px solid var(--mina-border-subtle);
-padding: 2px 8px;
-font-size: 11px;
-}
-
-/* --------- Buttons --------- */
+/* Buttons */
 
 button {
-font-family: inherit;
+  font-family: inherit;
 }
 
 .primary-button,
-.secondary-button,
-.link-button {
-border-radius: 999px;
-padding: 6px 14px;
-font-size: 12px;
-border: 1px solid var(--mina-border-strong);
-background: transparent;
-color: var(--mina-text);
-cursor: pointer;
-letter-spacing: 0.04em;
-text-transform: uppercase;
+.secondary-button {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  border: 1px solid var(--mina-text);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .primary-button {
-background: rgba(255, 255, 255, 0.95);
+  background-color: rgba(8, 10, 0, 0.9);
+  color: var(--mina-bg);
 }
 
 .secondary-button {
-border-color: var(--mina-border-subtle);
+  background-color: transparent;
+  color: var(--mina-text);
 }
 
-.link-button {
-border: none;
-padding: 0;
-text-transform: none;
-letter-spacing: 0.02em;
-font-size: 12px;
-text-decoration: underline;
-text-underline-offset: 3px;
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
-.primary-button:disabled,
-.secondary-button:disabled,
-.link-button:disabled {
-opacity: 0.45;
-cursor: default;
+/* Hints + status */
+
+.hint,
+.profile-hint {
+  font-size: 11px;
+  color: var(--mina-muted);
 }
 
-/* --------- Helper text --------- */
-
-.hint {
-font-size: 11px;
-color: var(--mina-hint);
+.status-error {
+  font-size: 11px;
+  color: rgba(8, 10, 0, 0.8);
 }
 
-.hint.small {
-font-size: 10px;
-}
-
-/* --------- Right side: stills & motion piles --------- */
+/* Output (stills / motion) */
 
 .output-shell {
-flex: 1;
-border-radius: 0;
-border: 1px solid var(--mina-border-subtle);
-background: rgba(255, 255, 255, 0.9);
-padding: 10px;
-display: flex;
-flex-direction: column;
-}
-
-.output-placeholder {
-margin: auto;
-text-align: center;
-font-size: 13px;
-color: var(--mina-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .output-media {
-flex: 1;
-background: #d6d2c0;
-display: flex;
-align-items: center;
-justify-content: center;
-overflow: hidden;
+  border: 1px solid var(--mina-border-soft);
+  background-color: rgba(8, 10, 0, 0.04);
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .output-media img,
 .output-media video {
-max-width: 100%;
-max-height: 100%;
-display: block;
+  max-width: 100%;
+  max-height: 100%;
 }
 
-.output-meta {
-margin-top: 8px;
+.output-placeholder {
+  font-size: 13px;
+  color: var(--mina-muted);
+  text-align: center;
 }
 
-.output-tag-row {
-display: flex;
-gap: 6px;
-margin-bottom: 4px;
-}
+/* Auto top-up */
 
-.output-tag {
-font-size: 10px;
-text-transform: uppercase;
-letter-spacing: 0.16em;
-padding: 2px 8px;
-border-radius: 999px;
-border: 1px solid var(--mina-border-subtle);
-}
-
-.output-tag.subtle {
-opacity: 0.6;
-}
-
-.output-prompt {
-font-size: 12px;
-line-height: 1.4;
-}
-
-/* --------- Profile / billing view --------- */
-
-.profile-layout {
-width: 100%;
-max-width: 1400px;
-margin: 0 auto;
-display: flex;
-flex-direction: column;
-gap: 12px;
-}
-
-.profile-body {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-gap: 10px 14px;
-}
-
-.profile-label {
-font-size: 11px;
-text-transform: uppercase;
-letter-spacing: 0.16em;
-opacity: 0.7;
-}
-
-.profile-value {
-font-size: 14px;
-font-weight: 500;
-}
-
-.profile-hint {
-font-size: 11px;
-color: var(--mina-hint);
-}
-
-.credits-list {
-list-style: none;
-padding: 0;
-margin: 6px 0 0;
-}
-
-.credits-list li {
-display: flex;
-gap: 6px;
-align-items: baseline;
-font-size: 11px;
-padding: 2px 0;
-}
-
-.credits-delta {
-min-width: 40px;
-}
-
-.credits-reason {
-flex: 1;
-}
-
-.credits-time {
-white-space: nowrap;
-color: var(--mina-muted);
-}
-
-/* Admin columns */
-
-.admin-layout {
-width: 100%;
-max-width: 1400px;
-margin: 0 auto;
-display: flex;
-flex-direction: column;
-gap: 12px;
-}
-
-.admin-columns {
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-gap: 12px 16px;
-}
-
-.admin-column {
-display: flex;
-flex-direction: column;
-gap: 6px;
-}
-
-/* Gallery */
-
-.gallery-grid {
-margin-top: 10px;
-display: grid;
-grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-gap: 10px;
-}
-
-.gallery-item {
-border: 1px solid var(--mina-border-subtle);
-background: var(--mina-surface);
-display: flex;
-flex-direction: column;
-}
-
-.gallery-media {
-background: #d6d2c0;
-padding: 6px;
-display: flex;
-align-items: center;
-justify-content: center;
-}
-
-.gallery-media img {
-max-width: 100%;
-max-height: 220px;
-display: block;
-}
-
-.gallery-meta {
-padding: 5px 7px;
-display: flex;
-flex-direction: column;
-gap: 2px;
-}
-
-.gallery-meta-top {
-display: flex;
-justify-content: space-between;
-align-items: center;
-}
-
-.gallery-tag {
-font-size: 10px;
-text-transform: uppercase;
-letter-spacing: 0.16em;
-}
-
-.gallery-tag.subtle {
-opacity: 0.6;
-}
-
-.gallery-date {
-font-size: 10px;
-color: var(--mina-hint);
-}
-
-/* --------- Responsive --------- */
-
-@media (max-width: 960px) {
-.mina-main {
-padding: 10px;
-}
-
-.mina-layout {
-grid-template-columns: minmax(0, 1fr);
-}
-
-.mina-left,
-.mina-right {
-min-height: auto;
-}
-}
 .auto-topup-row {
   display: flex;
   flex-direction: column;
@@ -608,5 +299,44 @@ min-height: auto;
 .auto-topup-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 8px 12px;
+  gap: 8px 10px;
+}
+
+/* Generic customer pills */
+
+.customer-pill,
+.customer-input {
+  border-radius: 999px;
+  border: 1px solid var(--mina-border-soft);
+  padding: 4px 8px;
+  font-size: 11px;
+  background-color: var(--mina-bg);
+}
+
+/* Profile / admin columns */
+
+.profile-layout,
+.admin-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.profile-body,
+.admin-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px 14px;
+}
+
+/* Responsive */
+
+@media (max-width: 960px) {
+  .mina-main {
+    padding: 10px;
+  }
+
+  .mina-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
