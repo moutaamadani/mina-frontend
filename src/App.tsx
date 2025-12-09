@@ -1,3 +1,6 @@
+// ==============================================
+// 1. Imports & environment
+// ==============================================
 import React, { useEffect, useState } from "react";
 
 const API_BASE_URL =
@@ -5,7 +8,11 @@ const API_BASE_URL =
   "https://mina-editorial-ai-api.onrender.com";
 
 const ADMIN_KEY = import.meta.env.VITE_MINA_ADMIN_KEY || "";
+const ADMIN_SECRET_STORAGE_KEY = "minaAdminSecretV1";
 
+// ==============================================
+// 2. Types
+// ==============================================
 type HealthPayload = {
   ok: boolean;
   service: string;
@@ -119,6 +126,18 @@ type AdminOverview = {
   }[];
 };
 
+// New admin API types
+interface AdminSummary {
+  totalCustomers: number;
+  totalCredits: number;
+  autoTopupOn: number;
+}
+
+interface AdminCustomer {
+  customerId: string;
+  balance: number;
+}
+
 type StillItem = {
   id: string;
   url: string;
@@ -133,6 +152,9 @@ type MotionItem = {
   createdAt: string;
 };
 
+// ==============================================
+// 3. Helpers
+// ==============================================
 const devCustomerId = "8766256447571";
 
 function getInitialCustomerId(): string {
@@ -168,89 +190,97 @@ function classNames(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+// ==============================================
+// 4. App component
+// ==============================================
 function App() {
-  const [activeTab, setActiveTab] = useState<"playground" | "profile" | "admin">(
-    "playground"
-  );
-
+  // --------------------------------------------
+  // 4.1 Basic tab + customer
+  // --------------------------------------------
+  const [activeTab, setActiveTab] = useState<
+    "playground" | "profile" | "admin"
+  >("playground");
   const [customerId, setCustomerId] = useState<string>(getInitialCustomerId);
-
   const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
 
-  // Health
+  // --------------------------------------------
+  // 4.2 Core state: health, credits, session
+  // --------------------------------------------
   const [health, setHealth] = useState<HealthPayload | null>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
   const [healthError, setHealthError] = useState<string | null>(null);
 
-  // Credits
   const [credits, setCredits] = useState<CreditsBalance | null>(null);
   const [creditsLoading, setCreditsLoading] = useState(false);
   const [creditsError, setCreditsError] = useState<string | null>(null);
 
-  // Session
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionStarting, setSessionStarting] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  // Still inputs
+  // --------------------------------------------
+  // 4.3 Still + motion state (inputs & results)
+  // --------------------------------------------
   const [productImageUrl, setProductImageUrl] = useState("");
   const [styleImageUrlsRaw, setStyleImageUrlsRaw] = useState("");
   const [brief, setBrief] = useState("");
   const [tone, setTone] = useState("Poetic");
   const [platform, setPlatform] = useState("tiktok");
-  const [stylePresetKey, setStylePresetKey] = useState("soft-desert-editorial");
+  const [stylePresetKey, setStylePresetKey] =
+    useState("soft-desert-editorial");
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
 
-  // Still generation
   const [stillGenerating, setStillGenerating] = useState(false);
   const [stillError, setStillError] = useState<string | null>(null);
   const [lastStillPrompt, setLastStillPrompt] = useState<string | null>(null);
   const [stillItems, setStillItems] = useState<StillItem[]>([]);
   const [stillIndex, setStillIndex] = useState(0);
 
-  // Motion inputs / suggestion
   const [motionDescription, setMotionDescription] = useState("");
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
     null
   );
 
-  // Motion generation
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
 
-  // Profile / auto-topup (now backed by API)
-const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
-const [autoTopupLimit, setAutoTopupLimit] = useState("0");
-const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
-const [billingLoading, setBillingLoading] = useState(false);
-const [billingSaving, setBillingSaving] = useState(false);
-const [billingError, setBillingError] = useState<string | null>(null);
-const [adminMode, setAdminMode] = useState(false);
-const [adminSecret, setAdminSecret] = useState("");
-const [adminSummary, setAdminSummary] = useState<AdminSummary | null>(null);
-const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
-const [adminLoading, setAdminLoading] = useState(false);
-const [adminError, setAdminError] = useState<string | null>(null);
-const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
+  // --------------------------------------------
+  // 4.4 Billing & auto-topup (with API)
+  // --------------------------------------------
+  const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
+  const [autoTopupLimit, setAutoTopupLimit] = useState("0");
+  const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingSaving, setBillingSaving] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
+  // --------------------------------------------
+  // 4.5 New Admin panel (Profile tab, admin secret)
+  // --------------------------------------------
+  const [adminMode, setAdminMode] = useState(false);
+  const [adminSecret, setAdminSecret] = useState("");
+  const [adminSummary, setAdminSummary] = useState<AdminSummary | null>(null);
+  const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
 
-
-  // History from backend
+  // --------------------------------------------
+  // 4.6 History + old Admin overview (ADMIN_KEY)
+  // --------------------------------------------
   const [history, setHistory] = useState<CustomerHistory | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Admin overview
-  const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(
-    null
-  );
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminOverview, setAdminOverview] =
+    useState<AdminOverview | null>(null);
 
-  // Persist customerId for future visits
+  // --------------------------------------------
+  // 4.7 Effects – persist customer & admin secret
+  // --------------------------------------------
   useEffect(() => {
     try {
       if (typeof window !== "undefined") {
@@ -261,7 +291,22 @@ const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
     }
   }, [customerId]);
 
-  // --- Step dots (Notion-like) ---
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY);
+        if (stored) {
+          setAdminSecret(stored);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // ============================================
+  // 5. Step “done” flags
+  // ============================================
   const step1Done = Boolean(health?.ok && sessionId);
   const step2Done = Boolean(
     productImageUrl.trim().length || styleImageUrlsRaw.trim().length
@@ -270,8 +315,9 @@ const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
   const step4Done = stillItems.length > 0;
   const step5Done = motionItems.length > 0;
 
-  // --- API helpers ---
-
+  // ============================================
+  // 6. API helpers – core
+  // ============================================
   const handleCheckHealth = async () => {
     try {
       setCheckingHealth(true);
@@ -357,151 +403,148 @@ const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
       setHistoryLoading(false);
     }
   };
-const fetchBillingSettings = async (cid: string) => {
-  if (!API_BASE_URL) return;
-  try {
-    setBillingLoading(true);
-    setBillingError(null);
-    const res = await fetch(
-      `${API_BASE_URL}/billing/settings?customerId=${encodeURIComponent(cid)}`
-    );
-    if (!res.ok) {
-      throw new Error(`Billing error: ${res.status}`);
-    }
-    const data = (await res.json()) as {
-      enabled?: boolean;
-      monthlyLimitPacks?: number;
-    };
-    setAutoTopupEnabled(Boolean(data.enabled));
-    setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
-  } catch (err: any) {
-    setBillingError(err?.message || "Failed to load billing settings.");
-  } finally {
-    setBillingLoading(false);
-  }
-};
 
-const saveBillingSettings = async () => {
-  if (!customerId || !API_BASE_URL) return;
-  try {
-    setBillingSaving(true);
-    setBillingError(null);
-    const res = await fetch(`${API_BASE_URL}/billing/settings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId,
-        enabled: autoTopupEnabled,
-        monthlyLimitPacks: Number(autoTopupLimit || "0"),
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`Billing save error: ${res.status}`);
+  // ============================================
+  // 7. API helpers – billing & admin
+  // ============================================
+  const fetchBillingSettings = async (cid: string) => {
+    if (!API_BASE_URL) return;
+    try {
+      setBillingLoading(true);
+      setBillingError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/billing/settings?customerId=${encodeURIComponent(
+          cid
+        )}`
+      );
+      if (!res.ok) {
+        throw new Error(`Billing error: ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        enabled?: boolean;
+        monthlyLimitPacks?: number;
+      };
+      setAutoTopupEnabled(Boolean(data.enabled));
+      setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
+    } catch (err: any) {
+      setBillingError(err?.message || "Failed to load billing settings.");
+    } finally {
+      setBillingLoading(false);
     }
-    const data = await res.json();
-    setAutoTopupEnabled(Boolean(data.enabled));
-    setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
-  } catch (err: any) {
-    setBillingError(err?.message || "Failed to save billing settings.");
-  } finally {
-    setBillingSaving(false);
-  }
-};
+  };
+
+  const saveBillingSettings = async () => {
+    if (!customerId || !API_BASE_URL) return;
+    try {
+      setBillingSaving(true);
+      setBillingError(null);
+      const res = await fetch(`${API_BASE_URL}/billing/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          enabled: autoTopupEnabled,
+          monthlyLimitPacks: Number(autoTopupLimit || "0"),
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Billing save error: ${res.status}`);
+      }
+      const data = await res.json();
+      setAutoTopupEnabled(Boolean(data.enabled));
+      setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
+    } catch (err: any) {
+      setBillingError(err?.message || "Failed to save billing settings.");
+    } finally {
+      setBillingSaving(false);
+    }
+  };
+
   const loadAdminData = async (secret: string) => {
-  if (!API_BASE_URL || !secret) return;
-  try {
-    setAdminLoading(true);
-    setAdminError(null);
-    const headers = { "x-admin-secret": secret };
+    if (!API_BASE_URL || !secret) return;
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const headers = { "x-admin-secret": secret };
 
-    const [summaryRes, customersRes] = await Promise.all([
-      fetch(`${API_BASE_URL}/admin/summary`, { headers }),
-      fetch(`${API_BASE_URL}/admin/customers`, { headers }),
-    ]);
+      const [summaryRes, customersRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/summary`, { headers }),
+        fetch(`${API_BASE_URL}/admin/customers`, { headers }),
+      ]);
 
-    if (!summaryRes.ok) throw new Error("Admin summary failed");
-    if (!customersRes.ok) throw new Error("Admin customers failed");
+      if (!summaryRes.ok) throw new Error("Admin summary failed");
+      if (!customersRes.ok) throw new Error("Admin customers failed");
 
-    const summary = (await summaryRes.json()) as AdminSummary;
-    const customersJson = await customersRes.json();
-    const customers: AdminCustomer[] =
-      customersJson.customers ?? customersJson;
+      const summary = (await summaryRes.json()) as AdminSummary;
+      const customersJson = await customersRes.json();
+      const customers: AdminCustomer[] =
+        customersJson.customers ?? customersJson;
 
-    setAdminSummary(summary);
-    setAdminCustomers(customers);
-    setAdminMode(true);
-  } catch (err: any) {
-    console.error(err);
-    setAdminError(
-      err?.message || "Failed to load admin data. Check secret."
-    );
-    setAdminMode(false);
-  } finally {
-    setAdminLoading(false);
-  }
-};
-
-const handleAdminEnter = async () => {
-  if (!adminSecret) return;
-  window.localStorage.setItem(ADMIN_SECRET_STORAGE_KEY, adminSecret);
-  await loadAdminData(adminSecret);
-};
-
-const handleAdminAdjust = async (targetCustomerId: string) => {
-  if (!API_BASE_URL || !adminSecret) return;
-  const raw = adminAdjust[targetCustomerId];
-  const delta = Number(raw);
-  if (!Number.isFinite(delta) || delta === 0) return;
-
-  try {
-    setAdminLoading(true);
-    setAdminError(null);
-    const res = await fetch(`${API_BASE_URL}/admin/credits/adjust`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-admin-secret": adminSecret,
-      },
-      body: JSON.stringify({ customerId: targetCustomerId, delta }),
-    });
-
-    if (!res.ok) throw new Error("Admin adjust failed");
-
-    const data = (await res.json()) as {
-      customerId: string;
-      balance: number;
-    };
-
-    // update list
-    setAdminCustomers((prev) =>
-      prev.map((c) =>
-        c.customerId === data.customerId
-          ? { ...c, balance: data.balance }
-          : c
-      )
-    );
-
-    // clear input
-    setAdminAdjust((prev) => ({ ...prev, [targetCustomerId]: "" }));
-
-    // refresh credits if this is the currently-viewed customer
-    if (customerId && String(customerId) === String(data.customerId)) {
-      await handleFetchCredits();
+      setAdminSummary(summary);
+      setAdminCustomers(customers);
+      setAdminMode(true);
+    } catch (err: any) {
+      console.error(err);
+      setAdminError(
+        err?.message || "Failed to load admin data. Check secret."
+      );
+      setAdminMode(false);
+    } finally {
+      setAdminLoading(false);
     }
-  } catch (err: any) {
-    console.error(err);
-    setAdminError(err?.message || "Failed to adjust credits.");
-  } finally {
-    setAdminLoading(false);
-  }
-};
-useEffect(() => {
-  const stored = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY);
-  if (stored) {
-    setAdminSecret(stored);
-    // don't auto-enter admin mode; you can click the button when you want
-  }
-}, []);
+  };
+
+  const handleAdminEnter = async () => {
+    if (!adminSecret) return;
+    window.localStorage.setItem(ADMIN_SECRET_STORAGE_KEY, adminSecret);
+    await loadAdminData(adminSecret);
+  };
+
+  const handleAdminAdjust = async (targetCustomerId: string) => {
+    if (!API_BASE_URL || !adminSecret) return;
+    const raw = adminAdjust[targetCustomerId];
+    const delta = Number(raw);
+    if (!Number.isFinite(delta) || delta === 0) return;
+
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const res = await fetch(`${API_BASE_URL}/admin/credits/adjust`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": adminSecret,
+        },
+        body: JSON.stringify({ customerId: targetCustomerId, delta }),
+      });
+
+      if (!res.ok) throw new Error("Admin adjust failed");
+
+      const data = (await res.json()) as {
+        customerId: string;
+        balance: number;
+      };
+
+      setAdminCustomers((prev) =>
+        prev.map((c) =>
+          c.customerId === data.customerId
+            ? { ...c, balance: data.balance }
+            : c
+        )
+      );
+
+      setAdminAdjust((prev) => ({ ...prev, [targetCustomerId]: "" }));
+
+      if (customerId && String(customerId) === String(data.customerId)) {
+        await handleFetchCredits();
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAdminError(err?.message || "Failed to adjust credits.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
 
   const fetchAdminOverview = async () => {
     if (!isAdmin || !ADMIN_KEY) return;
@@ -525,7 +568,9 @@ useEffect(() => {
     }
   };
 
-  // --- Bootstrap once on load ---
+  // ============================================
+  // 8. Bootstrap on first load
+  // ============================================
   useEffect(() => {
     const bootstrap = async () => {
       await handleCheckHealth();
@@ -541,6 +586,9 @@ useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ============================================
+  // 9. API helpers – stills & motions
+  // ============================================
   const handleGenerateStill = async () => {
     try {
       setStillGenerating(true);
@@ -780,8 +828,9 @@ useEffect(() => {
     }
   };
 
-  // --- Derived values ---
-
+  // ============================================
+  // 10. Derived values
+  // ============================================
   const currentStill = stillItems[stillIndex] || null;
   const currentMotion = motionItems[motionIndex] || null;
 
@@ -814,10 +863,13 @@ useEffect(() => {
   const historyMotions: ApiGeneration[] =
     history?.generations.filter((g) => g.type === "motion") ?? [];
 
-  // --- JSX ---
+   // ============================================
+  // 11. JSX
+  // ============================================
 
   return (
     <div className="mina-root">
+      {/* 11.1 Header / tabs / credits badge */}
       <header className="mina-header">
         <div className="mina-logo">MINA · Editorial AI</div>
         <div className="mina-header-right">
@@ -832,20 +884,14 @@ useEffect(() => {
               Playground
             </button>
             <button
-              className={classNames(
-                "tab",
-                activeTab === "profile" && "active"
-              )}
+              className={classNames("tab", activeTab === "profile" && "active")}
               onClick={() => setActiveTab("profile")}
             >
               Profile
             </button>
             {isAdmin && (
               <button
-                className={classNames(
-                  "tab",
-                  activeTab === "admin" && "active"
-                )}
+                className={classNames("tab", activeTab === "admin" && "active")}
                 onClick={() => setActiveTab("admin")}
               >
                 Admin
@@ -856,12 +902,14 @@ useEffect(() => {
         </div>
       </header>
 
+      {/* 11.2 Main content area (tabs body) */}
       <main className="mina-main">
+        {/* 11.2.1 Playground tab */}
         {activeTab === "playground" && (
           <div className="mina-layout">
-            {/* Left column */}
+            {/* 11.2.1.1 Left column – Steps 1–4 */}
             <div className="mina-left">
-              {/* Step 1 */}
+              {/* Step 1 – Connection & session */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -938,7 +986,7 @@ useEffect(() => {
                 </div>
               </section>
 
-              {/* Step 2 */}
+              {/* Step 2 – Product & style */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -1014,7 +1062,7 @@ useEffect(() => {
                 </div>
               </section>
 
-              {/* Step 3 */}
+              {/* Step 3 – Brief & format */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -1076,7 +1124,7 @@ useEffect(() => {
                 </div>
               </section>
 
-              {/* Step 4 + 5 */}
+              {/* Step 4 & 5 – Motion loop */}
               <section className="mina-section">
                 <div className="section-title">
                   <span
@@ -1085,7 +1133,7 @@ useEffect(() => {
                       step4Done && step5Done && "step-done"
                     )}
                   />
-                <span>04 · Motion loop</span>
+                  <span>04 · Motion loop</span>
                 </div>
                 <div className="section-body">
                   <div className="hint small">
@@ -1138,7 +1186,7 @@ useEffect(() => {
               </section>
             </div>
 
-            {/* Right column */}
+            {/* 11.2.1.2 Right column – Stills + Motion piles */}
             <div className="mina-right">
               {/* Stills pile */}
               <section className="mina-section">
@@ -1317,8 +1365,10 @@ useEffect(() => {
           </div>
         )}
 
+        {/* 11.2.2 Profile tab */}
         {activeTab === "profile" && (
           <div className="profile-layout">
+            {/* 11.2.2.1 Profile – account, credits, auto top-up, history */}
             <section className="mina-section wide">
               <div className="section-title">
                 <span className="step-dot step-done" />
@@ -1347,79 +1397,82 @@ useEffect(() => {
                       Image −{imageCost} · Motion −{motionCost} credits
                     </div>
                   </div>
-                        <div className="auto-topup-row">
-                          <div className="profile-label">Auto top-up</div>
-                        
-                          <div className="field-toggle">
-                            <input
-                              type="checkbox"
-                              checked={autoTopupEnabled}
-                              onChange={(e) => setAutoTopupEnabled(e.target.checked)}
-                            />
-                            <span
-                              className={classNames(
-                                "toggle-label",
-                                autoTopupEnabled ? "on" : "off"
-                              )}
-                            >
-                              {autoTopupEnabled ? "Enabled" : "Disabled"}
-                            </span>
-                          </div>
-                        
-                          <div className="auto-topup-grid">
-                            <div className="field">
-                              <div className="field-label">
-                                Monthly limit <span className="field-unit">(packs)</span>
-                              </div>
-                              <input
-                                className="field-input"
-                                type="number"
-                                min={0}
-                                value={autoTopupLimit}
-                                onChange={(e) => setAutoTopupLimit(e.target.value)}
-                              />
-                            </div>
-                        
-                            <div className="field">
-                              <div className="field-label">Pack</div>
-                              <select
-                                className="field-input"
-                                value={autoTopupPack}
-                                onChange={(e) => setAutoTopupPack(e.target.value)}
-                              >
-                                <option value="MINA-50">Mina 50 Machta</option>
-                              </select>
-                            </div>
-                          </div>
-                        
-                          <div className="field-row" style={{ marginTop: 8 }}>
-                            <button
-                              type="button"
-                              className="primary-button"
-                              onClick={saveBillingSettings}
-                              disabled={billingSaving || billingLoading}
-                            >
-                              {billingSaving ? "Saving…" : "Save auto top-up"}
-                            </button>
-                        
-                            {billingLoading && (
-                              <div className="profile-hint">Loading settings…</div>
-                            )}
-                        
-                            {billingError && (
-                              <div className="status-error">{billingError}</div>
-                            )}
-                          </div>
-                        
-                          <div className="profile-hint">
-                            For now Mina only stores this preference. Later it will control
-                            real auto-purchases via Shopify/Stripe.
-                          </div>
+
+                  {/* 11.2.2.1.a Auto top-up (profile card) */}
+                  <div className="auto-topup-row">
+                    <div className="profile-label">Auto top-up</div>
+
+                    <div className="field-toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoTopupEnabled}
+                        onChange={(e) =>
+                          setAutoTopupEnabled(e.target.checked)
+                        }
+                      />
+                      <span
+                        className={classNames(
+                          "toggle-label",
+                          autoTopupEnabled ? "on" : "off"
+                        )}
+                      >
+                        {autoTopupEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
+
+                    <div className="auto-topup-grid">
+                      <div className="field">
+                        <div className="field-label">
+                          Monthly limit{" "}
+                          <span className="field-unit">(packs)</span>
                         </div>
+                        <input
+                          className="field-input"
+                          type="number"
+                          min={0}
+                          value={autoTopupLimit}
+                          onChange={(e) => setAutoTopupLimit(e.target.value)}
+                        />
+                      </div>
 
+                      <div className="field">
+                        <div className="field-label">Pack</div>
+                        <select
+                          className="field-input"
+                          value={autoTopupPack}
+                          onChange={(e) => setAutoTopupPack(e.target.value)}
+                        >
+                          <option value="MINA-50">Mina 50 Machta</option>
+                        </select>
+                      </div>
+                    </div>
 
+                    <div className="field-row" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={saveBillingSettings}
+                        disabled={billingSaving || billingLoading}
+                      >
+                        {billingSaving ? "Saving…" : "Save auto top-up"}
+                      </button>
 
-                  
+                      {billingLoading && (
+                        <div className="profile-hint">Loading settings…</div>
+                      )}
+
+                      {billingError && (
+                        <div className="status-error">{billingError}</div>
+                      )}
+                    </div>
+
+                    <div className="profile-hint">
+                      For now Mina only stores this preference. Later it will
+                      control real auto-purchases via Shopify/Stripe.
+                    </div>
+                  </div>
+
+                  {/* 11.2.2.1.b Recent credit events */}
                   {historyLoading && (
                     <div className="hint small">Loading history…</div>
                   )}
@@ -1459,6 +1512,8 @@ useEffect(() => {
                 </div>
               </div>
             </section>
+
+            {/* 11.2.2.2 Admin – credits & customers (in profile tab) */}
             <section className="mina-section wide">
               <div className="section-title">ADMIN · CREDITS & CUSTOMERS</div>
               <div className="section-body">
@@ -1472,7 +1527,7 @@ useEffect(() => {
                       onChange={(e) => setAdminSecret(e.target.value)}
                     />
                   </div>
-            
+
                   <button
                     type="button"
                     className="secondary-button"
@@ -1482,13 +1537,13 @@ useEffect(() => {
                     {adminMode ? "Refresh admin data" : "Enter admin mode"}
                   </button>
                 </div>
-            
+
                 {adminError && (
                   <div className="status-error" style={{ marginTop: 6 }}>
                     {adminError}
                   </div>
                 )}
-            
+
                 {adminMode && (
                   <>
                     {adminSummary && (
@@ -1500,9 +1555,12 @@ useEffect(() => {
                         </div>
                       </div>
                     )}
-            
+
                     <div style={{ marginTop: 12, fontSize: 13 }}>
-                      <div className="field-label" style={{ marginBottom: 4 }}>
+                      <div
+                        className="field-label"
+                        style={{ marginBottom: 4 }}
+                      >
                         Customers
                       </div>
                       <div
@@ -1526,7 +1584,8 @@ useEffect(() => {
                                 style={{
                                   textAlign: "left",
                                   padding: "4px 6px",
-                                  borderBottom: "1px solid rgba(8,10,0,0.18)",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
                                 }}
                               >
                                 Customer ID
@@ -1535,7 +1594,8 @@ useEffect(() => {
                                 style={{
                                   textAlign: "right",
                                   padding: "4px 6px",
-                                  borderBottom: "1px solid rgba(8,10,0,0.18)",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
                                 }}
                               >
                                 Balance
@@ -1544,7 +1604,8 @@ useEffect(() => {
                                 style={{
                                   textAlign: "right",
                                   padding: "4px 6px",
-                                  borderBottom: "1px solid rgba(8,10,0,0.18)",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
                                 }}
                               >
                                 Adjust
@@ -1557,7 +1618,8 @@ useEffect(() => {
                                 <td
                                   style={{
                                     padding: "4px 6px",
-                                    borderBottom: "1px solid rgba(8,10,0,0.08)",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
                                   }}
                                 >
                                   {c.customerId}
@@ -1566,7 +1628,8 @@ useEffect(() => {
                                   style={{
                                     padding: "4px 6px",
                                     textAlign: "right",
-                                    borderBottom: "1px solid rgba(8,10,0,0.08)",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
                                   }}
                                 >
                                   {c.balance}
@@ -1575,7 +1638,8 @@ useEffect(() => {
                                   style={{
                                     padding: "4px 6px",
                                     textAlign: "right",
-                                    borderBottom: "1px solid rgba(8,10,0,0.08)",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
                                     whiteSpace: "nowrap",
                                   }}
                                 >
@@ -1593,8 +1657,13 @@ useEffect(() => {
                                   <button
                                     type="button"
                                     className="secondary-button"
-                                    style={{ padding: "4px 8px", fontSize: 11 }}
-                                    onClick={() => handleAdminAdjust(c.customerId)}
+                                    style={{
+                                      padding: "4px 8px",
+                                      fontSize: 11,
+                                    }}
+                                    onClick={() =>
+                                      handleAdminAdjust(c.customerId)
+                                    }
                                     disabled={adminLoading}
                                   >
                                     Apply
@@ -1606,7 +1675,10 @@ useEffect(() => {
                               <tr>
                                 <td
                                   colSpan={3}
-                                  style={{ padding: "6px", textAlign: "center" }}
+                                  style={{
+                                    padding: "6px",
+                                    textAlign: "center",
+                                  }}
                                 >
                                   No customers yet.
                                 </td>
@@ -1621,6 +1693,7 @@ useEffect(() => {
               </div>
             </section>
 
+            {/* 11.2.2.3 Gallery – recent generations */}
             <section className="mina-section wide">
               <div className="section-title">
                 <span className="step-dot" />
@@ -1676,6 +1749,7 @@ useEffect(() => {
           </div>
         )}
 
+        {/* 11.2.3 Admin tab (top-level) */}
         {activeTab === "admin" && isAdmin && (
           <div className="profile-layout">
             <section className="mina-section wide">
@@ -1794,3 +1868,4 @@ useEffect(() => {
 }
 
 export default App;
+
