@@ -221,10 +221,14 @@ function App() {
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
 
-  // Profile / auto-topup (UI only)
-  const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
-  const [autoTopupLimit, setAutoTopupLimit] = useState("200");
-  const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
+  // Profile / auto-topup (now backed by API)
+const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
+const [autoTopupLimit, setAutoTopupLimit] = useState("0");
+const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
+const [billingLoading, setBillingLoading] = useState(false);
+const [billingSaving, setBillingSaving] = useState(false);
+const [billingError, setBillingError] = useState(null);
+
 
   // History from backend
   const [history, setHistory] = useState<CustomerHistory | null>(null);
