@@ -318,27 +318,7 @@ function App() {
         }
       }, []);
     
-      const handleLoginSubmit = () => {
-      const trimmed = loginInput.trim();
-      if (!trimmed) return;
-    
-      setCustomerId(trimmed);
-    
-      try {
-        if (typeof window !== "undefined") {
-          // persist
-          window.localStorage.setItem("minaCustomerId", trimmed);
-    
-          const params = new URLSearchParams(window.location.search);
-          params.set("customerId", trimmed);
-          const newUrl =
-            window.location.pathname + "?" + params.toString();
-          window.history.replaceState({}, "", newUrl);
-        }
-      } catch {
-        // ignore
-      }
-    };
+     
 
   // ============================================
   // 5. Step “done” flags
