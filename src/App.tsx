@@ -831,37 +831,57 @@ function App() {
   // ============================================
   // 10. Derived values
   // ============================================
+  
   const currentStill = stillItems[stillIndex] || null;
   const currentMotion = motionItems[motionIndex] || null;
-
+  
   const imageCost = credits?.meta?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? 5;
-
+  
+  const hasCreditsForStill = credits ? credits.balance >= imageCost : true;
+  const hasCreditsForMotion = credits ? credits.balance >= motionCost : true;
+  
   const canGenerateStill =
     !stillGenerating &&
     !!sessionId &&
     !!productImageUrl.trim() &&
-    !!brief.trim();
-
+    !!brief.trim() &&
+    hasCreditsForStill;
+  
   const canGenerateMotion =
     !motionGenerating &&
     !!sessionId &&
     !!currentStill &&
-    !!motionDescription.trim();
-
+    !!motionDescription.trim() &&
+    hasCreditsForMotion;
+  
   const creditsLabel = (() => {
-    if (creditsLoading) return "Loading credits…";
+    if (creditsLoading) return "Credits: …";
     if (creditsError) return "Credits error";
-    if (!credits) return "Credits —";
-    return `Credits ${credits.balance}`;
+  
+    const baseDetail = `img ${imageCost} · motion ${motionCost}`;
+  
+    if (!credits) {
+      return `Credits: — (${baseDetail})`;
+    }
+  
+    const base = `Credits: ${credits.balance}`;
+    if (credits.balance <= 0) {
+      return `${base} (add more to generate) · ${baseDetail}`;
+    }
+    if (!hasCreditsForStill || !hasCreditsForMotion) {
+      return `${base} (not enough for next run) · ${baseDetail}`;
+    }
+    return `${base} (${baseDetail})`;
   })();
-
+  
   const isConnected = Boolean(health?.ok);
-
+  
   const historyStills: ApiGeneration[] =
     history?.generations.filter((g) => g.type === "image") ?? [];
   const historyMotions: ApiGeneration[] =
     history?.generations.filter((g) => g.type === "motion") ?? [];
+
 
    // ============================================
   // 11. JSX
