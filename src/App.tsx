@@ -152,19 +152,26 @@ type MotionItem = {
   createdAt: string;
 };
 
-// ==============================================
+  // ==============================================
 // 3. Helpers
 // ==============================================
+
 const devCustomerId = "8766256447571";
+
+// when this flag is "1" we auto-login with devCustomerId (local dev only)
+const USE_DEV_CUSTOMER =
+  import.meta.env.VITE_MINA_USE_DEV_CUSTOMER === "1";
 
 function getInitialCustomerId(): string {
   try {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const fromUrl = params.get("customerId");
+
       if (fromUrl && fromUrl.trim().length > 0) {
         return fromUrl.trim();
       }
+
       const stored = window.localStorage.getItem("minaCustomerId");
       if (stored && stored.trim().length > 0) {
         return stored.trim();
@@ -173,7 +180,14 @@ function getInitialCustomerId(): string {
   } catch {
     // ignore client storage errors
   }
-  return devCustomerId;
+
+  // dev auto-login (for your own testing)
+  if (USE_DEV_CUSTOMER) {
+    return devCustomerId;
+  }
+
+  // no initial id → show login screen
+  return "";
 }
 
 function formatTime(ts?: string) {
@@ -186,22 +200,32 @@ function formatTime(ts?: string) {
   }
 }
 
-function classNames(...parts: Array<string | false | null | undefined>) {
+function classNames(
+  ...parts: Array<string | false | null | undefined>
+) {
   return parts.filter(Boolean).join(" ");
 }
+
 
 // ==============================================
 // 4. App component
 // ==============================================
 function App() {
-  // --------------------------------------------
-  // 4.1 Basic tab + customer
-  // --------------------------------------------
-  const [activeTab, setActiveTab] = useState<
-    "playground" | "profile" | "admin"
-  >("playground");
-  const [customerId, setCustomerId] = useState<string>(getInitialCustomerId);
-  const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
+    // --------------------------------------------
+// 4.1 Basic tab + customer
+// --------------------------------------------
+
+const [activeTab, setActiveTab] = useState<
+  "playground" | "profile" | "admin"
+>("playground");
+
+const [customerId, setCustomerId] = useState(getInitialCustomerId);
+
+// simple login text field (used on login screen)
+const [loginInput, setLoginInput] = useState(customerId || "");
+
+const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
+
 
   // --------------------------------------------
   // 4.2 Core state: health, credits, session
@@ -314,95 +338,138 @@ function App() {
   const step3Done = Boolean(brief.trim().length);
   const step4Done = stillItems.length > 0;
   const step5Done = motionItems.length > 0;
+    // --------------------------------------------
+    // 5.1 Login handler
+    // --------------------------------------------
+    
+    const handleLoginSubmit = () => {
+      const trimmed = loginInput.trim();
+      if (!trimmed) return;
+    
+      setCustomerId(trimmed);
+    
+      try {
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams(window.location.search);
+          params.set("customerId", trimmed);
+          const newUrl =
+            window.location.pathname + "?" + params.toString();
+          window.history.replaceState({}, "", newUrl);
+        }
+      } catch {
+        // ignore URL / history errors
+      }
+    };
+
 
   // ============================================
-  // 6. API helpers – core
-  // ============================================
-  const handleCheckHealth = async () => {
-    try {
-      setCheckingHealth(true);
-      setHealthError(null);
-      const res = await fetch(`${API_BASE_URL}/health`);
-      if (!res.ok) {
-        throw new Error(`Health error: ${res.status}`);
-      }
-      const data = (await res.json()) as HealthPayload;
-      setHealth(data);
-    } catch (err: any) {
-      setHealthError(err?.message || "Failed to reach Mina API.");
-    } finally {
-      setCheckingHealth(false);
-    }
-  };
+// 6. API helpers – core
+// ============================================
 
-  const handleFetchCredits = async () => {
-    try {
-      setCreditsLoading(true);
-      setCreditsError(null);
-      const res = await fetch(
-        `${API_BASE_URL}/credits/balance?customerId=${encodeURIComponent(
-          customerId
-        )}`
-      );
-      if (!res.ok) {
-        throw new Error(`Credits error: ${res.status}`);
-      }
-      const data = (await res.json()) as CreditsBalance;
-      setCredits(data);
-    } catch (err: any) {
-      setCreditsError(err?.message || "Failed to load credits.");
-    } finally {
-      setCreditsLoading(false);
+const handleCheckHealth = async () => {
+  try {
+    setCheckingHealth(true);
+    setHealthError(null);
+    const res = await fetch(`${API_BASE_URL}/health`);
+    if (!res.ok) {
+      throw new Error(`Health error: ${res.status}`);
     }
-  };
+    const data = (await res.json()) as HealthPayload;
+    setHealth(data);
+  } catch (err: any) {
+    setHealthError(err?.message || "Failed to reach Mina API.");
+  } finally {
+    setCheckingHealth(false);
+  }
+};
 
-  const handleStartSession = async () => {
-    try {
-      setSessionStarting(true);
-      setSessionError(null);
-      const res = await fetch(`${API_BASE_URL}/sessions/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerId,
-          platform,
-          title: "Mina Editorial Session",
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`Session error: ${res.status}`);
-      }
-      const data = await res.json();
-      if (data?.session?.id) {
-        setSessionId(data.session.id);
-      } else {
-        throw new Error("Missing session id in response.");
-      }
-    } catch (err: any) {
-      setSessionError(err?.message || "Failed to start session.");
-    } finally {
-      setSessionStarting(false);
-    }
-  };
+const handleFetchCredits = async () => {
+  const trimmedId = customerId?.trim();
+  if (!trimmedId) {
+    setCredits(null);
+    return;
+  }
 
-  const fetchHistory = async (cid: string) => {
-    try {
-      setHistoryLoading(true);
-      setHistoryError(null);
-      const res = await fetch(
-        `${API_BASE_URL}/history/customer/${encodeURIComponent(cid)}`
-      );
-      if (!res.ok) {
-        throw new Error(`History error: ${res.status}`);
-      }
-      const data = (await res.json()) as CustomerHistory;
-      setHistory(data);
-    } catch (err: any) {
-      setHistoryError(err?.message || "Failed to load history.");
-    } finally {
-      setHistoryLoading(false);
+  try {
+    setCreditsLoading(true);
+    setCreditsError(null);
+    const res = await fetch(
+      `${API_BASE_URL}/credits/balance?customerId=${encodeURIComponent(
+        trimmedId
+      )}`
+    );
+    if (!res.ok) {
+      throw new Error(`Credits error: ${res.status}`);
     }
-  };
+    const data = (await res.json()) as CreditsBalance;
+    setCredits(data);
+  } catch (err: any) {
+    setCreditsError(err?.message || "Failed to load credits.");
+  } finally {
+    setCreditsLoading(false);
+  }
+};
+
+const handleStartSession = async () => {
+  const trimmedId = customerId?.trim();
+  if (!trimmedId) {
+    return;
+  }
+
+  try {
+    setSessionStarting(true);
+    setSessionError(null);
+    const res = await fetch(`${API_BASE_URL}/sessions/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        customerId: trimmedId,
+        platform,
+        title: "Mina Editorial Session",
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Session error: ${res.status}`);
+    }
+    const data = await res.json();
+    if (data?.session?.id) {
+      setSessionId(data.session.id);
+    } else {
+      throw new Error("Missing session id in response.");
+    }
+  } catch (err: any) {
+    setSessionError(err?.message || "Failed to start session.");
+  } finally {
+    setSessionStarting(false);
+  }
+};
+
+const fetchHistory = async (cid: string) => {
+  const trimmedId = cid?.trim();
+  if (!trimmedId) {
+    setHistory(null);
+    return;
+  }
+
+  try {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const res = await fetch(
+      `${API_BASE_URL}/history/customer/${encodeURIComponent(trimmedId)}`
+    );
+    if (!res.ok) {
+      throw new Error(`History error: ${res.status}`);
+    }
+    const data = (await res.json()) as CustomerHistory;
+    setHistory(data);
+  } catch (err: any) {
+    setHistoryError(err?.message || "Failed to load history.");
+  } finally {
+    setHistoryLoading(false);
+  }
+};
+
+
 
   // ============================================
   // 7. API helpers – billing & admin
@@ -569,22 +636,32 @@ function App() {
   };
 
   // ============================================
-  // 8. Bootstrap on first load
+  // 8. Effects – bootstrap initial data
   // ============================================
+  
   useEffect(() => {
     const bootstrap = async () => {
       await handleCheckHealth();
+  
+      const trimmedId = customerId?.trim();
+      if (!trimmedId) {
+        // not logged in yet – skip customer-specific calls
+        return;
+      }
+  
       await handleFetchCredits();
       await handleStartSession();
-      await fetchHistory(customerId);
-      await fetchBillingSettings(customerId);
+      await fetchHistory(trimmedId);
+      await fetchBillingSettings(trimmedId);
+  
       if (isAdmin) {
         await fetchAdminOverview();
       }
     };
+  
     void bootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [customerId, isAdmin]);
+
 
   // ============================================
   // 9. API helpers – stills & motions
@@ -887,6 +964,49 @@ function App() {
   // 11. JSX
   // ============================================
 
+// Login gate: if no customerId, show simple sign-in screen
+if (!customerId || !customerId.trim()) {
+  return (
+    <div className="mina-main">
+      <div style={{ maxWidth: 420, margin: "0 auto" }}>
+        <section className="mina-section">
+          <div className="section-title">
+            <span className="step-dot" />
+            <span>Sign in to Mina</span>
+          </div>
+          <div className="section-body">
+            <div className="field">
+              <div className="field-label">Customer ID or email</div>
+              <input
+                className="field-input"
+                placeholder="Paste your Shopify customer id or email"
+                value={loginInput}
+                onChange={(e) => setLoginInput(e.target.value)}
+              />
+            </div>
+
+            <div className="hint small">
+              Mina uses this id to load your credits, history and profile.
+            </div>
+
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleLoginSubmit}
+                disabled={!loginInput.trim()}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+  
   return (
     <div className="mina-root">
       {/* 11.1 Header / tabs / credits badge */}
