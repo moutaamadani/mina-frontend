@@ -158,10 +158,6 @@ type MotionItem = {
 
 const devCustomerId = "8766256447571";
 
-// when this flag is "1" we auto-login with devCustomerId (local dev only)
-const USE_DEV_CUSTOMER =
-  import.meta.env.VITE_MINA_USE_DEV_CUSTOMER === "1";
-
 function getInitialCustomerId(): string {
   try {
     if (typeof window !== "undefined") {
@@ -181,12 +177,7 @@ function getInitialCustomerId(): string {
     // ignore client storage errors
   }
 
-  // dev auto-login (for your own testing)
-  if (USE_DEV_CUSTOMER) {
-    return devCustomerId;
-  }
-
-  // no initial id → show login screen
+  // no id yet → show login
   return "";
 }
 
@@ -206,25 +197,24 @@ function classNames(
   return parts.filter(Boolean).join(" ");
 }
 
-
 // ==============================================
 // 4. App component
 // ==============================================
 function App() {
-    // --------------------------------------------
-// 4.1 Basic tab + customer
-// --------------------------------------------
-
-const [activeTab, setActiveTab] = useState<
-  "playground" | "profile" | "admin"
->("playground");
-
-const [customerId, setCustomerId] = useState(getInitialCustomerId);
-
-// simple login text field (used on login screen)
-const [loginInput, setLoginInput] = useState(customerId || "");
-
-const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
+  // --------------------------------------------
+  // 4.1 Basic tab + customer
+  // --------------------------------------------
+  
+  const [activeTab, setActiveTab] = useState<
+    "playground" | "profile" | "admin"
+  >("playground");
+  
+  const [customerId, setCustomerId] = useState(getInitialCustomerId);
+  
+  // login text field, used only on login screen
+  const [loginInput, setLoginInput] = useState(customerId || "");
+  
+  const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
 
 
   // --------------------------------------------
@@ -305,28 +295,50 @@ const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
   // --------------------------------------------
   // 4.7 Effects – persist customer & admin secret
   // --------------------------------------------
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("minaCustomerId", customerId);
-      }
-    } catch {
-      // ignore
-    }
-  }, [customerId]);
-
-  useEffect(() => {
-    try {
-      if (typeof window !== "undefined") {
-        const stored = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY);
-        if (stored) {
-          setAdminSecret(stored);
+      useEffect(() => {
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("minaCustomerId", customerId);
+          }
+        } catch {
+          // ignore
         }
+      }, [customerId]);
+    
+      useEffect(() => {
+        try {
+          if (typeof window !== "undefined") {
+            const stored = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY);
+            if (stored) {
+              setAdminSecret(stored);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }, []);
+    
+      const handleLoginSubmit = () => {
+      const trimmed = loginInput.trim();
+      if (!trimmed) return;
+    
+      setCustomerId(trimmed);
+    
+      try {
+        if (typeof window !== "undefined") {
+          // persist
+          window.localStorage.setItem("minaCustomerId", trimmed);
+    
+          const params = new URLSearchParams(window.location.search);
+          params.set("customerId", trimmed);
+          const newUrl =
+            window.location.pathname + "?" + params.toString();
+          window.history.replaceState({}, "", newUrl);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  }, []);
+    };
 
   // ============================================
   // 5. Step “done” flags
@@ -635,33 +647,34 @@ const fetchHistory = async (cid: string) => {
     }
   };
 
-  // ============================================
-  // 8. Effects – bootstrap initial data
-  // ============================================
-  
-  useEffect(() => {
-    const bootstrap = async () => {
-      await handleCheckHealth();
-  
-      const trimmedId = customerId?.trim();
-      if (!trimmedId) {
-        // not logged in yet – skip customer-specific calls
-        return;
-      }
-  
-      await handleFetchCredits();
-      await handleStartSession();
-      await fetchHistory(trimmedId);
-      await fetchBillingSettings(trimmedId);
-  
-      if (isAdmin) {
-        await fetchAdminOverview();
-      }
-    };
-  
-    void bootstrap();
-  }, [customerId, isAdmin]);
-
+      // ============================================
+    // 8. Bootstrap on first load + when customer changes
+    // ============================================
+    
+    useEffect(() => {
+      const bootstrap = async () => {
+        await handleCheckHealth();
+    
+        const trimmed = customerId?.trim();
+        if (!trimmed) {
+          // not logged in yet → only health
+          return;
+        }
+    
+        await handleFetchCredits();
+        await handleStartSession();
+        await fetchHistory(trimmed);
+        await fetchBillingSettings(trimmed);
+    
+        if (isAdmin) {
+          await fetchAdminOverview();
+        }
+      };
+    
+      void bootstrap();
+    
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customerId, isAdmin]);
 
   // ============================================
   // 9. API helpers – stills & motions
@@ -964,11 +977,11 @@ const fetchHistory = async (cid: string) => {
   // 11. JSX
   // ============================================
 
-// Login gate: if no customerId, show simple sign-in screen
+// if not logged in, show simple login
 if (!customerId || !customerId.trim()) {
   return (
     <div className="mina-main">
-      <div style={{ maxWidth: 420, margin: "0 auto" }}>
+      <div style={{ maxWidth: 420, margin: "40px auto" }}>
         <section className="mina-section">
           <div className="section-title">
             <span className="step-dot" />
@@ -985,8 +998,8 @@ if (!customerId || !customerId.trim()) {
               />
             </div>
 
-            <div className="hint small">
-              Mina uses this id to load your credits, history and profile.
+            <div className="hint small" style={{ marginTop: 4 }}>
+              Mina uses this to find your credits and history.
             </div>
 
             <div style={{ marginTop: 12 }}>
