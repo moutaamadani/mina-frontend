@@ -227,7 +227,15 @@ const [autoTopupLimit, setAutoTopupLimit] = useState("0");
 const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
 const [billingLoading, setBillingLoading] = useState(false);
 const [billingSaving, setBillingSaving] = useState(false);
-const [billingError, setBillingError] = useState(null);
+const [billingError, setBillingError] = useState(null);\
+const [adminMode, setAdminMode] = useState(false);
+const [adminSecret, setAdminSecret] = useState("");
+const [adminSummary, setAdminSummary] = useState<AdminSummary | null>(null);
+const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
+const [adminLoading, setAdminLoading] = useState(false);
+const [adminError, setAdminError] = useState<string | null>(null);
+const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
+
 
 
   // History from backend
