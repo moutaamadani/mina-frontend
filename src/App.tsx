@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
-  "https://mina-editorial-ai-api.onrender.com";
+  "https://www.faltastudio.com/checkouts/cn/hWN6EhbqQW5KrdIuBO3j5HKV/en-ae?_r=AQAB9NY_ccOV_da3y7VmTxJU-dDoLEOCdhP9sg2YlvDwLQQ";
 
 const ADMIN_KEY = import.meta.env.VITE_MINA_ADMIN_KEY || "";
 const ADMIN_SECRET_STORAGE_KEY = "minaAdminSecretV1";
@@ -894,6 +894,33 @@ const fetchHistory = async (cid: string) => {
       // ignore like errors
     }
   };
+  const handleLogout = () => {
+    setCustomerId("");
+    setLoginInput("");
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("minaCustomerId");
+
+        const params = new URLSearchParams(window.location.search);
+        params.delete("customerId");
+        const newUrl =
+          window.location.pathname +
+          (params.toString() ? "?" + params.toString() : "");
+        window.history.replaceState({}, "", newUrl);
+      }
+    } catch {
+      // ignore
+    }
+
+    setSessionId(null);
+    setStillItems([]);
+    setStillIndex(0);
+    setMotionItems([]);
+    setMotionIndex(0);
+    setHistory(null);
+    setCredits(null);
+  };
 
   // ============================================
   // 10. Derived values
@@ -1028,9 +1055,32 @@ if (!customerId || !customerId.trim()) {
               </button>
             )}
           </div>
+
           <div className="mina-credits-badge">{creditsLabel}</div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginLeft: 12,
+              fontSize: 12,
+            }}
+          >
+            <span style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {customerId}
+            </span>
+            <button
+              type="button"
+              className="link-button subtle"
+              onClick={handleLogout}
+            >
+              Switch
+            </button>
+          </div>
         </div>
       </header>
+
 
       {/* 11.2 Main content area (tabs body) */}
       <main className="mina-main">
@@ -1237,20 +1287,36 @@ if (!customerId || !customerId.trim()) {
                     </div>
                   </div>
 
-                  <div className="section-actions">
-                    <button
-                      className="primary-button"
-                      onClick={handleGenerateStill}
-                      disabled={!canGenerateStill}
-                    >
-                      {stillGenerating
-                        ? "Creating still…"
-                        : `Create still (−${imageCost} credits)`}
-                    </button>
-                    {stillError && (
-                      <div className="error-text">{stillError}</div>
-                    )}
-                  </div>
+                                      <div className="section-actions">
+                      <button
+                        className="primary-button"
+                        onClick={handleGenerateStill}
+                        disabled={!canGenerateStill}
+                      >
+                        {stillGenerating
+                          ? "Creating still…"
+                          : `Create still (−${imageCost} credits)`}
+                      </button>
+                      {stillError && (
+                        <div className="error-text">
+                          {stillError}
+                          {TOPUP_URL && (
+                            <>
+                              {" "}
+                              ·{" "}
+                              <a
+                                href={TOPUP_URL}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Buy credits
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                 </div>
               </section>
 
@@ -1306,12 +1372,28 @@ if (!customerId || !customerId.trim()) {
                     />
                   </div>
 
-                  {motionError && (
-                    <div className="status-error">{motionError}</div>
+                    {motionError && (
+                    <div className="status-error">
+                      {motionError}
+                      {TOPUP_URL && (
+                        <>
+                          {" "}
+                          ·{" "}
+                          <a
+                            href={TOPUP_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Buy credits
+                          </a>
+                        </>
+                      )}
+                    </div>
                   )}
                   {motionSuggestError && (
                     <div className="status-error">{motionSuggestError}</div>
                   )}
+
                 </div>
               </section>
             </div>
@@ -1499,13 +1581,33 @@ if (!customerId || !customerId.trim()) {
         {activeTab === "profile" && (
           <div className="profile-layout">
             {/* 11.2.2.1 Profile – account, credits, auto top-up, history */}
-            <section className="mina-section wide">
+                        <section className="mina-section wide">
               <div className="section-title">
                 <span className="step-dot step-done" />
                 <span>Profile · Account & billing</span>
               </div>
               <div className="section-body">
+                <div
+                  className="field-row"
+                  style={{ justifyContent: "flex-end", marginBottom: 8 }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      if (customerId) {
+                        void handleFetchCredits();
+                        void fetchHistory(customerId);
+                        void fetchBillingSettings(customerId);
+                      }
+                    }}
+                  >
+                    Refresh data
+                  </button>
+                </div>
+
                 <div className="profile-body">
+
                   <div>
                     <div className="profile-label">Shopify customer id</div>
                     <div className="profile-value">{customerId}</div>
