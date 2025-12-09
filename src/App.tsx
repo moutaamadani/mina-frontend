@@ -429,6 +429,7 @@ const saveBillingSettings = async () => {
       await handleFetchCredits();
       await handleStartSession();
       await fetchHistory(customerId);
+      await fetchBillingSettings(customerId);
       if (isAdmin) {
         await fetchAdminOverview();
       }
