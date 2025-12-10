@@ -661,6 +661,8 @@ button:disabled {
   max-width: 420px;
   display: flex;
   flex-direction: column;
+    transform: translateY(-40px); /* lift block ~40px */
+
 }
 
 /* top-left logo on auth */
