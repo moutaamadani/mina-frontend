@@ -1,18 +1,13 @@
-/* MINA – only two colors:
-   - background: #EEEED2
-   - text:       #080A00
-   Everything else is just opacity of the text color.
-*/
-
 :root {
-  --mina-bg: #EEEED2;
-  --mina-text: #080A00;
+  /* MAIN PALETTE – change here only */
+  --mina-bg: #eeeED2; /* your “white” */
+  --mina-text: #080a00; /* your “black” */
   --mina-border-soft: rgba(8, 10, 0, 0.16);
   --mina-border-strong: rgba(8, 10, 0, 0.32);
   --mina-muted: rgba(8, 10, 0, 0.6);
 }
 
-/* Reset */
+/* Reset / base */
 
 *,
 *::before,
@@ -23,269 +18,427 @@
 html,
 body,
 #root {
-  margin: 0;
-  padding: 0;
   height: 100%;
-  background-color: var(--mina-bg);
-  color: var(--mina-text);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Segoe UI", sans-serif;
 }
 
-/* Kill any leftover dark backgrounds */
+body {
+  margin: 0;
+  background: var(--mina-bg);
+  color: var(--mina-text);
+  font-family: "Schibsted Grotesk", system-ui, -apple-system, BlinkMacSystemFont,
+    "SF Pro Text", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* scroll inside columns, not whole page */
+}
 
-body,
-#root,
-.mina-root,
-.mina-main,
-.mina-layout,
-.mina-left,
-.mina-right {
-  background-color: var(--mina-bg);
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border-radius: 0;
+}
+
+/* ========== App shell ========== */
+
+.mina-root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--mina-bg);
+  color: var(--mina-text);
 }
 
 /* Header */
 
-.mina-header,
-header {
-  background-color: var(--mina-bg);
-  border-bottom: 1px solid var(--mina-border-soft);
+.mina-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--mina-border-soft);
 }
 
 .mina-logo {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-/* Tabs + credits */
-
-.mina-tabs {
-  display: inline-flex;
-  gap: 4px;
-  border-radius: 999px;
-  padding: 2px;
-  border: 1px solid var(--mina-border-soft);
-}
-
-.tab {
-  border: none;
-  background: transparent;
-  padding: 6px 12px;
-  border-radius: 999px;
   font-size: 12px;
-  cursor: pointer;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.mina-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+}
+
+/* Status pill in header */
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.status-label {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 10px;
   color: var(--mina-muted);
 }
 
-.tab.active {
-  background-color: rgba(8, 10, 0, 0.06);
-  color: var(--mina-text);
+.status-chip {
+  padding: 2px 6px;
+  border: 1px solid var(--mina-border-soft);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
+
+.status-chip.ok {
+  border-color: var(--mina-border-strong);
+}
+
+.status-chip.error {
+  border-color: var(--mina-border-strong);
+}
+
+/* Tabs */
+
+.mina-tabs {
+  display: inline-flex;
+  border: 1px solid var(--mina-border-soft);
+  padding: 2px;
+  gap: 2px;
+}
+
+.tab {
+  padding: 5px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--mina-text);
+  color: var(--mina-bg);
+}
+
+/* Credits badge */
 
 .mina-credits-badge {
-  border-radius: 999px;
+  font-size: 11px;
+  padding: 4px 8px;
   border: 1px solid var(--mina-border-soft);
-  padding: 4px 10px;
-  font-size: 12px;
 }
 
-/* Main layout */
+/* ========== Main 50/50 layout ========== */
 
 .mina-main {
+  flex: 1;
   display: flex;
   justify-content: center;
   padding: 16px;
+  overflow: hidden; /* scroll inside columns */
 }
 
 .mina-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  grid-template-columns: 1fr 1fr; /* 50 / 50 */
   gap: 16px;
   width: 100%;
-  max-width: 1400px;
+  max-width: 1440px;
+  height: 100%;
 }
 
-/* Sections / cards */
+.mina-left,
+.mina-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
 
-.mina-section,
-.output-shell,
-.profile-layout,
-.admin-layout {
-  background-color: var(--mina-bg);
+/* Sections */
+
+.mina-section {
   border: 1px solid var(--mina-border-soft);
-  padding: 12px 14px;
+  padding: 10px 12px;
+  background: var(--mina-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mina-section.wide {
+  grid-column: 1 / -1;
 }
 
 .section-title {
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  margin-bottom: 4px;
+}
+
+.section-body {
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .step-dot {
-  width: 9px;
-  height: 9px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  border: 1px solid var(--mina-border-strong);
+  border: 1px solid var(--mina-text);
 }
 
 .step-dot.step-done {
-  background-color: rgba(8, 10, 0, 0.85);
+  background: var(--mina-text);
 }
 
 /* Fields */
 
-.field,
-.field-inline {
+.field {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 12px;
+  font-size: 13px;
+}
+
+.field-inline {
+  flex: 1;
 }
 
 .field-row {
   display: flex;
-  flex-wrap: wrap;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
 .field-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: var(--mina-muted);
 }
 
 .field-unit {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--mina-muted);
+  margin-left: 4px;
 }
 
 .field-input,
 .field-textarea,
-select {
-  border-radius: 0;
+.customer-input {
   border: 1px solid var(--mina-border-soft);
-  padding: 7px 9px;
+  padding: 6px 8px;
   font-size: 13px;
-  background-color: var(--mina-bg);
-  color: var(--mina-text);
+  background: transparent;
   outline: none;
 }
 
-.field-textarea {
-  min-height: 70px;
-  resize: vertical;
-}
-
-.field-input:focus-visible,
-.field-textarea:focus-visible,
-select:focus-visible {
+.field-input:focus,
+.field-textarea:focus,
+.customer-input:focus {
   border-color: var(--mina-border-strong);
 }
 
-/* Toggle */
+.field-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.4;
+}
 
 .field-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
 }
 
 .field-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 
 .toggle-label {
-  color: var(--mina-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
 }
 
 .toggle-label.on {
-  color: var(--mina-text);
+  font-weight: 500;
 }
 
 /* Buttons */
 
 button {
-  font-family: inherit;
-}
-
-.primary-button,
-.secondary-button {
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 12px;
-  border: 1px solid var(--mina-text);
   cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.primary-button {
-  background-color: rgba(8, 10, 0, 0.9);
-  color: var(--mina-bg);
-}
-
-.secondary-button {
-  background-color: transparent;
-  color: var(--mina-text);
+  border-radius: 0;
+  border: 1px solid transparent;
+  background: transparent;
 }
 
 button:disabled {
-  opacity: 0.45;
+  opacity: 0.5;
   cursor: default;
 }
 
-/* Hints + status */
+.primary-button {
+  border-color: var(--mina-text);
+  background: var(--mina-text);
+  color: var(--mina-bg);
+  padding: 7px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
 
-.hint,
-.profile-hint {
-  font-size: 11px;
+.secondary-button {
+  border-color: var(--mina-border-soft);
+  padding: 7px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+
+/* Link-style buttons */
+
+.link-button {
+  border: none;
+  padding: 0;
+  background: none;
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.link-button.subtle {
   color: var(--mina-muted);
 }
 
-.status-error {
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.8);
+/* Text helpers */
+
+.hint {
+  font-size: 12px;
+  color: var(--mina-muted);
 }
 
-/* Output (stills / motion) */
+.hint.small {
+  font-size: 11px;
+}
+
+.status-error,
+.error-text {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--mina-text);
+}
+
+/* Outputs */
 
 .output-shell {
+  border: 1px solid var(--mina-border-soft);
+  min-height: 160px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .output-media {
-  border: 1px solid var(--mina-border-soft);
-  background-color: rgba(8, 10, 0, 0.04);
-  min-height: 260px;
+  border-bottom: 1px solid var(--mina-border-soft);
+  background: rgba(8, 10, 0, 0.03);
+  padding: 8px;
   display: flex;
-  align-items: center;
   justify-content: center;
+  align-items: center;
+  min-height: 200px;
 }
 
 .output-media img,
 .output-media video {
   max-width: 100%;
-  max-height: 100%;
+  max-height: 320px;
 }
 
 .output-placeholder {
-  font-size: 13px;
+  padding: 16px;
+  font-size: 12px;
   color: var(--mina-muted);
-  text-align: center;
+}
+
+.output-meta {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.output-tag-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.output-tag {
+  border: 1px solid var(--mina-border-soft);
+  padding: 2px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 10px;
+}
+
+.output-tag.subtle {
+  border-color: rgba(8, 10, 0, 0.12);
+  color: var(--mina-muted);
+}
+
+.output-prompt {
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: pre-wrap;
 }
 
 /* Auto top-up */
@@ -293,7 +446,8 @@ button:disabled {
 .auto-topup-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .auto-topup-grid {
@@ -302,18 +456,20 @@ button:disabled {
   gap: 8px 10px;
 }
 
-/* Generic customer pills */
-
-.customer-pill,
-.customer-input {
-  border-radius: 999px;
+.customer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid var(--mina-border-soft);
   padding: 4px 8px;
-  font-size: 11px;
-  background-color: var(--mina-bg);
+  font-size: 12px;
 }
 
-/* Profile / admin columns */
+.customer-input {
+  min-width: 160px;
+}
+
+/* Profile & admin */
 
 .profile-layout,
 .admin-layout {
@@ -329,75 +485,285 @@ button:disabled {
   gap: 10px 14px;
 }
 
+.profile-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.profile-value {
+  font-size: 13px;
+}
+
+.profile-hint {
+  font-size: 11px;
+  color: var(--mina-muted);
+  margin-top: 4px;
+}
+
+.credits-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.credits-delta {
+  width: 42px;
+  display: inline-block;
+}
+
+.credits-reason {
+  flex: 1;
+}
+
+.credits-time {
+  white-space: nowrap;
+  color: var(--mina-muted);
+}
+
+.admin-columns {
+  gap: 16px;
+}
+
+/* Gallery */
+
+.gallery-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.gallery-item {
+  border: 1px solid var(--mina-border-soft);
+  display: flex;
+  flex-direction: column;
+}
+
+.gallery-media {
+  border-bottom: 1px solid var(--mina-border-soft);
+  background: rgba(8, 10, 0, 0.03);
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+}
+
+.gallery-media img,
+.gallery-media video {
+  max-width: 100%;
+  max-height: 260px;
+}
+
+.gallery-meta {
+  padding: 6px 8px;
+}
+
+.gallery-meta-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.gallery-tag {
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 10px;
+}
+
+.gallery-tag.subtle {
+  color: var(--mina-muted);
+}
+
+.gallery-date {
+  font-size: 11px;
+  color: var(--mina-muted);
+}
+
 /* Responsive */
 
 @media (max-width: 960px) {
+  body {
+    overflow: auto; /* allow normal scroll on small screens */
+  }
+
   .mina-main {
     padding: 10px;
   }
 
   .mina-layout {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+
+  .mina-left,
+  .mina-right {
+    overflow: visible;
+  }
+
+  .mina-section.wide {
+    grid-column: auto;
+  }
+
+  .mina-auth-shell {
+    flex-direction: column;
+  }
+
+  .mina-auth-left {
+    border-right: none;
+    border-bottom: 1px solid var(--mina-border-soft);
+  }
+
+  .mina-auth-right {
+    height: 260px;
   }
 }
 
 /* ========== Mina auth page ========== */
 
 .mina-auth-shell {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  background: var(--mina-bg);
+  color: var(--mina-text);
+}
+
+.mina-auth-left,
+.mina-auth-right {
+  flex: 1;
+  min-width: 0;
+}
+
+.mina-auth-left {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 16px;
-  background: radial-gradient(circle at top left, #fffbe6 0, #f4f0d8 40%, #ece5c4 100%);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    sans-serif;
+  padding: 32px 40px;
+  border-right: 1px solid var(--mina-border-soft);
+  overflow-y: auto;
+}
+
+.mina-auth-right {
+  background-image: url("https://cdn.shopify.com/s/files/1/0678/9254/3571/files/g-form-121277-appearance.imageUrl-mijzwt6a-cropped.jpg?v=1764402871");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .mina-auth-card {
   width: 100%;
-  max-width: 560px;
-  background: rgba(252, 250, 240, 0.96);
-  border-radius: 24px;
-  padding: 28px 28px 20px;
-  box-shadow: 0 18px 40px rgba(41, 33, 0, 0.16);
-  border: 1px solid rgba(157, 145, 84, 0.18);
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.mina-auth-header h1 {
-  font-size: 28px;
-  font-weight: 650;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #181400;
-  margin: 0 0 6px;
-}
-
-.mina-auth-header p {
-  margin: 0 0 18px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #5a5631;
-}
-
-.mina-auth-footer {
-  margin-top: 16px;
+.mina-auth-logo {
   font-size: 11px;
-  line-height: 1.4;
-  color: #7b744b;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+}
+
+.mina-auth-title {
+  font-size: 22px;
+  font-weight: 500;
+  margin: 0;
+}
+
+.mina-auth-text {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 340px;
+}
+
+.mina-auth-or {
+  font-size: 13px;
+  margin: 16px 0 0;
+}
+
+.mina-auth-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mina-auth-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mina-auth-input {
+  border: 1px solid var(--mina-border-soft);
+  padding: 6px 8px;
+  font-size: 13px;
+  background: transparent;
+  outline: none;
+}
+
+.mina-auth-input:focus {
+  border-color: var(--mina-border-strong);
+}
+
+.mina-auth-actions {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mina-auth-btn {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--mina-border-soft);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
   text-align: center;
+  background: transparent;
+  cursor: pointer;
 }
 
-/* Tweak Supabase default look inside the card */
-.mina-auth-card .sbui-typography-title {
-  /* hide the extra "Sign in" title, we already have our own */
-  display: none;
+.mina-auth-btn.primary {
+  border-color: var(--mina-text);
+  background: var(--mina-text);
+  color: var(--mina-bg);
 }
 
-.mina-auth-card .sbui-input {
-  border-radius: 999px !important;
+.mina-auth-btn.secondary {
+  border-color: var(--mina-border-soft);
 }
 
-.mina-auth-card button {
-  font-family: inherit;
+.mina-auth-btn.ghost {
+  border: none;
+  padding: 0;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mina-auth-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--mina-text);
+}
+
+.mina-auth-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--mina-muted);
+  max-width: 340px;
 }
