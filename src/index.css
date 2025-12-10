@@ -182,7 +182,7 @@ select {
   max-width: 420px;
   display: flex;
   flex-direction: column;
-  transform: translateY(-20px); /* push view up a bit */
+  transform: translateY(-40px); /* push view higher */
 }
 
 /* used only in check-email / loading */
@@ -277,6 +277,11 @@ select {
 
 /* back icon */
 
+.mina-auth-back-wrapper {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
 .mina-auth-back {
   display: inline-flex;
   padding: 4px 0 4px;
@@ -317,22 +322,48 @@ select {
   transition-delay: 0.12s;
 }
 
-/* stacked hero/email block to avoid jump */
+/* stacked hero/email block = no jumping */
 
 .mina-auth-stack {
   margin-top: 4px;
   position: relative;
-  height: 140px; /* fixed height so nothing jumps */
+  height: 140px; /* fixed height => layout stays stable */
 }
+
+/* entry animation for first hero (Login with Google) */
+
+@keyframes mina-fade-up-in {
+  from {
+    opacity: 0;
+    transform: translateY(-30%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-40%);
+  }
+}
+
+/* base overlay */
 
 .fade-overlay {
   position: absolute;
   left: 0;
   top: 50%;
   width: 100%;
-  /* slight slide up when appearing, no layout jump */
-  transform: translateY(-40%);
   opacity: 1;
+}
+
+/* initial hero: fade + slide up slightly on first load */
+
+.fade-overlay.initial {
+  transform: translateY(-40%);
+  animation: mina-fade-up-in 0.45s ease-out;
+}
+
+/* email panel: fade + slide from bottom a bit */
+
+.fade-overlay.email-panel {
+  transform: translateY(-35%);
   transition:
     opacity 0.45s ease-out,
     transform 0.45s ease-out;
@@ -340,11 +371,15 @@ select {
 
 .fade-overlay.hidden {
   opacity: 0;
-  /* start a bit lower so it moves up as it appears */
-  transform: translateY(-30%);
   pointer-events: none;
 }
 
+/* when email panel is hidden, start slightly lower so it comes from bottom */
+
+.fade-overlay.email-panel.hidden {
+  opacity: 0;
+  transform: translateY(-30%);
+}
 
 /* email form */
 
