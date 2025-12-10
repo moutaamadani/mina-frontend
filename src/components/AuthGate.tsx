@@ -5,9 +5,8 @@ import { supabase } from "../lib/supabaseClient";
 type AuthGateProps = {
   children: React.ReactNode;
 };
-const API_BASE_URL =
-  import.meta.env.VITE_MINA_API_BASE_URL ||
-  "https://mina-editorial-ai-api.onrender.com";
+
+const API_BASE_URL = "https://mina-editorial-ai-api.onrender.com";
 
 async function syncShopifyWelcome(email: string | null | undefined) {
   const clean = (email || "").trim().toLowerCase();
@@ -20,25 +19,19 @@ async function syncShopifyWelcome(email: string | null | undefined) {
       body: JSON.stringify({ email: clean }),
     });
   } catch {
-    // soft fail – we don't block login on this
+    // non-blocking
   }
 }
 
-// Decide where "Open email app" should send the user, WITHOUT JS window.open
 function getInboxHref(email: string | null): string {
-  if (!email) {
-    // just open default mail app
-    return "mailto:";
-  }
+  if (!email) return "mailto:";
 
   const parts = email.split("@");
   if (parts.length !== 2) return "mailto:";
 
   const domain = parts[1].toLowerCase();
 
-  if (domain === "gmail.com") {
-    return "https://mail.google.com/mail/u/0/#inbox";
-  }
+  if (domain === "gmail.com") return "https://mail.google.com/mail/u/0/#inbox";
 
   if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) {
     return "https://outlook.live.com/mail/0/inbox";
@@ -48,12 +41,32 @@ function getInboxHref(email: string | null): string {
     return "https://mail.yahoo.com/d/folders/1";
   }
 
-  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) {
+  if (
+    domain === "icloud.com" ||
+    domain.endsWith(".me.com") ||
+    domain.endsWith(".mac.com")
+  ) {
     return "https://www.icloud.com/mail";
   }
 
-  // fallback: open default mail app with this address
   return `mailto:${email}`;
+}
+
+function formatUserCount(n: number | null): string {
+  if (!Number.isFinite(n as number) || n === null) return "";
+  const value = Math.max(0, Math.round(n));
+
+  if (value >= 1_000_000) {
+    const m = value / 1_000_000;
+    return `${m.toFixed(m >= 10 ? 0 : 1).replace(/\.0$/, "")}m`;
+  }
+
+  if (value >= 1_000) {
+    const k = value / 1_000;
+    return `${k.toFixed(k >= 10 ? 0 : 1).replace(/\.0$/, "")}k`;
+  }
+
+  return String(value);
 }
 
 export function AuthGate({ children }: AuthGateProps) {
@@ -69,6 +82,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [googleOpening, setGoogleOpening] = useState(false);
+  const [totalUsers, setTotalUsers] = useState<number | null>(null);
 
   const [bypassForNow] = useState(false);
 
@@ -87,26 +101,56 @@ export function AuthGate({ children }: AuthGateProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
-  setSession(newSession);
-  if (event === "SIGNED_IN" && newSession?.user?.email) {
-    const email = newSession.user.email;
-    try {
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("minaCustomerId", email);
+      setSession(newSession);
+
+      if (event === "SIGNED_OUT") {
+        setEmail("");
+        setOtpSent(false);
+        setSentTo(null);
+        setEmailMode(false);
+        setError(null);
+        setGoogleOpening(false);
       }
-    } catch {
-      // ignore
-    }
 
-    // Tell backend to sync Shopify customer + Welcome matcha
-    void syncShopifyWelcome(email);
-  }
-});
-
+      if (event === "SIGNED_IN" && newSession?.user?.email) {
+        const signedEmail = newSession.user.email;
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem("minaCustomerId", signedEmail);
+          }
+        } catch {
+          // ignore
+        }
+        void syncShopifyWelcome(signedEmail);
+      }
+    });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/public/stats/total-users`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!cancelled && typeof json.totalUsers === "number") {
+          setTotalUsers(json.totalUsers);
+        }
+      } catch {
+        // keep footer without number
+      }
+    };
+
+    void fetchStats();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -132,7 +176,9 @@ export function AuthGate({ children }: AuthGateProps) {
       setSentTo(trimmed);
 
       try {
-        window.localStorage.setItem("minaCustomerId", trimmed);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("minaCustomerId", trimmed);
+        }
       } catch {
         // ignore
       }
@@ -154,7 +200,6 @@ export function AuthGate({ children }: AuthGateProps) {
         },
       });
       if (supaError) throw supaError;
-      // on success browser redirects away
     } catch (err: any) {
       setError(err?.message || "Failed to start Google login.");
       setGoogleOpening(false);
@@ -174,7 +219,11 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="mina-auth-card">
             <p className="mina-auth-text">Loading…</p>
           </div>
-          <div className="mina-auth-footer">Total users: 0</div>
+          <div className="mina-auth-footer">
+            {totalUsers !== null
+              ? `${formatUserCount(totalUsers)} creatives using Mina`
+              : "creatives using Mina"}
+          </div>
         </div>
         <div className="mina-auth-right" />
       </div>
@@ -191,13 +240,11 @@ export function AuthGate({ children }: AuthGateProps) {
   const inboxHref = getInboxHref(targetEmail);
   const openInNewTab = inboxHref.startsWith("http");
 
-  // back appears in email mode (with text) and in check-email
   const showBack = (emailMode && hasEmail) || otpSent;
 
   return (
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
-        {/* logo top-left */}
         <div className="mina-auth-brand">
           <img
             src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
@@ -206,7 +253,6 @@ export function AuthGate({ children }: AuthGateProps) {
         </div>
 
         <div className="mina-auth-card">
-          {/* back icon */}
           <div
             className={
               showBack
@@ -241,10 +287,8 @@ export function AuthGate({ children }: AuthGateProps) {
 
           {!otpSent ? (
             <>
-              {/* Google hero + email form share same baseline */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
-                  {/* Google hero panel */}
                   <div
                     className={
                       "fade-overlay auth-panel auth-panel--google " +
@@ -259,7 +303,7 @@ export function AuthGate({ children }: AuthGateProps) {
                       {googleOpening ? "Opening Google…" : "Login with Google"}
                     </button>
 
-                    <div style={{ marginTop: "8px" }}>
+                    <div style={{ marginTop: 8 }}>
                       <button
                         type="button"
                         className="mina-auth-link secondary"
@@ -274,7 +318,6 @@ export function AuthGate({ children }: AuthGateProps) {
                     </div>
                   </div>
 
-                  {/* Email panel – comes from bottom, same line */}
                   <div
                     className={
                       "fade-overlay auth-panel auth-panel--email " +
@@ -328,7 +371,6 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              {/* Check email state, same baseline */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
                   <div className="fade-overlay auth-panel auth-panel--check visible">
@@ -358,8 +400,11 @@ export function AuthGate({ children }: AuthGateProps) {
           )}
         </div>
 
-        {/* bottom-left copy */}
-        <div className="mina-auth-footer">Total users: 0</div>
+        <div className="mina-auth-footer">
+          {totalUsers !== null
+            ? `${formatUserCount(totalUsers)} creatives using Mina`
+            : "creatives using Mina"}
+        </div>
       </div>
       <div className="mina-auth-right" />
     </div>
