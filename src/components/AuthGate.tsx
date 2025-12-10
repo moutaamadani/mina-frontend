@@ -1,20 +1,29 @@
-import { useEffect, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
-import { supabase } from "../lib/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 
-export function AuthGate({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<any | null>(null);
+import { supabase } from "./lib/supabaseClient";
+
+interface AuthGateProps {
+  children: ReactNode;
+}
+
+const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1) Load current session from localStorage
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
+    const init = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (!error) {
+        setSession(data.session);
+      }
       setLoading(false);
-    });
+    };
 
-    // 2) Listen for login / logout changes
+    init();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
@@ -26,35 +35,54 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Small loading state while we ask Supabase for the session
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-white">
-        <span>Mina is loading…</span>
+      <div className="mina-auth-shell">
+        <div className="mina-auth-card">
+          <div className="mina-auth-header">
+            <h1>Mina</h1>
+            <p>Loading your studio…</p>
+          </div>
+        </div>
       </div>
     );
   }
 
-  // Not logged in → show beautiful auth UI
+  // Not logged in → show pretty auth screen
   if (!session) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black px-4">
-        <div className="w-full max-w-md rounded-3xl bg-zinc-950/80 border border-zinc-800 p-6 shadow-xl">
-          <div className="flex flex-col items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-full bg-pink-500" />
-            <h1 className="text-white text-xl font-semibold">Welcome to Mina</h1>
-            <p className="text-zinc-400 text-sm text-center">
-              Sign in with Google, Apple or email. We’ll keep you logged in for a smooth, Pinterest-style experience.
+      <div className="mina-auth-shell">
+        <div className="mina-auth-card">
+          <div className="mina-auth-header">
+            <h1>Welcome to Mina</h1>
+            <p>
+              Sign in with Google or email. We&rsquo;ll keep you logged in for a
+              smooth, Pinterest-style experience.
             </p>
           </div>
 
           <Auth
             supabaseClient={supabase}
-            // email + password + passwordless + OTP, all handled by Supabase
             providers={["google"]}
+            magicLink={false}
             appearance={{
               theme: ThemeSupa,
-              className: {
-                container: "gap-3",
+              variables: {
+                default: {
+                  colors: {
+                    brand: "#00C37A",
+                    brandAccent: "#00A366",
+                    inputBorder: "#DDD7B8",
+                    inputBackground: "#FCFAF0",
+                    inputText: "#141307",
+                    messageText: "#635C3A",
+                  },
+                  radii: {
+                    borderRadiusButton: "999px",
+                    borderRadiusInput: "999px",
+                  },
+                },
               },
             }}
             localization={{
@@ -62,22 +90,27 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
                 sign_in: {
                   email_label: "Work email",
                   password_label: "Password",
+                  button_label: "Sign in",
                 },
                 sign_up: {
                   email_label: "Work email",
-                  password_label: "Set a password",
+                  password_label: "Create a password",
+                  button_label: "Create account",
                 },
               },
             }}
           />
-          <p className="text-xs text-zinc-500 mt-4 text-center">
-            By continuing, you agree to Mina’s terms and privacy policy.
+
+          <p className="mina-auth-footer">
+            By continuing, you agree to Mina&rsquo;s terms and privacy policy.
           </p>
         </div>
       </div>
     );
   }
 
-  // Logged in → show the actual app
+  // Logged in → show real Mina app
   return <>{children}</>;
-}
+};
+
+export default AuthGate;
