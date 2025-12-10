@@ -51,16 +51,14 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [emailMode, setEmailMode] = useState(false);
 
-  // loading only for email flow
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Google opening state (text only, no disable)
+  // text state: "Opening Google…"
   const [googleOpening, setGoogleOpening] = useState(false);
 
   const [bypassForNow] = useState(false);
 
-  // load session
   useEffect(() => {
     let mounted = true;
 
@@ -148,7 +146,7 @@ export function AuthGate({ children }: AuthGateProps) {
         },
       });
       if (supaError) throw supaError;
-      // on success we leave the page, no need to reset
+      // success -> browser leaves page
     } catch (err: any) {
       setError(err?.message || "Failed to start Google login.");
       setGoogleOpening(false);
@@ -176,14 +174,14 @@ export function AuthGate({ children }: AuthGateProps) {
   const hasEmail = trimmed.length > 0;
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
 
-  // back appears when typing email or in check-email view
+  // back icon visible in email mode (when typing) + check email view
   const showBack = (emailMode && hasEmail) || otpSent;
 
   return (
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
         <div className="mina-auth-card">
-          {/* back icon – uses Mina fading effect, position is fixed */}
+          {/* Back icon with Mina fading effect */}
           <div
             className={
               showBack
@@ -196,13 +194,13 @@ export function AuthGate({ children }: AuthGateProps) {
               className="mina-auth-back"
               onClick={() => {
                 if (otpSent) {
-                  // back from check-email -> email form
+                  // back from "Open email app" -> email form
                   setOtpSent(false);
                   setSentTo(null);
                   setError(null);
                   setEmailMode(true);
                 } else {
-                  // back from email form -> google hero
+                  // back from email form -> Google hero
                   setEmailMode(false);
                   setEmail("");
                   setError(null);
@@ -219,15 +217,15 @@ export function AuthGate({ children }: AuthGateProps) {
 
           {!otpSent ? (
             <>
-              {/* main sign-in view */}
+              {/* Google + email choice */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
-                  {/* Panel 1 – hero + use email (Mina slide effect in) */}
+                  {/* Panel 1 – Login with Google */}
                   <div
                     className={
                       emailMode
-                        ? "fade-overlay mina-slide initial hidden"
-                        : "fade-overlay mina-slide initial"
+                        ? "fade-overlay mina-slide hidden"
+                        : "fade-overlay mina-slide"
                     }
                   >
                     <button
@@ -253,7 +251,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     </div>
                   </div>
 
-                  {/* Panel 2 – email field + sign in + hint (Mina slide effect, bottom→top) */}
+                  {/* Panel 2 – email form */}
                   <div
                     className={
                       emailMode
@@ -275,7 +273,7 @@ export function AuthGate({ children }: AuthGateProps) {
                         />
                       </label>
 
-                      {/* sign-in + hint appear together with Mina fading effect (no movement) */}
+                      {/* Sign in + hint = Mina fading effect (no movement) */}
                       <div
                         className={
                           hasEmail ? "fade-block delay" : "fade-block hidden"
@@ -309,7 +307,7 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              {/* check-email view: hero = Open email app */}
+              {/* Check email view */}
               <div className="mina-auth-actions">
                 <div className="fade-block">
                   <button
