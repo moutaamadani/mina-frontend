@@ -4,6 +4,9 @@
   --mina-border-soft: rgba(8, 10, 0, 0.16);
   --mina-border-strong: rgba(8, 10, 0, 0.32);
   --mina-muted: rgba(8, 10, 0, 0.6);
+  /* Mina global animation timings */
+  --mina-anim-fade: 0.35s;  /* Mina fading effect */
+  --mina-anim-slide: 0.55s; /* Mina slide effect */
 }
 
 /* reset / base */
@@ -163,9 +166,9 @@ select {
 
 .mina-auth-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* anchor top so back icon never shifts */
   justify-content: center;
-  padding: 32px 40px;
+  padding: 72px 40px 32px; /* controls vertical position of the whole block */
   border-right: 1px solid var(--mina-border-soft);
   overflow-y: auto;
 }
@@ -182,10 +185,9 @@ select {
   max-width: 420px;
   display: flex;
   flex-direction: column;
-  transform: translateY(-40px); /* push view higher */
 }
 
-/* used only in check-email / loading */
+/* small heading text (only used in check-email / loading) */
 
 .mina-auth-title {
   font-size: 18px;
@@ -306,79 +308,77 @@ select {
   opacity: 0.5;
 }
 
-/* generic fade blocks – opacity only, no movement */
+/* --- Mina animation presets (reusable) --- */
 
+/* Mina fading effect – use .mina-fade or .fade-block (+ .hidden / .delay) */
+
+.mina-fade,
 .fade-block {
-  transition: opacity 0.4s ease-out;
+  transition: opacity var(--mina-anim-fade) ease-out;
   opacity: 1;
 }
 
+.mina-fade.hidden,
 .fade-block.hidden {
   opacity: 0;
   pointer-events: none;
 }
 
+.mina-fade.delay,
 .fade-block.delay {
   transition-delay: 0.12s;
 }
 
-/* stacked hero/email block = no jumping */
+/* Mina slide effect – use .mina-slide (+ .hidden) for intro/outro bottom→top */
+
+.mina-slide,
+.fade-overlay.mina-slide {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--mina-anim-slide) ease-out,
+    transform var(--mina-anim-slide) ease-out;
+}
+
+.mina-slide.hidden,
+.fade-overlay.mina-slide.hidden {
+  opacity: 0;
+  transform: translateY(-16px); /* slides up as it fades out */
+  pointer-events: none;
+}
+
+/* initial hero slide-in (Login with Google) using Mina slide */
+
+@keyframes mina-slide-in-initial {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* stacked hero/email block so nothing jumps */
 
 .mina-auth-stack {
   margin-top: 4px;
   position: relative;
-  height: 140px; /* fixed height => layout stays stable */
+  height: 130px; /* fixed height => placeholder + hero always aligned */
 }
-
-/* entry animation for first hero (Login with Google) */
-
-@keyframes mina-fade-up-in {
-  from {
-    opacity: 0;
-    transform: translateY(-30%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(-40%);
-  }
-}
-
-/* base overlay */
 
 .fade-overlay {
   position: absolute;
   left: 0;
-  top: 50%;
+  top: 0;
   width: 100%;
-  opacity: 1;
 }
 
-/* initial hero: fade + slide up slightly on first load */
+/* when initial hero is shown, play the intro animation once */
 
-.fade-overlay.initial {
-  transform: translateY(-40%);
-  animation: mina-fade-up-in 0.45s ease-out;
-}
-
-/* email panel: fade + slide from bottom a bit */
-
-.fade-overlay.email-panel {
-  transform: translateY(-35%);
-  transition:
-    opacity 0.45s ease-out,
-    transform 0.45s ease-out;
-}
-
-.fade-overlay.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* when email panel is hidden, start slightly lower so it comes from bottom */
-
-.fade-overlay.email-panel.hidden {
-  opacity: 0;
-  transform: translateY(-30%);
+.fade-overlay.initial.mina-slide {
+  animation: mina-slide-in-initial var(--mina-anim-slide) ease-out;
 }
 
 /* email form */
@@ -437,9 +437,15 @@ select {
   .mina-auth-left {
     border-right: none;
     border-bottom: 1px solid var(--mina-border-soft);
+    padding: 40px 20px 24px;
   }
 
   .mina-auth-right {
     height: 260px;
   }
+
+  .mina-auth-card {
+    max-width: 360px;
+  }
 }
+
