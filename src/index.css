@@ -627,10 +627,13 @@ button:disabled {
 /* auth layout 50 / 50 */
 
 .mina-auth-shell {
+  /* use dynamic viewport for iPad / mobile, keep vh as fallback */
   height: 100vh;
+  height: 100dvh;
   display: flex;
   background: var(--mina-bg);
   color: var(--mina-text);
+  overflow: hidden; /* kill any scroll */
 }
 
 .mina-auth-left,
