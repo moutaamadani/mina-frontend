@@ -591,7 +591,7 @@ button:disabled {
 
 /* --- Mina animation presets --- */
 
-/* Mina fading effect: use .mina-fade or .fade-block */
+/* Mina fading effect */
 .mina-fade,
 .fade-block {
   transition: opacity var(--mina-anim-fade) ease-out;
@@ -609,7 +609,7 @@ button:disabled {
   transition-delay: 0.12s;
 }
 
-/* Optional generic slide effect */
+/* Optional generic slide (not used much yet) */
 .mina-slide {
   transition:
     opacity var(--mina-anim-slide) ease-out,
@@ -646,7 +646,7 @@ button:disabled {
   justify-content: center;
   padding: 32px 40px;
   border-right: 1px solid var(--mina-border-soft);
-  overflow-y: auto;
+  overflow-y: hidden; /* no scroll, fixed 50/50 */
 }
 
 .mina-auth-right {
@@ -663,12 +663,25 @@ button:disabled {
   flex-direction: column;
 }
 
+/* top-left logo on auth */
+
+.mina-auth-brand {
+  position: absolute;
+  top: 16px;
+  left: 40px;
+}
+
+.mina-auth-brand img {
+  height: 18px;
+  display: block;
+}
+
 /* bottom-left total users text */
 
 .mina-auth-footer {
   position: absolute;
   left: 40px;
-  bottom: 24px;
+  bottom: 16px;
   font-size: 11px;
   color: rgba(8, 10, 0, 0.4);
 }
@@ -697,7 +710,7 @@ button:disabled {
   gap: 10px;
 }
 
-/* back icon */
+/* back icon (secondary tone) */
 
 .mina-auth-back-wrapper {
   margin-bottom: 4px;
@@ -715,16 +728,16 @@ button:disabled {
   width: 22px;
   height: 22px;
   display: block;
-  opacity: 0.75;
+  opacity: 0.5;          /* softer */
   transition: opacity 0.2s ease-out;
 }
 
 .mina-auth-back:hover img {
-  opacity: 1;
+  opacity: 0.8;
 }
 
 .mina-auth-back:active img {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 /* hero & links */
@@ -794,10 +807,10 @@ button:disabled {
 .mina-auth-stack {
   margin-top: 4px;
   position: relative;
-  height: 72px; /* controls hero baseline, same for all states */
+  height: 72px;
 }
 
-/* panels: one visible at a time, aligned to top */
+/* panels: one visible at a time, aligned to top of stack */
 
 .fade-overlay.auth-panel {
   position: absolute;
@@ -808,7 +821,7 @@ button:disabled {
   pointer-events: none;
 }
 
-/* base transitions for hero panels */
+/* base transitions */
 
 .auth-panel {
   transition:
@@ -816,10 +829,7 @@ button:disabled {
     transform var(--mina-anim-slide) ease-out;
 }
 
-/* GOOGLE PANEL
-   - visible: on the line
-   - hidden: slides slightly up and fades out
-*/
+/* GOOGLE PANEL – fade & slide slightly up */
 
 .auth-panel--google.visible {
   opacity: 1;
@@ -833,10 +843,7 @@ button:disabled {
   transform: translateY(-12px);
 }
 
-/* EMAIL PANEL
-   - hidden: sits below the line
-   - visible: moves up to the line AFTER google is almost gone
-*/
+/* EMAIL PANEL – starts below, comes up a bit earlier (less white) */
 
 .auth-panel--email.hidden {
   opacity: 0;
@@ -847,13 +854,11 @@ button:disabled {
 .auth-panel--email.visible {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(0); /* exactly same place as google */
-  transition-delay: var(--mina-anim-slide); /* wait so no overlap */
+  transform: translateY(0); /* same place as google */
+  transition-delay: 0.20s;  /* appears a bit earlier */
 }
 
-/* CHECK EMAIL PANEL
-   - just fade on the same line
-*/
+/* CHECK EMAIL PANEL – just fade, same line */
 
 .auth-panel--check.visible {
   opacity: 1;
@@ -923,8 +928,14 @@ button:disabled {
     max-width: 360px;
   }
 
+  .mina-auth-brand {
+    left: 20px;
+    top: 16px;
+  }
+
   .mina-auth-footer {
     left: 20px;
     bottom: 16px;
   }
 }
+
