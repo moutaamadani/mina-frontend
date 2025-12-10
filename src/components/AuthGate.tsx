@@ -24,7 +24,7 @@ function openInboxFor(email: string | null) {
 
   if (domain === "gmail.com") {
     window.open("https://mail.google.com", "_blank");
-    ;
+    return;
   }
 
   if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) {
@@ -144,7 +144,7 @@ export function AuthGate({ children }: AuthGateProps) {
         },
       });
       if (supaError) throw supaError;
-      // browser redirects away on success
+      // on success browser redirects away
     } catch (err: any) {
       setError(err?.message || "Failed to start Google login.");
       setGoogleOpening(false);
@@ -153,19 +153,19 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (initializing) {
     return (
+      <div className="mina-auth-shell">
         <div className="mina-auth-left">
-  <div className="mina-auth-brand">
-    <img
-      src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-      alt="Mina"
-    />
-  </div>
-  <div className="mina-auth-card">
-    <p className="mina-auth-text">Loading…</p>
-  </div>
-  <div className="mina-auth-footer">Total users: 0</div>
-</div>
-
+          <div className="mina-auth-brand">
+            <img
+              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+              alt="Mina"
+            />
+          </div>
+          <div className="mina-auth-card">
+            <p className="mina-auth-text">Loading…</p>
+          </div>
+          <div className="mina-auth-footer">Total users: 0</div>
+        </div>
         <div className="mina-auth-right" />
       </div>
     );
@@ -179,21 +179,21 @@ export function AuthGate({ children }: AuthGateProps) {
   const hasEmail = trimmed.length > 0;
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
 
-  // back appears in email mode (when there is text) and in check-email
+  // back appears in email mode (with text) and in check-email
   const showBack = (emailMode && hasEmail) || otpSent;
 
- 
-   return (
-  <div className="mina-auth-shell">
-    <div className="mina-auth-left">
-      <div className="mina-auth-brand">
-        <img
-          src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-          alt="Mina"
-        />
-      </div>
-      <div className="mina-auth-card">
+  return (
+    <div className="mina-auth-shell">
+      <div className="mina-auth-left">
+        {/* logo top-left */}
+        <div className="mina-auth-brand">
+          <img
+            src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+            alt="Mina"
+          />
+        </div>
 
+        <div className="mina-auth-card">
           {/* back icon */}
           <div
             className={
@@ -229,7 +229,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
           {!otpSent ? (
             <>
-              {/* Google hero + email form share the same baseline */}
+              {/* Google hero + email form share same baseline */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
                   {/* Google hero panel */}
@@ -262,7 +262,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     </div>
                   </div>
 
-                  {/* Email panel */}
+                  {/* Email panel – comes from bottom, same line */}
                   <div
                     className={
                       "fade-overlay auth-panel auth-panel--email " +
@@ -327,7 +327,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     >
                       Open email app
                     </button>
-                    <p className="mina-auth-text" style={{ marginTop: "8px" }}>
+                    <p className="mina-auth-text" style={{ marginTop: 8 }}>
                       We’ve sent a sign-in link to{" "}
                       {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}
                       . Open it to continue with Mina.
