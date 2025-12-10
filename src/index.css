@@ -188,7 +188,7 @@ select {
 /* used only in check-email / loading */
 
 .mina-auth-title {
-  font-size: 18px;
+  font-size: 20px;
   margin: 0 0 4px;
 }
 
@@ -335,11 +335,11 @@ select {
 @keyframes mina-fade-up-in {
   from {
     opacity: 0;
-    transform: translateY(-10%);
+    transform: translateY(-0%);
   }
   to {
     opacity: 1;
-    transform: translateY(-50%);
+    transform: translateY(-60%);
   }
 }
 
@@ -357,7 +357,7 @@ select {
 
 .fade-overlay.initial {
   transform: translateY(-50%);
-  animation: mina-fade-up-in 0.8s ease-out;
+  animation: mina-fade-up-in 1.2s ease-out;
 }
 
 /* email panel: fade + slide from bottom a bit */
@@ -365,8 +365,8 @@ select {
 .fade-overlay.email-panel {
   transform: translateY(-35%);
   transition:
-    opacity 0.45s ease-out,
-    transform 0.45s ease-out;
+    opacity 1.2s ease-out,
+    transform 1.2s ease-out;
 }
 
 .fade-overlay.hidden {
