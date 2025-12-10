@@ -51,7 +51,8 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [emailMode, setEmailMode] = useState(false);
 
-  const [loading, setLoading] = useState(false); // only for email flow
+  // loading is only for email flow, not for google
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [bypassForNow] = useState(false);
@@ -159,7 +160,7 @@ export function AuthGate({ children }: AuthGateProps) {
         </div>
         <div className="mina-auth-right" />
       </div>
-    };
+    );
   }
 
   if (session || bypassForNow) {
