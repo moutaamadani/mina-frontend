@@ -1,4 +1,3 @@
-// src/components/AuthGate.tsx
 import React, { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
@@ -127,7 +126,7 @@ export function AuthGate({ children }: AuthGateProps) {
         // ignore
       }
     } catch (err: any) {
-      setError(err?.message || "failed to send login link.");
+      setError(err?.message || "Failed to send login link.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +144,7 @@ export function AuthGate({ children }: AuthGateProps) {
       });
       if (supaError) throw supaError;
     } catch (err: any) {
-      setError(err?.message || "failed to start google login.");
+      setError(err?.message || "Failed to start Google login.");
       setLoading(false);
     }
   };
@@ -155,9 +154,9 @@ export function AuthGate({ children }: AuthGateProps) {
       <div className="mina-auth-shell">
         <div className="mina-auth-left">
           <div className="mina-auth-card">
-            <div className="mina-auth-logo">mina editorial ai</div>
-            <h1 className="mina-auth-title">loading</h1>
-            <p className="mina-auth-text">just a moment…</p>
+            <div className="mina-auth-logo">Mina editorial</div>
+            <h1 className="mina-auth-title">Loading</h1>
+            <p className="mina-auth-text">Just a moment…</p>
           </div>
         </div>
         <div className="mina-auth-right" />
@@ -172,31 +171,34 @@ export function AuthGate({ children }: AuthGateProps) {
   const hasEmail = email.trim().length > 0;
   const targetEmail = sentTo || (hasEmail ? email.trim() : null);
 
+  const googleClass = emailMode
+    ? "mina-auth-link mina-auth-main small"
+    : "mina-auth-link mina-auth-main";
+
   return (
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
         <div className="mina-auth-card">
-          <div className="mina-auth-logo">mina editorial ai</div>
+          <div className="mina-auth-logo">Mina editorial</div>
+          <h1 className="mina-auth-title">Sign in</h1>
+          <p className="mina-auth-text">
+            Use your Google account or email to work with Mina.
+          </p>
 
           {!otpSent ? (
             <>
-              <h1 className="mina-auth-title">sign in</h1>
-              <p className="mina-auth-text">
-                use your google account or email to work with mina.
-              </p>
-
               <div className="mina-auth-actions">
-                {/* main button: bold, underlined text */}
+                {/* hero: biggest line */}
                 <button
                   type="button"
-                  className="mina-auth-link primary"
+                  className={googleClass}
                   onClick={handleGoogleLogin}
                   disabled={loading}
                 >
-                  {loading && !emailMode ? "opening google…" : "login with google"}
+                  {loading && !emailMode ? "Opening Google…" : "Login with Google"}
                 </button>
 
-                {/* secondary trigger: use email instead */}
+                {/* secondary trigger: becomes invisible when email is open */}
                 <div className={emailMode ? "fade-block hidden" : "fade-block"}>
                   <button
                     type="button"
@@ -204,18 +206,18 @@ export function AuthGate({ children }: AuthGateProps) {
                     onClick={() => setEmailMode(true)}
                     disabled={loading}
                   >
-                    use email instead
+                    Use email instead
                   </button>
                 </div>
 
-                {/* email mode: fades in, pushes content */}
+                {/* email mode: slides up, fades in, pushes above */}
                 <div className={emailMode ? "fade-block" : "fade-block hidden"}>
                   <form onSubmit={handleEmailLogin} className="mina-auth-form">
                     <label className="mina-auth-label">
                       <input
                         className="mina-auth-input"
                         type="email"
-                        placeholder="type email here"
+                        placeholder="Type email here"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
@@ -228,16 +230,16 @@ export function AuthGate({ children }: AuthGateProps) {
                     >
                       <button
                         type="submit"
-                        className="mina-auth-link primary"
+                        className="mina-auth-link mina-auth-main small"
                         disabled={loading || !hasEmail}
                       >
-                        {loading ? "sending link…" : "sign in"}
+                        {loading ? "Sending link…" : "Sign in"}
                       </button>
                     </div>
                   </form>
 
                   <p className="mina-auth-hint">
-                    we’ll email you a one-time link. if this address is new,
+                    We’ll email you a one-time link. If this address is new,
                     that email will also confirm your account.
                   </p>
                 </div>
@@ -247,20 +249,20 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              <h1 className="mina-auth-title">check your email</h1>
+              <h1 className="mina-auth-title">Check your email</h1>
               <p className="mina-auth-text">
-                we’ve sent a sign-in link to{" "}
+                We’ve sent a sign-in link to{" "}
                 {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}.
-                open it to continue with mina.
+                Open it to continue with Mina.
               </p>
 
               <div className="mina-auth-actions">
                 <button
                   type="button"
-                  className="mina-auth-link primary"
+                  className="mina-auth-link mina-auth-main small"
                   onClick={() => openInboxFor(targetEmail)}
                 >
-                  open email app
+                  Open email app
                 </button>
 
                 <button
@@ -273,14 +275,14 @@ export function AuthGate({ children }: AuthGateProps) {
                     setEmailMode(true);
                   }}
                 >
-                  use a different email
+                  Use a different email
                 </button>
               </div>
 
               {error && <div className="mina-auth-error">{error}</div>}
 
               <p className="mina-auth-hint">
-                if you can’t see the message, check spam or promotions.
+                If you can’t see the message, check Spam or Promotions.
               </p>
             </>
           )}
