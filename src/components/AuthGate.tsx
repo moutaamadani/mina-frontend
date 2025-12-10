@@ -1,4 +1,3 @@
-// src/components/AuthGate.tsx
 import React, { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
@@ -50,7 +49,6 @@ export function AuthGate({ children }: AuthGateProps) {
   const [sentTo, setSentTo] = useState<string | null>(null);
 
   const [emailMode, setEmailMode] = useState(false);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,6 +80,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setSentTo(null);
         setError(null);
         setEmailMode(false);
+        setGoogleOpening(false);
       }
 
       if (event === "SIGNED_IN" && newSession?.user?.email) {
@@ -160,6 +159,7 @@ export function AuthGate({ children }: AuthGateProps) {
           <div className="mina-auth-card">
             <p className="mina-auth-text">Loading…</p>
           </div>
+          <div className="mina-auth-footer">Total users: 0</div>
         </div>
         <div className="mina-auth-right" />
       </div>
@@ -204,6 +204,7 @@ export function AuthGate({ children }: AuthGateProps) {
                   setEmailMode(false);
                   setEmail("");
                   setError(null);
+                  setGoogleOpening(false);
                 }
               }}
               aria-label="Back"
@@ -251,11 +252,11 @@ export function AuthGate({ children }: AuthGateProps) {
                     </div>
                   </div>
 
-                  {/* Panel 2 – email form */}
+                  {/* Panel 2 – email form (comes from bottom, delayed so no overlap) */}
                   <div
                     className={
                       emailMode
-                        ? "fade-overlay mina-slide"
+                        ? "fade-overlay mina-slide mina-slide-delay"
                         : "fade-overlay mina-slide hidden"
                     }
                   >
@@ -307,24 +308,23 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              {/* Check email view */}
+              {/* Check email view – hero aligned via same stack */}
               <div className="mina-auth-actions">
-                <div className="fade-block">
-                  <button
-                    type="button"
-                    className="mina-auth-link mina-auth-main"
-                    onClick={() => openInboxFor(targetEmail)}
-                  >
-                    Open email app
-                  </button>
-                </div>
-
-                <div className="fade-block delay">
-                  <p className="mina-auth-text">
-                    We’ve sent a sign-in link to{" "}
-                    {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}
-                    . Open it to continue with Mina.
-                  </p>
+                <div className="mina-auth-stack">
+                  <div className="fade-overlay mina-slide">
+                    <button
+                      type="button"
+                      className="mina-auth-link mina-auth-main"
+                      onClick={() => openInboxFor(targetEmail)}
+                    >
+                      Open email app
+                    </button>
+                    <p className="mina-auth-text" style={{ marginTop: "8px" }}>
+                      We’ve sent a sign-in link to{" "}
+                      {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}
+                      . Open it to continue with Mina.
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -332,6 +332,9 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           )}
         </div>
+
+        {/* bottom-left small copy – fake number for now, hook real data later */}
+        <div className="mina-auth-footer">Total users: 0</div>
       </div>
       <div className="mina-auth-right" />
     </div>
