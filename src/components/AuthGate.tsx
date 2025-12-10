@@ -177,8 +177,14 @@ export function AuthGate({ children }: AuthGateProps) {
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
         <div className="mina-auth-card">
-          {/* back icon – smooth fade, no layout jump */}
-          <div className={showBack ? "fade-block" : "fade-block hidden"}>
+          {/* back icon – smooth fade, fixed vertical spacing */}
+          <div
+            className={
+              showBack
+                ? "fade-block mina-auth-back-wrapper"
+                : "fade-block hidden mina-auth-back-wrapper"
+            }
+          >
             <button
               type="button"
               className="mina-auth-back"
@@ -210,10 +216,12 @@ export function AuthGate({ children }: AuthGateProps) {
               {/* main sign-in view */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
-                  {/* Panel 1 – hero + use email */}
+                  {/* Panel 1 – hero + use email (initial slide/fade in) */}
                   <div
                     className={
-                      emailMode ? "fade-overlay hidden" : "fade-overlay"
+                      emailMode
+                        ? "fade-overlay hidden initial"
+                        : "fade-overlay initial"
                     }
                   >
                     <button
@@ -239,13 +247,18 @@ export function AuthGate({ children }: AuthGateProps) {
                     </div>
                   </div>
 
-                  {/* Panel 2 – email field + sign in + hint */}
+                  {/* Panel 2 – email field + sign in + hint (slides from bottom) */}
                   <div
                     className={
-                      emailMode ? "fade-overlay" : "fade-overlay hidden"
+                      emailMode
+                        ? "fade-overlay email-panel"
+                        : "fade-overlay email-panel hidden"
                     }
                   >
-                    <form onSubmit={handleEmailLogin} className="mina-auth-form">
+                    <form
+                      onSubmit={handleEmailLogin}
+                      className="mina-auth-form"
+                    >
                       <label className="mina-auth-label">
                         <input
                           className="mina-auth-input"
@@ -256,7 +269,7 @@ export function AuthGate({ children }: AuthGateProps) {
                         />
                       </label>
 
-                      {/* sign-in + hint appear together when typing, only opacity fades */}
+                      {/* sign-in + hint appear together, just opacity (no movement) */}
                       <div
                         className={
                           hasEmail ? "fade-block delay" : "fade-block hidden"
@@ -290,7 +303,7 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              {/* check-email view: hero is "Open email app" */}
+              {/* check-email view: hero = Open email app */}
               <div className="mina-auth-actions">
                 <div className="fade-block">
                   <button
