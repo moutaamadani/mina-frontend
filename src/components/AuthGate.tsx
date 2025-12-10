@@ -1,120 +1,268 @@
 // src/components/AuthGate.tsx
 import React, { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "../lib/supabaseClient";
 
 type AuthGateProps = {
   children: React.ReactNode;
 };
 
-export const AuthGate: React.FC<AuthGateProps> = ({ children }) => {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+function openInboxFor(email: string | null) {
+  if (typeof window === "undefined") return;
 
+  if (!email) {
+    window.open("https://mail.google.com", "_blank");
+    return;
+  }
+
+  const parts = email.split("@");
+  if (parts.length !== 2) {
+    window.open("https://mail.google.com", "_blank");
+    return;
+  }
+
+  const domain = parts[1].toLowerCase();
+
+  if (domain === "gmail.com") {
+    window.open("https://mail.google.com", "_blank");
+    return;
+  }
+
+  if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) {
+    window.open("https://outlook.live.com", "_blank");
+    return;
+  }
+
+  if (domain === "yahoo.com") {
+    window.open("https://mail.yahoo.com", "_blank");
+    return;
+  }
+
+  window.open(`mailto:${email}`, "_blank");
+}
+
+export function AuthGate({ children }: AuthGateProps) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [initializing, setInitializing] = useState(true);
+
+  const [email, setEmail] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [bypassForNow, setBypassForNow] = useState(false);
+
+  // Load existing session
   useEffect(() => {
-    const loadSession = async () => {
+    let mounted = true;
+
+    const init = async () => {
       const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
       setSession(data.session ?? null);
-      setLoading(false);
+      setInitializing(false);
     };
 
-    void loadSession();
+    void init();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
+      if (event === "SIGNED_OUT") {
+        setBypassForNow(false);
+        setOtpSent(false);
+        setSentTo(null);
+      }
+      if (event === "SIGNED_IN" && newSession?.user?.email) {
+        try {
+          window.localStorage.setItem(
+            "minaCustomerId",
+            newSession.user.email
+          );
+        } catch {
+          // ignore
+        }
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = email.trim();
+    if (!trimmed) return;
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const { error: supaError } = await supabase.auth.signInWithOtp({
+        email: trimmed,
+        options: {
+          emailRedirectTo: window.location.origin,
+        },
+      });
+
+      if (supaError) throw supaError;
+
+      setOtpSent(true);
+      setSentTo(trimmed);
+
+      try {
+        window.localStorage.setItem("minaCustomerId", trimmed);
+      } catch {
+        // ignore
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to send login link.");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="mina-root">
-        <main className="mina-main">
-          <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>
-        </main>
-      </div>
-    );
-  }
+  const handleGoogleLogin = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const { error: supaError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+      if (supaError) throw supaError;
+    } catch (err: any) {
+      setError(err?.message || "Failed to start Google login.");
+      setLoading(false);
+    }
+  };
 
-  // Not logged in → show Supabase Auth UI
-  if (!session) {
+  if (initializing) {
     return (
-      <div className="mina-root">
-        <main className="mina-main">
-          <div style={{ maxWidth: 460, margin: "40px auto" }}>
-            <h1 style={{ fontSize: 28, marginBottom: 8 }}>Welcome to Mina</h1>
-            <p style={{ marginBottom: 24 }}>
-              Sign in with Google or email. We’ll keep you logged in for a
-              smooth, Pinterest-style experience.
-            </p>
-            <Auth
-              supabaseClient={supabase}
-              appearance={{
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: "#22c55e",
-                      brandAccent: "#16a34a",
-                    },
-                  },
-                },
-              }}
-              providers={["google"]}
-              redirectTo={window.location.origin}
-            />
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  // Logged in → show Mina UI with a small header + sign out
-  return (
-    <div className="mina-root">
-      <header className="mina-header">
-        <div className="mina-logo">MINA · Editorial AI</div>
-        <div className="mina-header-right">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 12,
-            }}
-          >
-            <span
-              style={{
-                maxWidth: 200,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {session.user.email}
-            </span>
-            <button
-              type="button"
-              className="link-button subtle"
-              onClick={handleSignOut}
-            >
-              Sign out
-            </button>
-          </div>
+      <div className="mina-auth-shell">
+        <div className="mina-auth-card">
+          <div className="mina-auth-title">Mina</div>
+          <p className="mina-auth-text">Loading…</p>
         </div>
-      </header>
+      </div>
+    );
+  }
 
-      <main className="mina-main">{children}</main>
+  if (session || bypassForNow) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="mina-auth-shell">
+      <div className="mina-auth-card">
+        <div className="mina-auth-logo">MINA · Editorial AI</div>
+
+        {!otpSent ? (
+          <>
+            <h2 className="mina-auth-title">Welcome back</h2>
+            <p className="mina-auth-text">
+              Sign in with Google or email to start creating with Mina.
+            </p>
+
+            <div className="mina-auth-actions">
+              <button
+                type="button"
+                className="mina-auth-btn primary wide"
+                onClick={handleGoogleLogin}
+                disabled={loading}
+              >
+                Continue with Google
+              </button>
+            </div>
+
+            <div className="mina-auth-separator">
+              <span />
+              <span>or</span>
+              <span />
+            </div>
+
+            <form onSubmit={handleEmailLogin} className="mina-auth-form">
+              <label className="mina-auth-label">
+                Email
+                <input
+                  className="mina-auth-input"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="mina-auth-btn secondary wide"
+                disabled={loading || !email.trim()}
+              >
+                {loading ? "Sending link…" : "Send magic link"}
+              </button>
+            </form>
+
+            {error && <div className="mina-auth-error">{error}</div>}
+
+            <p className="mina-auth-hint">
+              You’ll receive a one-time link to sign in. No password needed.
+            </p>
+          </>
+        ) : (
+          <>
+            <h2 className="mina-auth-title">Check your email ✨</h2>
+            <p className="mina-auth-text">
+              We sent a sign-in link to{" "}
+              <strong>{sentTo || email.trim()}</strong>.
+              <br />
+              Open your inbox and click the link. If you don’t see it, check
+              Spam or Promotions.
+            </p>
+
+            <div className="mina-auth-actions">
+              <button
+                type="button"
+                className="mina-auth-btn primary wide"
+                onClick={() => openInboxFor(sentTo || email.trim())}
+              >
+                Open email app
+              </button>
+
+              <button
+                type="button"
+                className="mina-auth-btn secondary wide"
+                onClick={() => setBypassForNow(true)}
+              >
+                Continue to Mina now
+              </button>
+
+              <button
+                type="button"
+                className="mina-auth-btn ghost wide"
+                onClick={() => {
+                  setOtpSent(false);
+                  setSentTo(null);
+                }}
+              >
+                Use a different email
+              </button>
+            </div>
+
+            {error && <div className="mina-auth-error">{error}</div>}
+
+            <p className="mina-auth-hint">
+              You can confirm your email later from the message we sent.
+            </p>
+          </>
+        )}
+      </div>
     </div>
   );
-};
+}
