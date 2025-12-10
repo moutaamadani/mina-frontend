@@ -138,12 +138,18 @@ export function AuthGate({ children }: AuthGateProps) {
       try {
         const res = await fetch(`${API_BASE_URL}/public/stats/total-users`);
         if (!res.ok) return;
+
         const json = await res.json();
-        if (!cancelled && typeof json.totalUsers === "number") {
+        if (
+          !cancelled &&
+          json.ok &&
+          typeof json.totalUsers === "number" &&
+          json.totalUsers > 0
+        ) {
           setTotalUsers(json.totalUsers);
         }
       } catch {
-        // keep footer without number
+        // stay silent, no number = no display
       }
     };
 
@@ -221,8 +227,8 @@ export function AuthGate({ children }: AuthGateProps) {
           </div>
           <div className="mina-auth-footer">
             {totalUsers !== null
-              ? `${formatUserCount(totalUsers)} curators use Mina`
-              : "curators use Mina"}
+              ? `${formatUserCount(totalUsers)} creatives using Mina`
+              : "creatives using Mina"}
           </div>
         </div>
         <div className="mina-auth-right" />
