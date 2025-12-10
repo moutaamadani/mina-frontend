@@ -50,7 +50,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           <Auth
             supabaseClient={supabase}
             // email + password + passwordless + OTP, all handled by Supabase
-            providers={["google", "apple"]}
+            providers={["google"]}
             appearance={{
               theme: ThemeSupa,
               className: {
