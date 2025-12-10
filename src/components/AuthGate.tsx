@@ -6,38 +6,36 @@ type AuthGateProps = {
   children: React.ReactNode;
 };
 
-function openInboxFor(email: string | null) {
-  if (typeof window === "undefined") return;
-
+// Decide where "Open email app" should send the user, WITHOUT JS window.open
+function getInboxHref(email: string | null): string {
   if (!email) {
-    window.open("https://mail.google.com", "_blank");
-    return;
+    // just open default mail app
+    return "mailto:";
   }
 
   const parts = email.split("@");
-  if (parts.length !== 2) {
-    window.open("https://mail.google.com", "_blank");
-    return;
-  }
+  if (parts.length !== 2) return "mailto:";
 
   const domain = parts[1].toLowerCase();
 
   if (domain === "gmail.com") {
-    window.open("https://mail.google.com", "_blank");
-    return;
+    return "https://mail.google.com/mail/u/0/#inbox";
   }
 
   if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) {
-    window.open("https://outlook.live.com", "_blank");
-    return;
+    return "https://outlook.live.com/mail/0/inbox";
   }
 
   if (domain === "yahoo.com") {
-    window.open("https://mail.yahoo.com", "_blank");
-    return;
+    return "https://mail.yahoo.com/d/folders/1";
   }
 
-  window.open(`mailto:${email}`, "_blank");
+  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) {
+    return "https://www.icloud.com/mail";
+  }
+
+  // fallback: open default mail app with this address
+  return `mailto:${email}`;
 }
 
 export function AuthGate({ children }: AuthGateProps) {
@@ -178,6 +176,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const trimmed = email.trim();
   const hasEmail = trimmed.length > 0;
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
+  const inboxHref = getInboxHref(targetEmail);
+  const openInNewTab = inboxHref.startsWith("http");
 
   // back appears in email mode (with text) and in check-email
   const showBack = (emailMode && hasEmail) || otpSent;
@@ -320,16 +320,21 @@ export function AuthGate({ children }: AuthGateProps) {
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
                   <div className="fade-overlay auth-panel auth-panel--check visible">
-                    <button
-                      type="button"
+                    <a
                       className="mina-auth-link mina-auth-main"
-                      onClick={() => openInboxFor(targetEmail)}
+                      href={inboxHref}
+                      target={openInNewTab ? "_blank" : undefined}
+                      rel={openInNewTab ? "noreferrer" : undefined}
                     >
                       Open email app
-                    </button>
+                    </a>
                     <p className="mina-auth-text" style={{ marginTop: 8 }}>
                       We’ve sent a sign-in link to{" "}
-                      {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}
+                      {targetEmail ? (
+                        <strong>{targetEmail}</strong>
+                      ) : (
+                        "your inbox"
+                      )}
                       . Open it to continue with Mina.
                     </p>
                   </div>
