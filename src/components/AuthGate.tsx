@@ -52,6 +52,7 @@ export function AuthGate({ children }: AuthGateProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // kept for dev/admin if ever needed, but no button in UI now
   const [bypassForNow, setBypassForNow] = useState(false);
 
   // Load existing session
@@ -147,10 +148,14 @@ export function AuthGate({ children }: AuthGateProps) {
   if (initializing) {
     return (
       <div className="mina-auth-shell">
-        <div className="mina-auth-card">
-          <div className="mina-auth-title">Mina</div>
-          <p className="mina-auth-text">Loading…</p>
+        <div className="mina-auth-left">
+          <div className="mina-auth-card">
+            <div className="mina-auth-logo">MINA · Editorial AI</div>
+            <h2 className="mina-auth-title">Preparing Mina</h2>
+            <p className="mina-auth-text">Just a moment…</p>
+          </div>
         </div>
+        <div className="mina-auth-right" />
       </div>
     );
   }
@@ -159,110 +164,103 @@ export function AuthGate({ children }: AuthGateProps) {
     return <>{children}</>;
   }
 
+  const targetEmail = sentTo || email.trim() || null;
+
   return (
     <div className="mina-auth-shell">
-      <div className="mina-auth-card">
-        <div className="mina-auth-logo">MINA · Editorial AI</div>
+      <div className="mina-auth-left">
+        <div className="mina-auth-card">
+          <div className="mina-auth-logo">MINA · Editorial AI</div>
 
-        {!otpSent ? (
-          <>
-            <h2 className="mina-auth-title">Welcome back</h2>
-            <p className="mina-auth-text">
-              Sign in with Google or email to start creating with Mina.
-            </p>
+          {!otpSent ? (
+            <>
+              <h2 className="mina-auth-title">Sign in</h2>
+              <p className="mina-auth-text">
+                Use your Google account or email to work with Mina.
+              </p>
 
-            <div className="mina-auth-actions">
-              <button
-                type="button"
-                className="mina-auth-btn primary wide"
-                onClick={handleGoogleLogin}
-                disabled={loading}
-              >
-                Continue with Google
-              </button>
-            </div>
+              <div className="mina-auth-actions">
+                <button
+                  type="button"
+                  className="mina-auth-btn primary"
+                  onClick={handleGoogleLogin}
+                  disabled={loading}
+                >
+                  {loading ? "Opening Google…" : "Login with Google"}
+                </button>
+              </div>
 
-            <div className="mina-auth-separator">
-              <span />
-              <span>or</span>
-              <span />
-            </div>
+              <p className="mina-auth-or">or sign in with email</p>
 
-            <form onSubmit={handleEmailLogin} className="mina-auth-form">
-              <label className="mina-auth-label">
-                Email
-                <input
-                  className="mina-auth-input"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </label>
+              <form onSubmit={handleEmailLogin} className="mina-auth-form">
+                <label className="mina-auth-label">
+                  <span>Email</span>
+                  <input
+                    className="mina-auth-input"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </label>
 
-              <button
-                type="submit"
-                className="mina-auth-btn secondary wide"
-                disabled={loading || !email.trim()}
-              >
-                {loading ? "Sending link…" : "Send magic link"}
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  className="mina-auth-btn secondary"
+                  disabled={loading || !email.trim()}
+                >
+                  {loading ? "Sending link…" : "Send login link"}
+                </button>
+              </form>
 
-            {error && <div className="mina-auth-error">{error}</div>}
+              {error && <div className="mina-auth-error">{error}</div>}
 
-            <p className="mina-auth-hint">
-              You’ll receive a one-time link to sign in. No password needed.
-            </p>
-          </>
-        ) : (
-          <>
-            <h2 className="mina-auth-title">Check your email ✨</h2>
-            <p className="mina-auth-text">
-              We sent a sign-in link to{" "}
-              <strong>{sentTo || email.trim()}</strong>.
-              <br />
-              Open your inbox and click the link. If you don’t see it, check
-              Spam or Promotions.
-            </p>
+              <p className="mina-auth-hint">
+                We’ll email you a one-time link. If this address is new, that
+                email will also confirm your account.
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="mina-auth-title">Check your email</h2>
+              <p className="mina-auth-text">
+                We’ve sent a sign-in link to{" "}
+                {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}.
+                Open it to confirm your email and continue with Mina.
+              </p>
 
-            <div className="mina-auth-actions">
-              <button
-                type="button"
-                className="mina-auth-btn primary wide"
-                onClick={() => openInboxFor(sentTo || email.trim())}
-              >
-                Open email app
-              </button>
+              <div className="mina-auth-actions">
+                <button
+                  type="button"
+                  className="mina-auth-btn primary"
+                  onClick={() => openInboxFor(targetEmail)}
+                >
+                  Open email app
+                </button>
 
-              <button
-                type="button"
-                className="mina-auth-btn secondary wide"
-                onClick={() => setBypassForNow(true)}
-              >
-                Continue to Mina now
-              </button>
+                <button
+                  type="button"
+                  className="mina-auth-btn ghost"
+                  onClick={() => {
+                    setOtpSent(false);
+                    setSentTo(null);
+                    setError(null);
+                  }}
+                >
+                  Use a different email
+                </button>
+              </div>
 
-              <button
-                type="button"
-                className="mina-auth-btn ghost wide"
-                onClick={() => {
-                  setOtpSent(false);
-                  setSentTo(null);
-                }}
-              >
-                Use a different email
-              </button>
-            </div>
+              {error && <div className="mina-auth-error">{error}</div>}
 
-            {error && <div className="mina-auth-error">{error}</div>}
-
-            <p className="mina-auth-hint">
-              You can confirm your email later from the message we sent.
-            </p>
-          </>
-        )}
+              <p className="mina-auth-hint">
+                If you can’t see the message, check Spam or Promotions.
+              </p>
+            </>
+          )}
+        </div>
       </div>
+      <div className="mina-auth-right" />
     </div>
   );
 }
