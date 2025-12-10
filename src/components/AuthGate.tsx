@@ -51,7 +51,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [emailMode, setEmailMode] = useState(false);
 
-  // loading is only for email flow, not for google
+  // loading only for email flow
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -135,7 +135,6 @@ export function AuthGate({ children }: AuthGateProps) {
   };
 
   const handleGoogleLogin = async () => {
-    // no loading lock here, so if user comes back they can click again
     setError(null);
     try {
       const { error: supaError } = await supabase.auth.signInWithOAuth({
@@ -169,30 +168,29 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const trimmed = email.trim();
   const hasEmail = trimmed.length > 0;
-  const hasAt = trimmed.includes("@");
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
 
-  // back only when there is something to go back from
+  // back appears when typing email or in check-email view
   const showBack = (emailMode && hasEmail) || otpSent;
 
   return (
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
         <div className="mina-auth-card">
-          {/* back icon fades in / out, sits close to the content */}
+          {/* back icon – smooth fade, no layout jump */}
           <div className={showBack ? "fade-block" : "fade-block hidden"}>
             <button
               type="button"
               className="mina-auth-back"
               onClick={() => {
                 if (otpSent) {
-                  // back from check-email → email form with same text
+                  // back from check-email -> email form
                   setOtpSent(false);
                   setSentTo(null);
                   setError(null);
                   setEmailMode(true);
                 } else {
-                  // back from email form → google hero
+                  // back from email form -> google hero
                   setEmailMode(false);
                   setEmail("");
                   setError(null);
@@ -209,10 +207,10 @@ export function AuthGate({ children }: AuthGateProps) {
 
           {!otpSent ? (
             <>
-              {/* sign-in view */}
+              {/* main sign-in view */}
               <div className="mina-auth-actions">
                 <div className="mina-auth-stack">
-                  {/* Panel 1 – Login with Google + Use email instead */}
+                  {/* Panel 1 – hero + use email */}
                   <div
                     className={
                       emailMode ? "fade-overlay hidden" : "fade-overlay"
@@ -247,10 +245,7 @@ export function AuthGate({ children }: AuthGateProps) {
                       emailMode ? "fade-overlay" : "fade-overlay hidden"
                     }
                   >
-                    <form
-                      onSubmit={handleEmailLogin}
-                      className="mina-auth-form"
-                    >
+                    <form onSubmit={handleEmailLogin} className="mina-auth-form">
                       <label className="mina-auth-label">
                         <input
                           className="mina-auth-input"
@@ -261,10 +256,10 @@ export function AuthGate({ children }: AuthGateProps) {
                         />
                       </label>
 
-                      {/* “Sign in” appears once typing starts */}
+                      {/* sign-in + hint appear together when typing, only opacity fades */}
                       <div
                         className={
-                          hasEmail ? "fade-block" : "fade-block hidden"
+                          hasEmail ? "fade-block delay" : "fade-block hidden"
                         }
                       >
                         <button
@@ -276,10 +271,9 @@ export function AuthGate({ children }: AuthGateProps) {
                         </button>
                       </div>
 
-                      {/* hint appears slightly after, and only once @ is typed */}
                       <div
                         className={
-                          hasAt ? "fade-block delay" : "fade-block hidden"
+                          hasEmail ? "fade-block delay" : "fade-block hidden"
                         }
                       >
                         <p className="mina-auth-hint">
@@ -296,19 +290,12 @@ export function AuthGate({ children }: AuthGateProps) {
             </>
           ) : (
             <>
-              {/* check-email view */}
-              <h1 className="mina-auth-title">Check your email</h1>
-              <p className="mina-auth-text">
-                We’ve sent a sign-in link to{" "}
-                {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}.
-                Open it to continue with Mina.
-              </p>
-
+              {/* check-email view: hero is "Open email app" */}
               <div className="mina-auth-actions">
                 <div className="fade-block">
                   <button
                     type="button"
-                    className="mina-auth-link mina-auth-main small"
+                    className="mina-auth-link mina-auth-main"
                     onClick={() => openInboxFor(targetEmail)}
                   >
                     Open email app
@@ -316,18 +303,11 @@ export function AuthGate({ children }: AuthGateProps) {
                 </div>
 
                 <div className="fade-block delay">
-                  <button
-                    type="button"
-                    className="mina-auth-link secondary"
-                    onClick={() => {
-                      setOtpSent(false);
-                      setSentTo(null);
-                      setError(null);
-                      setEmailMode(true);
-                    }}
-                  >
-                    Use a different email
-                  </button>
+                  <p className="mina-auth-text">
+                    We’ve sent a sign-in link to{" "}
+                    {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}
+                    . Open it to continue with Mina.
+                  </p>
                 </div>
               </div>
 
