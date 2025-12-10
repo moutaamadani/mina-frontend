@@ -356,7 +356,7 @@ select {
 /* initial hero: fade + slide up slightly on first load */
 
 .fade-overlay.initial {
-  transform: translateY(-50%);
+  transform: translateY(-40%);
   animation: mina-fade-up-in 0.8s ease-out;
 }
 
