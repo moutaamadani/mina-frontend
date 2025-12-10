@@ -51,7 +51,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [emailMode, setEmailMode] = useState(false);
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // only for email flow
   const [error, setError] = useState<string | null>(null);
 
   const [bypassForNow] = useState(false);
@@ -134,8 +134,8 @@ export function AuthGate({ children }: AuthGateProps) {
   };
 
   const handleGoogleLogin = async () => {
+    // no loading lock here, so if user comes back they can click again
     setError(null);
-    setLoading(true);
     try {
       const { error: supaError } = await supabase.auth.signInWithOAuth({
         provider: "google",
@@ -146,7 +146,6 @@ export function AuthGate({ children }: AuthGateProps) {
       if (supaError) throw supaError;
     } catch (err: any) {
       setError(err?.message || "Failed to start Google login.");
-      setLoading(false);
     }
   };
 
@@ -160,7 +159,7 @@ export function AuthGate({ children }: AuthGateProps) {
         </div>
         <div className="mina-auth-right" />
       </div>
-    );
+    };
   }
 
   if (session || bypassForNow) {
@@ -176,7 +175,7 @@ export function AuthGate({ children }: AuthGateProps) {
     <div className="mina-auth-shell">
       <div className="mina-auth-left">
         <div className="mina-auth-card">
-          {/* back icon appears when in email flow or check-email */}
+          {/* back icon appears first in flows */}
           {showBack && (
             <button
               type="button"
@@ -189,7 +188,7 @@ export function AuthGate({ children }: AuthGateProps) {
                   setError(null);
                   setEmailMode(true);
                 } else {
-                  // back from email form → main google hero
+                  // back from email form → google hero
                   setEmailMode(false);
                   setEmail("");
                   setError(null);
@@ -208,20 +207,23 @@ export function AuthGate({ children }: AuthGateProps) {
             <>
               {/* sign-in view */}
               <div className="mina-auth-actions">
-                {/* hero: biggest line (text) when not in email mode */}
-                {!emailMode && (
+                {/* hero: biggest line, fades out when email opens */}
+                <div
+                  className={emailMode ? "fade-block hidden" : "fade-block"}
+                >
                   <button
                     type="button"
                     className="mina-auth-link mina-auth-main"
                     onClick={handleGoogleLogin}
-                    disabled={loading}
                   >
-                    {loading ? "Opening Google…" : "Login with Google"}
+                    Login with Google
                   </button>
-                )}
+                </div>
 
-                {/* secondary trigger: use email instead, fades out when email mode open */}
-                <div className={emailMode ? "fade-block hidden" : "fade-block"}>
+                {/* secondary trigger: use email instead */}
+                <div
+                  className={emailMode ? "fade-block hidden" : "fade-block"}
+                >
                   <button
                     type="button"
                     className="mina-auth-link secondary"
@@ -232,7 +234,7 @@ export function AuthGate({ children }: AuthGateProps) {
                   </button>
                 </div>
 
-                {/* email mode: fades in, slides up, pushes content */}
+                {/* email mode: fades in, slides up into hero space */}
                 <div className={emailMode ? "fade-block" : "fade-block hidden"}>
                   <form onSubmit={handleEmailLogin} className="mina-auth-form">
                     <label className="mina-auth-label">
@@ -245,7 +247,7 @@ export function AuthGate({ children }: AuthGateProps) {
                       />
                     </label>
 
-                    {/* “Sign in” line appears only when typing */}
+                    {/* “Sign in” appears first when typing */}
                     <div
                       className={
                         hasEmail ? "fade-block" : "fade-block hidden"
@@ -259,19 +261,19 @@ export function AuthGate({ children }: AuthGateProps) {
                         {loading ? "Sending link…" : "Sign in"}
                       </button>
                     </div>
-                  </form>
 
-                  {/* hint also only fades in when typing */}
-                  <div
-                    className={
-                      hasEmail ? "fade-block" : "fade-block hidden"
-                    }
-                  >
-                    <p className="mina-auth-hint">
-                      We’ll email you a one-time link. If this address is new,
-                      that email will also confirm your account.
-                    </p>
-                  </div>
+                    {/* then the hint, slightly delayed fade */}
+                    <div
+                      className={
+                        hasEmail ? "fade-block delay" : "fade-block hidden"
+                      }
+                    >
+                      <p className="mina-auth-hint">
+                        We’ll email you a one-time link. If this address is
+                        new, that email will also confirm your account.
+                      </p>
+                    </div>
+                  </form>
                 </div>
               </div>
 
