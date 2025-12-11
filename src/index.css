@@ -53,6 +53,14 @@ a {
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
+button {
+  transition: opacity 0.08s ease-out, transform 0.08s ease-out,
+    background 0.08s ease-out;
+}
+
+button:active {
+  opacity: 0.6;
+}
 
 button,
 input,
@@ -725,118 +733,98 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 }
 
 
-/* brief block (state zero) */
+      /* brief block (state zero) */
 
-.studio-brief-block {
-  margin-top: 8px;
-}
-
-/* Input 1 scroll container with bottom fade only */
-./* Input 1 scroll container with fade only at the bottom */
-.studio-brief-shell {
-  position: relative;
-  max-height: 260px;
-  overflow-y: auto;
-  padding-top: 4px;
-  padding-bottom: 4px;
-  -webkit-overflow-scrolling: touch;
-
-  /* hide scrollbars */
-  scrollbar-width: none; /* Firefox */
-
-  /* soft fade ONLY on the bottom (about 40px) */
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(100% - 40px),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    #000 0,
-    #000 calc(100% - 40px),
-    transparent 100%
-  );
-  -webkit-mask-size: 100% 100%;
-  mask-size: 100% 100%;
-}
-
-.studio-brief-shell::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  background: transparent;
-}
-
-
-
-
-
-.studio-brief-input {
-  width: 100%;
-  border: none;
-  outline: none;
-  resize: none;
-  padding: 0;
-  margin: 0;
-  font-family: inherit;
-  font-size: 32px;
-  line-height: 1.08;
-  font-weight: 600;
- letter-spacing: -0.02em;
-  background: transparent;
-  color: var(--mina-text);
-}
-
-
-.studio-pills-animate .studio-pill {
-  opacity: 0;
-  transform: translateY(6px);
-  animation: studioPillIn 0.45s ease-out forwards;
-}
-
-.studio-pills-animate .studio-pill:nth-child(1) {
-  animation-delay: 0s;
-}
-
-.studio-pills-animate .studio-pill:nth-child(2) {
-  animation-delay: 0.06s;
-}
-
-.studio-pills-animate .studio-pill:nth-child(3) {
-  animation-delay: 0.12s;
-}
-
-@keyframes studioPillIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
+         .studio-brief-block {
+           margin-top: 8px;
+         }
+         
+         /* Input 1 scroll container with fade on top/bottom */
+         .studio-brief-shell {
+           position: relative;
+           max-height: 260px;
+           overflow-y: auto;
+           padding-top: 4px;
+           padding-bottom: 4px;
+           -webkit-overflow-scrolling: touch;
+         
+           /* hide scrollbars */
+           scrollbar-width: none; /* Firefox */
+         
+           /* soft fade top + bottom */
+           -webkit-mask-image: linear-gradient(
+             to bottom,
+             transparent 0,
+             #000 18px,
+             #000 calc(100% - 18px),
+             transparent 100%
+           );
+           mask-image: linear-gradient(
+             to bottom,
+             transparent 0,
+             #000 18px,
+             #000 calc(100% - 18px),
+             transparent 100%
+           );
+         }
+         
+         .studio-brief-shell::-webkit-scrollbar {
+           width: 0 !important;
+           height: 0 !important;
+           background: transparent;
+         }
+         
+         .studio-brief-input {
+           width: 100%;
+           border: none;
+           outline: none;
+           resize: none;
+           padding: 0;
+           margin: 0;
+           font-family: inherit;
+           font-size: 32px;
+           line-height: 1.08;
+           font-weight: 600;
+           letter-spacing: -0.02em;
+           background: transparent;
+           color: var(--mina-text);
+         }
+         
+         .studio-brief-input::placeholder {
+           color: rgba(8, 10, 0, 0.2);
+         }
+         
+         /* “Describe more” overlay */
+         
+         .studio-brief-hint {
+           position: absolute;
+           right: 0;
+           bottom: 6px;
+           font-size: 12px;
+           font-weight: 500;
+           letter-spacing: -0.02em;
+           color: rgba(8, 10, 0, 0.45);
+           pointer-events: none;
+         }
 
 
 /* styles section */
 
-/* styles section – completely removed until it becomes visible */
+/* completely hidden until .visible is added */
 .studio-step {
-  display: none;               /* no layout in state zero */
+  display: none;
 }
 
-/* when React adds .visible, it pops in and can animate if you want */
+/* when React adds .visible */
 .studio-step.visible {
   display: block;
-  margin-top: 0;              /* kill the orange gap */
-  padding-top: 8px;          /* small breathing room, tweak if you want */
+  margin-top: 0;
+  padding-top: 8px;
   border-top: 1px solid rgba(8, 10, 0, 0.08);
   animation: studioStepIn 0.45s ease-out forwards;
 }
 
-
-/* optional soft fade/slide */
+/* soft fade/slide */
 @keyframes studioStepIn {
   from {
     opacity: 0;
@@ -848,18 +836,29 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   }
 }
 
-
+/* clickable title / summary */
 .studio-style-title {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* divider between styles + toggle */
+.studio-style-divider {
+  border-bottom: 1px solid rgba(8, 10, 0, 0.08);
+  margin: 12px 0 8px;
 }
 
 .studio-style-row {
   display: flex;
   gap: 24px;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .studio-style-card {
@@ -873,19 +872,24 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 }
 
 .studio-style-thumb {
-  width: 72px;
-  height: 72px;
+  width: 50px;
+  height: 50px;
   background: rgba(8, 10, 0, 0.1); /* 10% black */
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
+.studio-style-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 .studio-style-card.add .studio-style-thumb span {
   font-size: 18px;
 }
-
 
 .studio-style-card.active .studio-style-thumb {
   outline: 1px solid rgba(8, 10, 0, 0.7);
@@ -898,18 +902,20 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   letter-spacing: -0.02em;
 }
 
+/* vision toggle + state */
 
 .studio-vision-toggle {
-  margin-top: 16px;
+  margin-top: 8px;
   border: none;
   padding: 0;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
-  letter-spacing: -0.00em;
+  letter-spacing: -0.02em;
   text-decoration: underline;
   cursor: pointer;
 }
+
 
 
 .studio-vision-state {
