@@ -186,6 +186,7 @@ const ASPECT_ICON_URLS: Record<AspectKey, string> = {
   "1-1":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956",
 };
+
 const STYLE_PRESETS = [
   {
     key: "vintage",
@@ -206,6 +207,7 @@ const STYLE_PRESETS = [
       "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Backlight.png?v=1765457775",
   },
 ] as const;
+
 
 function getInitialCustomerId(initialCustomerId?: string): string {
   try {
@@ -280,7 +282,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
 
-    // 4.3 Studio – brief + steps
+      // 4.3 Studio – brief + steps
   const [brief, setBrief] = useState("");
   const [tone] = useState("Poetic");
   const [platform, setPlatform] = useState("tiktok");
@@ -296,22 +298,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [stylePresetKey, setStylePresetKey] =
     useState<string>("soft-desert-editorial");
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
-
-  // custom styles (Add yours)
-  const [customStylePanelOpen, setCustomStylePanelOpen] = useState(false);
-  const [customStyleImages, setCustomStyleImages] = useState<
-    CustomStyleImage[]
-  >([]);
-  const [customStyleHeroId, setCustomStyleHeroId] = useState<string | null>(
-    null
-  );
-  const [customStyleHeroThumb, setCustomStyleHeroThumb] = useState<
-    string | null
-  >(null);
-  const [customStyleTraining, setCustomStyleTraining] = useState(false);
-  const [customStyleError, setCustomStyleError] = useState<string | null>(
-    null
-  );
+  const [stylesCollapsed, setStylesCollapsed] = useState(false);
 
   const [stillItems, setStillItems] = useState<StillItem[]>([]);
   const [stillIndex, setStillIndex] = useState(0);
@@ -322,12 +309,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
   const [motionDescription, setMotionDescription] = useState("");
-  const [motionGenerating, setMotionGenerating] = useState(false);
-  const [motionError, setMotionError] = useState<string | null>(null);
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
     null
   );
+  const [motionGenerating, setMotionGenerating] = useState(false);
+  const [motionError, setMotionError] = useState<string | null>(null);
 
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
@@ -347,14 +334,19 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [draggingUpload, setDraggingUpload] = useState(false);
   const productInputRef = useRef<HTMLInputElement | null>(null);
   const brandInputRef = useRef<HTMLInputElement | null>(null);
-  const customStyleInputRef = useRef<HTMLInputElement | null>(null);
 
-  // 4.6 Scroll state for brief (ref only; fade handled in CSS)
+  // brief helper hint for "describe more"
+  const [showDescribeMore, setShowDescribeMore] = useState(false);
+  const describeMoreTimeoutRef = useRef<number | null>(null);
+
+  // 4.6 Brief scroll state (for possible gradients – safe to keep)
   const briefShellRef = useRef<HTMLDivElement | null>(null);
-  const briefScrollStateRef = useRef({
+  const [briefScrollState, setBriefScrollState] = useState({
+    canScroll: false,
     atTop: true,
     atBottom: true,
   });
+
 
 
   // ============================================
@@ -1059,67 +1051,129 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               )}
             </div>
 
-            {/* Brief text area */}
-            <div className="studio-brief-block">
-              <div
-                className="studio-brief-shell"
-                ref={briefShellRef}
-                onScroll={handleBriefScroll}
-              >
-                <textarea
-                  className="studio-brief-input"
-                  placeholder="Describe how you want your still life image to look like"
-                  value={brief}
-                  onChange={(e) => setBrief(e.target.value)}
-                  rows={4}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Input 2 – styles, vision toggle, credits, create */}
-          <div
-            className={classNames("studio-step", showStylesStep && "visible")}
-          >
-            <div className="studio-style-title">Pick one editorial style</div>
-
-                        <div className="studio-style-row">
-              {STYLE_PRESETS.map((preset) => (
-                <button
-                  key={preset.key}
-                  type="button"
-                  className={classNames(
-                    "studio-style-card",
-                    stylePresetKey === preset.key && "active"
-                  )}
-                  onClick={() => setStylePresetKey(preset.key)}
-                >
-                  <div className="studio-style-thumb">
-                    <img src={preset.thumb} alt="" />
+       {/* Brief text area */}
+                  <div className="studio-brief-block">
+                    <div
+                      className={classNames(
+                        "studio-brief-shell",
+                        briefHintVisible && "has-brief-hint"
+                      )}
+                      ref={briefShellRef}
+                      onScroll={handleBriefScroll}
+                    >
+                      <textarea
+                        className="studio-brief-input"
+                        placeholder="Describe how you want your still life image to look like"
+                        value={brief}
+                        onChange={(e) => setBrief(e.target.value)}
+                        rows={4}
+                      />
+          
+                      {briefHintVisible && (
+                        <div className="studio-brief-hint">Describe more</div>
+                      )}
+                    </div>
                   </div>
-                  <div className="studio-style-label">{preset.label}</div>
-                </button>
-              ))}
-
-              <button
-                type="button"
-                className={classNames(
-                  "studio-style-card",
-                  "add",
-                  stylePresetKey === "custom-style" && "active"
-                )}
-                onClick={handleOpenCustomStylePanel}
-              >
-                <div className="studio-style-thumb">
-                  {customStyleHeroThumb ? (
-                    <img src={customStyleHeroThumb} alt="" />
-                  ) : (
-                    <span>+</span>
-                  )}
                 </div>
-                <div className="studio-style-label">Add yours</div>
-              </button>
-            </div>
+          
+                {/* Input 2 – styles, vision toggle, create */}
+                <div className={classNames("studio-step", showStylesStep && "visible")}>
+                  <button
+                    type="button"
+                    className="studio-style-title"
+                    onClick={() => {
+                      if (!showStylesStep) return;
+                      setStylesCollapsed((prev) => !prev);
+                    }}
+                  >
+                    {stylesCollapsed
+                      ? `Editorial style picked: ${
+                          STYLE_PRESETS.find((p) => p.key === stylePresetKey)?.label ??
+                          (stylePresetKey === "custom-style" ? "Custom" : "—")
+                        }`
+                      : "Pick one editorial style"}
+                  </button>
+          
+                  {!stylesCollapsed && (
+                    <div className="studio-style-row">
+                      {STYLE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.key}
+                          type="button"
+                          className={classNames(
+                            "studio-style-card",
+                            stylePresetKey === preset.key && "active"
+                          )}
+                          onClick={() => setStylePresetKey(preset.key)}
+                          onMouseEnter={() => setStylePresetKey(preset.key)} // hover selects
+                        >
+                          <div className="studio-style-thumb">
+                            <img src={preset.thumb} alt="" />
+                          </div>
+                          <div className="studio-style-label">{preset.label}</div>
+                        </button>
+                      ))}
+          
+                      <button
+                        type="button"
+                        className={classNames(
+                          "studio-style-card",
+                          "add",
+                          stylePresetKey === "custom-style" && "active"
+                        )}
+                        onClick={handleOpenCustomStylePanel}
+                      >
+                        <div className="studio-style-thumb">
+                          {customStyleHeroThumb ? (
+                            <img src={customStyleHeroThumb} alt="" />
+                          ) : (
+                            <span>+</span>
+                          )}
+                        </div>
+                        <div className="studio-style-label">Add yours</div>
+                      </button>
+                    </div>
+                  )}
+          
+                  {showStylesStep && <div className="studio-style-divider" />}
+          
+                  <button
+                    type="button"
+                    className="studio-vision-toggle"
+                    onClick={() => setMinaVisionEnabled((prev) => !prev)}
+                  >
+                    Mina Vision Intelligence:{" "}
+                    <span className="studio-vision-state">
+                      {minaVisionEnabled ? "ON" : "OFF"}
+                    </span>
+                  </button>
+          
+                  <div className="studio-create-block">
+                    <button
+                      type="button"
+                      className={classNames(
+                        "studio-create-link",
+                        !canCreateStill && "disabled"
+                      )}
+                      disabled={!canCreateStill}
+                      onClick={handleGenerateStill}
+                    >
+                      {stillGenerating ? "Creating…" : "Create"}
+                    </button>
+                  </div>
+          
+                  <div className="studio-credits-small">
+                    {creditsLoading ? (
+                      "Checking credits…"
+                    ) : credits ? (
+                      <>
+                        Credits: {credits.balance} (img −{imageCost} · motion −
+                        {motionCost})
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
 
 
             <button
