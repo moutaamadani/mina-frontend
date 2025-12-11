@@ -689,13 +689,14 @@ video {
 
 
 /* text: 10pt-ish, semi bold + muted subtitle */
-.studio-pill-main {
+.studio-pill-main,
+.studio-pill-sub {
   font-size: 13px;      /* ≈10pt */
-  font-weight: 600;
+  font-weight: 600;     /* all semibold */
+  letter-spacing: -0.02em;
 }
 
 .studio-pill-sub {
-  font-size: 11px;
   opacity: 0.6;
 }
 
