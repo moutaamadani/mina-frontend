@@ -222,7 +222,7 @@ return fromUrl.trim();
 }
 ```
 
-} catch {
+} catch (err) {
 // ignore
 }
 
@@ -238,7 +238,7 @@ try {
 if (typeof window !== "undefined") {
 window.localStorage.setItem("minaCustomerId", id);
 }
-} catch {
+} catch (err) {
 // ignore
 }
 }
@@ -281,184 +281,8 @@ const [creditsLoading, setCreditsLoading] = useState(false);
 const [sessionId, setSessionId] = useState<string | null>(null);
 const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
 
-// 4.3 Studio – brief + steps
-const [brief, setBrief] = useState("");
-const [tone] = useState("Poetic");
-const [platform, setPlatform] = useState("tiktok");
-const [aspectIndex, setAspectIndex] = useState(0);
+// ...keep everything after this exactly as you have it now...
 
-const [productImageAdded, setProductImageAdded] = useState(false);
-const [brandImageAdded, setBrandImageAdded] = useState(false);
-const [productImageThumb, setProductImageThumb] = useState<string | null>(
-null
-);
-const [brandImageThumb, setBrandImageThumb] = useState<string | null>(null);
-
-const [stylePresetKey, setStylePresetKey] =
-useState<string>("soft-desert-editorial");
-const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
-const [stylesCollapsed, setStylesCollapsed] = useState(false);
-
-// custom styles (Add yours)
-const [customStylePanelOpen, setCustomStylePanelOpen] = useState(false);
-const [customStyleImages, setCustomStyleImages] = useState<CustomStyleImage[]>(
-[]
-);
-const [customStyleHeroId, setCustomStyleHeroId] = useState<string | null>(
-null
-);
-const [customStyleHeroThumb, setCustomStyleHeroThumb] = useState<
-string | null
-
-> (null);
-> const [customStyleTraining, setCustomStyleTraining] = useState(false);
-> const [customStyleError, setCustomStyleError] = useState<string | null>(null);
-
-const [stillItems, setStillItems] = useState<StillItem[]>([]);
-const [stillIndex, setStillIndex] = useState(0);
-const [stillGenerating, setStillGenerating] = useState(false);
-const [stillError, setStillError] = useState<string | null>(null);
-const [lastStillPrompt, setLastStillPrompt] = useState<string>("");
-
-const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
-const [motionIndex, setMotionIndex] = useState(0);
-const [motionDescription, setMotionDescription] = useState("");
-const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
-const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
-null
-);
-const [motionGenerating, setMotionGenerating] = useState(false);
-const [motionError, setMotionError] = useState<string | null>(null);
-
-const [feedbackText, setFeedbackText] = useState("");
-const [feedbackSending, setFeedbackSending] = useState(false);
-const [feedbackError, setFeedbackError] = useState<string | null>(null);
-
-// 4.4 History (profile)
-const [historyLoading, setHistoryLoading] = useState(false);
-const [historyError, setHistoryError] = useState<string | null>(null);
-const [historyGenerations, setHistoryGenerations] = useState<
-GenerationRecord[]
-
-> ([]);
-> const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>(
-> []
-> );
-
-// 4.5 Drag & upload refs
-const [draggingUpload, setDraggingUpload] = useState(false);
-const productInputRef = useRef<HTMLInputElement | null>(null);
-const brandInputRef = useRef<HTMLInputElement | null>(null);
-const customStyleInputRef = useRef<HTMLInputElement | null>(null);
-
-// brief helper hint “Describe more”
-const [briefHintVisible, setBriefHintVisible] = useState(false);
-const [briefLastChangeAt, setBriefLastChangeAt] = useState<number | null>(
-null
-);
-
-// 4.6 Brief scroll ref (fade handled in CSS)
-const briefShellRef = useRef<HTMLDivElement | null>(null);
-
-// ============================================
-// 5. Derived values
-// ============================================
-const briefLength = brief.trim().length;
-const showPills = briefLength >= 3;
-const showStylesStep = briefLength >= 20;
-const canCreateStill = briefLength >= 40 && !stillGenerating;
-
-const currentAspect = ASPECT_OPTIONS[aspectIndex];
-const currentStill: StillItem | null =
-stillItems[stillIndex] || stillItems[0] || null;
-const currentMotion: MotionItem | null =
-motionItems[motionIndex] || motionItems[0] || null;
-
-const imageCost = credits?.meta?.imageCost ?? 1;
-const motionCost = credits?.meta?.motionCost ?? 5;
-
-// ============================================
-// 6. Effects – bootstrap + persist customer + brief hint
-// ============================================
-useEffect(() => {
-setCustomerIdInput(customerId);
-persistCustomerId(customerId);
-}, [customerId]);
-
-useEffect(() => {
-if (!API_BASE_URL || !customerId) return;
-
-```
-const bootstrap = async () => {
-  await handleCheckHealth();
-  await fetchCredits();
-  await ensureSession();
-  await fetchHistory();
-};
-
-void bootstrap();
-// eslint-disable-next-line react-hooks/exhaustive-deps
-```
-
-}, [customerId]);
-
-// revoke object URLs on unmount
-useEffect(() => {
-return () => {
-if (productImageThumb) URL.revokeObjectURL(productImageThumb);
-if (brandImageThumb) URL.revokeObjectURL(brandImageThumb);
-if (customStyleHeroThumb && customStyleHeroThumb.startsWith("blob:")) {
-URL.revokeObjectURL(customStyleHeroThumb);
-}
-customStyleImages.forEach((img) => {
-if (img.url.startsWith("blob:")) {
-URL.revokeObjectURL(img.url);
-}
-});
-};
-// eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
-
-// track brief changes for “Describe more”
-useEffect(() => {
-const trimmed = brief.trim();
-if (!trimmed) {
-setBriefHintVisible(false);
-setBriefLastChangeAt(null);
-return;
-}
-setBriefHintVisible(false);
-setBriefLastChangeAt(Date.now());
-}, [brief]);
-
-useEffect(() => {
-if (!briefLastChangeAt) return;
-
-```
-const id = window.setTimeout(() => {
-  const len = brief.trim().length;
-  if (len > 0 && len < 20) {
-    setBriefHintVisible(true);
-  } else {
-    setBriefHintVisible(false);
-  }
-}, 1200);
-
-return () => window.clearTimeout(id);
-```
-
-}, [briefLastChangeAt, brief]);
-
-// collapse styles reset when not visible
-useEffect(() => {
-if (!showStylesStep) {
-setStylesCollapsed(false);
-}
-}, [showStylesStep]);
-
-// ============================================
-// 7. API helpers
-// ============================================
 const handleCheckHealth = async () => {
 if (!API_BASE_URL) return;
 try {
@@ -481,6 +305,29 @@ message: err?.message || "Unable to reach Mina.",
 setCheckingHealth(false);
 }
 };
+
+const fetchCredits = async () => {
+if (!API_BASE_URL || !customerId) return;
+try {
+setCreditsLoading(true);
+const params = new URLSearchParams({ customerId });
+const res = await fetch(`${API_BASE_URL}/credits/balance?${params}`);
+if (!res.ok) return;
+const json = (await res.json()) as {
+balance: number;
+meta?: { imageCost: number; motionCost: number };
+};
+setCredits({
+balance: json.balance,
+meta: json.meta,
+});
+} catch (err) {
+// silent
+} finally {
+setCreditsLoading(false);
+}
+};
+
 
 const fetchCredits = async () => {
 if (!API_BASE_URL || !customerId) return;
