@@ -1,5 +1,7 @@
-/* src/MinaApp.tsx */
-
+// src/MinaApp.tsx
+// ==============================================
+// 1. Imports & environment
+// ==============================================
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 
@@ -281,8 +283,168 @@ const [creditsLoading, setCreditsLoading] = useState(false);
 const [sessionId, setSessionId] = useState<string | null>(null);
 const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
 
-// ...keep everything after this exactly as you have it now...
+// 4.3 Studio – brief + steps
+const [brief, setBrief] = useState("");
+const [tone] = useState("Poetic");
+const [aspectIndex, setAspectIndex] = useState(0);
 
+const [productImageAdded, setProductImageAdded] = useState(false);
+const [brandImageAdded, setBrandImageAdded] = useState(false);
+const [productImageThumb, setProductImageThumb] = useState<string | null>(
+null
+);
+const [brandImageThumb, setBrandImageThumb] = useState<string | null>(null);
+
+const [stylePresetKey, setStylePresetKey] =
+useState<string>("soft-desert-editorial");
+const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
+const [stylesCollapsed, setStylesCollapsed] = useState(false);
+
+const [stillItems, setStillItems] = useState<StillItem[]>([]);
+const [stillIndex, setStillIndex] = useState(0);
+const [stillGenerating, setStillGenerating] = useState(false);
+const [stillError, setStillError] = useState<string | null>(null);
+const [lastStillPrompt, setLastStillPrompt] = useState<string>("");
+
+const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
+const [motionIndex, setMotionIndex] = useState(0);
+const [motionDescription, setMotionDescription] = useState("");
+const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
+const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
+null
+);
+const [motionGenerating, setMotionGenerating] = useState(false);
+const [motionError, setMotionError] = useState<string | null>(null);
+
+const [feedbackText, setFeedbackText] = useState("");
+const [feedbackSending, setFeedbackSending] = useState(false);
+const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+// 4.4 History (profile)
+const [historyLoading, setHistoryLoading] = useState(false);
+const [historyError, setHistoryError] = useState<string | null>(null);
+const [historyGenerations, setHistoryGenerations] = useState<
+GenerationRecord[]
+
+> ([]);
+> const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>(
+> []
+> );
+
+// 4.5 Drag & upload refs
+const [draggingUpload, setDraggingUpload] = useState(false);
+const productInputRef = useRef<HTMLInputElement | null>(null);
+const brandInputRef = useRef<HTMLInputElement | null>(null);
+
+// 4.6 Brief helper hint for "describe more"
+const [showDescribeMore, setShowDescribeMore] = useState(false);
+const describeMoreTimeoutRef = useRef<number | null>(null);
+
+// 4.7 Brief scroll ref (for CSS mask fade)
+const briefShellRef = useRef<HTMLDivElement | null>(null);
+
+// 4.8 Custom style (Add yours)
+const [customStylePanelOpen, setCustomStylePanelOpen] = useState(false);
+const [customStyleImages, setCustomStyleImages] = useState<CustomStyleImage[]>(
+[]
+);
+const [customStyleHeroId, setCustomStyleHeroId] = useState<string | null>(
+null
+);
+const [customStyleHeroThumb, setCustomStyleHeroThumb] = useState<
+string | null
+
+> (null);
+> const [customStyleTraining, setCustomStyleTraining] = useState(false);
+> const [customStyleError, setCustomStyleError] = useState<string | null>(null);
+> const customStyleInputRef = useRef<HTMLInputElement | null>(null);
+
+// ============================================
+// 5. Derived values
+// ============================================
+const briefLength = brief.trim().length;
+const showPills = briefLength >= 3;
+const showStylesStep = briefLength >= 20;
+const canCreateStill = briefLength >= 40 && !stillGenerating;
+
+const currentAspect = ASPECT_OPTIONS[aspectIndex];
+const currentStill: StillItem | null =
+stillItems[stillIndex] || stillItems[0] || null;
+const currentMotion: MotionItem | null =
+motionItems[motionIndex] || motionItems[0] || null;
+
+const imageCost = credits?.meta?.imageCost ?? 1;
+const motionCost = credits?.meta?.motionCost ?? 5;
+
+const briefHintVisible =
+showDescribeMore && briefLength > 0 && briefLength < 20;
+
+// ============================================
+// 6. Effects – bootstrap + persist customer + brief hint
+// ============================================
+useEffect(() => {
+setCustomerIdInput(customerId);
+persistCustomerId(customerId);
+}, [customerId]);
+
+useEffect(() => {
+if (!API_BASE_URL || !customerId) return;
+
+ 
+const bootstrap = async () => {
+  await handleCheckHealth();
+  await fetchCredits();
+  await ensureSession();
+  await fetchHistory();
+};
+
+void bootstrap();
+// eslint-disable-next-line react-hooks/exhaustive-deps
+ 
+
+}, [customerId]);
+
+// revoke object URLs on unmount
+useEffect(() => {
+return () => {
+if (productImageThumb) URL.revokeObjectURL(productImageThumb);
+if (brandImageThumb) URL.revokeObjectURL(brandImageThumb);
+if (customStyleHeroThumb && customStyleHeroThumb.startsWith("blob:")) {
+URL.revokeObjectURL(customStyleHeroThumb);
+}
+};
+}, [productImageThumb, brandImageThumb, customStyleHeroThumb]);
+
+// "Describe more" hint – show if user stops before 20 chars
+useEffect(() => {
+if (describeMoreTimeoutRef.current && typeof window !== "undefined") {
+window.clearTimeout(describeMoreTimeoutRef.current);
+}
+
+ 
+const trimmed = brief.trim();
+if (!trimmed || trimmed.length >= 20) {
+  setShowDescribeMore(false);
+  return;
+}
+
+if (typeof window === "undefined") return;
+
+const id = window.setTimeout(() => {
+  setShowDescribeMore(true);
+}, 1200);
+describeMoreTimeoutRef.current = id as unknown as number;
+
+return () => {
+  window.clearTimeout(id);
+};
+ 
+
+}, [brief]);
+
+// ============================================
+// 7. API helpers
+// ============================================
 const handleCheckHealth = async () => {
 if (!API_BASE_URL) return;
 try {
@@ -328,29 +490,6 @@ setCreditsLoading(false);
 }
 };
 
-
-const fetchCredits = async () => {
-if (!API_BASE_URL || !customerId) return;
-try {
-setCreditsLoading(true);
-const params = new URLSearchParams({ customerId });
-const res = await fetch(`${API_BASE_URL}/credits/balance?${params}`);
-if (!res.ok) return;
-const json = (await res.json()) as {
-balance: number;
-meta?: { imageCost: number; motionCost: number };
-};
-setCredits({
-balance: json.balance,
-meta: json.meta,
-});
-} catch {
-// silent
-} finally {
-setCreditsLoading(false);
-}
-};
-
 const ensureSession = async (): Promise<string | null> => {
 if (sessionId) return sessionId;
 if (!API_BASE_URL || !customerId) return null;
@@ -377,7 +516,7 @@ try {
     setSessionTitle(json.session.title || sessionTitle);
     return json.session.id;
   }
-} catch {
+} catch (err) {
   // ignore
 }
 return null;
@@ -627,7 +766,7 @@ try {
       sessionId,
     }),
   });
-} catch {
+} catch (err) {
   // non-blocking
 }
  
@@ -697,7 +836,6 @@ document.body.removeChild(a);
 const handleCycleAspect = () => {
 setAspectIndex((prev) => {
 const next = (prev + 1) % ASPECT_OPTIONS.length;
-setPlatform(ASPECT_OPTIONS[next].platformKey);
 return next;
 });
 };
@@ -826,7 +964,7 @@ try {
   setCustomStyleTraining(true);
   setCustomStyleError(null);
 
-  // TODO: plug into real training endpoint
+  // TODO: plug this into the real training endpoint.
   await new Promise((resolve) => setTimeout(resolve, 1200));
 
   setStylePresetKey("custom-style");
@@ -896,7 +1034,7 @@ await handleGenerateMotion();
 };
 
 const handleBriefScroll = () => {
-// no-op; fade handled via CSS on .studio-brief-shell
+// fade is handled purely by CSS mask on .studio-brief-shell
 };
 
 // ============================================
@@ -967,6 +1105,7 @@ return (
                     </span>
                   )}
                 </span>
+
                 <span className="studio-pill-main">Add inspiration</span>
               </button>
 
@@ -1015,12 +1154,20 @@ return (
               <div className="studio-brief-hint">Describe more</div>
             )}
           </div>
+          {stillError && (
+            <div className="error-text" style={{ marginTop: 8 }}>
+              {stillError}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Input 2 – styles, vision toggle, create */}
       <div
-        className={classNames("studio-step", showStylesStep && "visible")}
+        className={classNames(
+          "studio-step",
+          showStylesStep && "visible"
+        )}
       >
         <button
           type="button"
@@ -1035,7 +1182,7 @@ return (
                 STYLE_PRESETS.find(
                   (p) => p.key === stylePresetKey
                 )?.label ??
-                (stylePresetKey === "custom-style" ? "Custom" : "—")
+              (stylePresetKey === "custom-style" ? "Custom" : "—")
               }`
             : "Pick one editorial style"}
         </button>
@@ -1051,7 +1198,7 @@ return (
                   stylePresetKey === preset.key && "active"
                 )}
                 onClick={() => setStylePresetKey(preset.key)}
-                onMouseEnter={() => setStylePresetKey(preset.key)} // hover selects
+                onMouseEnter={() => setStylePresetKey(preset.key)}
               >
                 <div className="studio-style-thumb">
                   <img src={preset.thumb} alt="" />
@@ -1137,7 +1284,7 @@ return (
       onChange={handleBrandFileChange}
     />
 
-    {/* footer – Profile fixed at bottom-left via flex */}
+    {/* footer – Profile */}
     <div className="studio-footer">
       <button
         type="button"
@@ -1270,7 +1417,10 @@ return (
     className="mina-modal-backdrop"
     onClick={handleCloseCustomStylePanel}
   >
-    <div className="mina-modal" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="mina-modal"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="mina-modal-header">
         <div>Train your own style</div>
         <button
