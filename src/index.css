@@ -555,6 +555,8 @@ video {
   height: 100dvh;
 }
 
+/* left / right columns */
+
 .studio-left,
 .studio-right {
   position: relative;
@@ -564,17 +566,28 @@ video {
   min-height: 0;
 }
 
+/* center Input 1 + Input 2 on the left */
 
 .studio-left-main {
-  flex: 0 0 auto;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  margin-top: 0;
-  margin-bottom: 0;   /* anchor to the top padding of .studio-left */
+  justify-content: center;
+  transition: transform var(--mina-anim-slide) ease-out;
 }
-/* Pills slot – reserves height so text doesn't move when pills appear */
+
+.studio-left-main--with-step {
+  transform: translateY(-24px);
+}
+
+.studio-input1-block {
+  margin-bottom: 32px;
+}
+
+/* Pills slot – keeps constant height so textarea never jumps */
+
 .studio-pills-slot {
-  min-height: 32px;          /* ~22px pill + a bit of breathing room */
+  min-height: 30px;
   margin-bottom: 16px;
   display: flex;
   align-items: center;
@@ -589,6 +602,7 @@ video {
 .studio-left.drag-active {
   outline: 1px dashed rgba(8, 10, 0, 0.4);
 }
+
 
 /* ===========================================================
    3.1 LEFT SIDE – describe + pills + styles
@@ -612,9 +626,8 @@ video {
 .studio-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  min-height: 22px;
+  gap: 6px;
+  padding: 4px 6px;
   border: none;
   background: rgba(8, 10, 0, 0.06);
   cursor: pointer;
@@ -623,6 +636,7 @@ video {
     opacity 0.08s ease-out,
     transform 0.08s ease-out;
 }
+
 
 .studio-pill.active {
   background: rgba(8, 10, 0, 0.16);
@@ -817,11 +831,12 @@ video {
 .studio-style-thumb {
   width: 50px;
   height: 50px;
-  background: rgba(8, 10, 0, 0.06);
+  background: rgba(8, 10, 0, 0.2); /* 20% black */
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 
 .studio-style-card.add .studio-style-thumb span {
   font-size: 18px;
