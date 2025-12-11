@@ -1,939 +1,2237 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+// ==============================================
+// MinaApp.tsx – Studio UI
+// ==============================================
+import React, { useEffect, useState } from "react";
+import { supabase } from "./lib/supabaseClient";
 
-type MinaAppProps = {
-  initialCustomerId: string | null;
-  onSignOut: () => void;
-};
-
-const API_BASE_URL =
-  import.meta.env.VITE_MINA_API_BASE_URL ||
-  "https://mina-editorial-ai-api.onrender.com";
+const API_BASE_URL = import.meta.env.VITE_MINA_API_BASE_URL || "";
 
 const TOPUP_URL =
   import.meta.env.VITE_MINA_TOPUP_URL ||
-  "https://faltastudio.com/products/mina-machta-50";
+  "https://www.faltastudio.com/checkouts/cn/hWN6EhbqQW5KrdIuBO3j5HKV/en-ae?_r=AQAB9NY_ccOV_da3y7VmTxJU-dDoLEOCdhP9sg2YlvDwLQQ";
 
-type HealthStatus = "idle" | "ok" | "error";
+const ADMIN_KEY = import.meta.env.VITE_MINA_ADMIN_KEY || "";
+const ADMIN_SECRET_STORAGE_KEY = "minaAdminSecretV1";
 
-type CreditsState = {
-  balance: number | null;
-  imageCost: number | null;
-  motionCost: number | null;
-  loading: boolean;
-  error: string | null;
+// ==============================================
+// Types
+// ==============================================
+type HealthPayload = {
+  ok: boolean;
+  service: string;
+  time: string;
 };
 
-type EditorialGenerateResponse = {
+type CreditsMeta = {
+  imageCost: number;
+  motionCost: number;
+};
+
+type CreditsBalance = {
   ok: boolean;
-  message?: string;
-  error?: string;
-  imageUrl?: string | null;
+  requestId: string;
+  customerId: string;
+  balance: number;
+  historyLength: number;
+  meta: CreditsMeta;
+};
+
+type EditorialResponse = {
+  ok: boolean;
+  message: string;
+  requestId: string;
+  prompt: string;
+  imageUrl: string | null;
   imageUrls?: string[];
-  generationId?: string;
-  sessionId?: string;
-  credits?: {
+  generationId: string;
+  sessionId: string;
+  credits: {
     balance: number;
     cost: number;
   };
-  prompt?: string;
+  gpt?: any;
 };
 
-type CreditsBalanceResponse = {
+type MotionSuggestResponse = {
   ok: boolean;
-  requestId?: string;
-  customerId?: string;
-  balance: number;
-  historyLength?: number;
-  meta?: {
-    imageCost?: number;
-    motionCost?: number;
+  requestId: string;
+  suggestion: string;
+  gpt?: any;
+};
+
+type MotionResponse = {
+  ok: boolean;
+  message: string;
+  requestId: string;
+  prompt: string;
+  videoUrl: string | null;
+  generationId: string;
+  sessionId: string;
+  credits: {
+    balance: number;
+    cost: number;
+  };
+  gpt?: any;
+};
+
+type LikePayload = {
+  ok: boolean;
+  message: string;
+  requestId: string;
+  totals: {
+    likesForCustomer: number;
   };
 };
 
-type StatsResponse = {
-  ok: boolean;
-  requestId: string;
-  source: string;
-  totalUsers: number | null;
+type ApiGeneration = {
+  id: string;
+  type: "image" | "motion";
+  sessionId: string;
+  customerId: string;
+  platform: string;
+  prompt: string;
+  outputUrl: string;
+  createdAt: string;
+  meta?: Record<string, any>;
 };
 
-type StudioItemKind = "image" | "video";
+type CreditsHistoryEntry = {
+  delta: number;
+  reason: string;
+  source: string;
+  at: string;
+};
 
-type StudioItem = {
+type CustomerHistory = {
+  ok: boolean;
+  customerId: string;
+  credits: {
+    balance: number;
+    history: CreditsHistoryEntry[];
+  };
+  generations: ApiGeneration[];
+  feedbacks: any[];
+};
+
+type AdminOverview = {
+  ok: boolean;
+  totals: {
+    customersWithCredits: number;
+    generations: number;
+    feedbacks: number;
+  };
+  generations: ApiGeneration[];
+  feedbacks: any[];
+  credits: {
+    customerId: string;
+    balance: number;
+    history: CreditsHistoryEntry[];
+  }[];
+};
+
+interface AdminSummary {
+  totalCustomers: number;
+  totalCredits: number;
+  autoTopupOn: number;
+}
+
+interface AdminCustomer {
+  customerId: string;
+  balance: number;
+}
+
+type StillItem = {
   id: string;
   url: string;
   prompt: string;
-  kind: StudioItemKind;
   createdAt: string;
 };
 
-type TabKey = "studio" | "profile";
+type MotionItem = {
+  id: string;
+  url: string;
+  prompt: string;
+  createdAt: string;
+};
 
-function formatUserCount(count: number): string {
-  if (count >= 1_000_000) {
-    return (count / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  }
-  if (count >= 1_000) {
-    return (count / 1_000).toFixed(1).replace(/\.0$/, "") + "k";
-  }
-  return String(count);
-}
+// ==============================================
+// Helpers
+// ==============================================
+const devCustomerId = "8766256447571";
 
-function slugFromPrompt(prompt: string): string {
-  if (!prompt) return "mina-image";
-  return prompt
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40) || "mina-image";
-}
-
-export function MinaApp({ initialCustomerId, onSignOut }: MinaAppProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("studio");
-
-  // Customer id (same as login: email)
-  const [customerId] = useState<string | null>(() => {
-    if (initialCustomerId) return initialCustomerId;
+function getInitialCustomerId(initialCustomerId?: string): string {
+  try {
     if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const fromUrl = params.get("customerId");
+
+      // If Shopify passes ?customerId=... → auto sign-in
+      if (fromUrl && fromUrl.trim().length > 0) {
+        return fromUrl.trim();
+      }
+
       const stored = window.localStorage.getItem("minaCustomerId");
-      return stored || null;
+      if (stored && stored.trim().length > 0) {
+        return stored.trim();
+      }
     }
-    return null;
-  });
+  } catch {
+    // ignore
+  }
 
-  // Session id used for history / feedback
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  if (initialCustomerId && initialCustomerId.trim().length > 0) {
+    return initialCustomerId.trim();
+  }
 
-  // Health + credits + stats
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>("idle");
-  const [healthMessage, setHealthMessage] = useState<string>("");
+  return "";
+}
 
-  const [credits, setCredits] = useState<CreditsState>({
-    balance: null,
-    imageCost: null,
-    motionCost: null,
-    loading: false,
-    error: null,
-  });
+function formatTime(ts?: string) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString();
+  } catch {
+    return ts;
+  }
+}
 
-  const [totalUsers, setTotalUsers] = useState<number | null>(null);
+function classNames(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
-  // Studio form state
-  const [brief, setBrief] = useState("");
-  const [tone, setTone] = useState("");
+type MinaAppProps = {
+  initialCustomerId?: string;
+};
 
-  // Ratio preset + orientation
-  const [ratioChoice, setRatioChoice] = useState<
-    "vertical" | "post" | "square" | null
-  >("vertical");
-  const [orientation, setOrientation] = useState<"vertical" | "horizontal">(
-    "vertical"
+// ==============================================
+// MinaApp
+// ==============================================
+function MinaApp({ initialCustomerId }: MinaAppProps) {
+  // Tabs
+  const [activeTab, setActiveTab] = useState<"studio" | "profile" | "admin">(
+    "studio"
   );
 
-  // Image URLs (still URL-based for now)
+  // Customer & admin identity
+  const [customerId, setCustomerId] = useState(() =>
+    getInitialCustomerId(initialCustomerId)
+  );
+  const isAdmin = Boolean(ADMIN_KEY && customerId === devCustomerId);
+
+  // Health / credits / session
+  const [health, setHealth] = useState<HealthPayload | null>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+
+  const [credits, setCredits] = useState<CreditsBalance | null>(null);
+  const [creditsLoading, setCreditsLoading] = useState(false);
+  const [creditsError, setCreditsError] = useState<string | null>(null);
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionStarting, setSessionStarting] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  // Stills & motion – inputs + results
   const [productImageUrl, setProductImageUrl] = useState("");
   const [styleImageUrlsRaw, setStyleImageUrlsRaw] = useState("");
+  const [brief, setBrief] = useState("");
+  const [tone, setTone] = useState("Poetic");
+  const [platform, setPlatform] = useState("tiktok");
+  const [stylePresetKey, setStylePresetKey] =
+    useState("soft-desert-editorial");
+  const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
 
-  const styleImageUrls = useMemo(
-    () =>
-      styleImageUrlsRaw
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean),
-    [styleImageUrlsRaw]
+  const [stillGenerating, setStillGenerating] = useState(false);
+  const [stillError, setStillError] = useState<string | null>(null);
+  const [lastStillPrompt, setLastStillPrompt] = useState<string | null>(null);
+  const [stillItems, setStillItems] = useState<StillItem[]>([]);
+  const [stillIndex, setStillIndex] = useState(0);
+
+  const [motionDescription, setMotionDescription] = useState("");
+  const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
+  const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
+    null
   );
 
-  // Style preset + Mina Vision
-  const [stylePresetKey, setStylePresetKey] =
-    useState<string>("soft-desert-editorial");
-  const [minaVisionEnabled, setMinaVisionEnabled] = useState<boolean>(true);
+  const [motionGenerating, setMotionGenerating] = useState(false);
+  const [motionError, setMotionError] = useState<string | null>(null);
+  const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
+  const [motionIndex, setMotionIndex] = useState(0);
 
-  // Studio generation results
-  const [studioItems, setStudioItems] = useState<StudioItem[]>([]);
-  const [studioIndex, setStudioIndex] = useState<number>(0);
-  const [studioLoading, setStudioLoading] = useState<boolean>(false);
-  const [studioError, setStudioError] = useState<string | null>(null);
-
-  // Feedback / like
+  // Studio output panel
+  const [outputMode, setOutputMode] = useState<"stills" | "motion">("stills");
   const [feedbackText, setFeedbackText] = useState("");
-  const [likeSending, setLikeSending] = useState(false);
-  const [likedIds, setLikedIds] = useState<string[]>([]);
+  const [feedbackSending, setFeedbackSending] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
 
-  // Touch swipe for carousel
-  const touchStartXRef = useRef<number | null>(null);
+  // Billing & auto top-up
+  const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
+  const [autoTopupLimit, setAutoTopupLimit] = useState("0");
+  const [autoTopupPack, setAutoTopupPack] = useState("MINA-50");
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingSaving, setBillingSaving] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
-  const currentItem: StudioItem | null =
-    studioItems.length > 0 ? studioItems[studioIndex] : null;
+  // Admin (credits + customers via secret)
+  const [adminMode, setAdminMode] = useState(false);
+  const [adminSecret, setAdminSecret] = useState("");
+  const [adminSummary, setAdminSummary] = useState<AdminSummary | null>(null);
+  const [adminCustomers, setAdminCustomers] = useState<AdminCustomer[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [adminAdjust, setAdminAdjust] = useState<Record<string, string>>({});
 
-  const isCurrentLiked =
-    !!currentItem && likedIds.includes(currentItem.id ?? "");
+  // History + admin overview (old admin key)
+  const [history, setHistory] = useState<CustomerHistory | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Map ratio/orientation to "platform" for backend
-  const platform = useMemo(() => {
-    if (!ratioChoice) return "tiktok";
-    if (ratioChoice === "vertical") {
-      return orientation === "vertical" ? "tiktok" : "youtube";
-    }
-    if (ratioChoice === "post") {
-      return "instagram";
-    }
-    if (ratioChoice === "square") {
-      return "square";
-    }
-    return "tiktok";
-  }, [ratioChoice, orientation]);
+  const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(
+    null
+  );
 
-  // --- Effects: health, credits, stats ---
-
+  // Persist customer id
   useEffect(() => {
-    async function loadHealth() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/health`);
-        if (!res.ok) throw new Error(String(res.status));
-        const json = await res.json();
-        setHealthStatus("ok");
-        setHealthMessage(json.service || "Mina API online");
-      } catch (err: any) {
-        console.error("Health check failed", err);
-        setHealthStatus("error");
-        setHealthMessage("Mina API offline");
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("minaCustomerId", customerId);
       }
+    } catch {
+      // ignore
     }
-    void loadHealth();
-  }, []);
-
-  useEffect(() => {
-    if (!customerId) return;
-
-    async function loadCredits() {
-      setCredits((prev) => ({ ...prev, loading: true, error: null }));
-      try {
-        const res = await fetch(
-          `${API_BASE_URL}/credits/balance?customerId=${encodeURIComponent(
-            customerId
-          )}`
-        );
-        const json: CreditsBalanceResponse = await res.json();
-        if (!res.ok || !json.ok) {
-          throw new Error(json as any);
-        }
-        setCredits({
-          balance: json.balance,
-          imageCost: json.meta?.imageCost ?? null,
-          motionCost: json.meta?.motionCost ?? null,
-          loading: false,
-          error: null,
-        });
-      } catch (err: any) {
-        console.error("loadCredits error", err);
-        setCredits((prev) => ({
-          ...prev,
-          loading: false,
-          error: "Could not load credits.",
-        }));
-      }
-    }
-
-    void loadCredits();
   }, [customerId]);
 
+  // Load stored admin secret
   useEffect(() => {
-    async function loadStats() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/public/stats/total-users`);
-        const json: StatsResponse = await res.json();
-        if (json && typeof json.totalUsers === "number") {
-          setTotalUsers(json.totalUsers);
-        } else {
-          setTotalUsers(null);
+    try {
+      if (typeof window !== "undefined") {
+        const stored = window.localStorage.getItem(ADMIN_SECRET_STORAGE_KEY);
+        if (stored) {
+          setAdminSecret(stored);
         }
-      } catch (err) {
-        console.error("Stats error", err);
-        setTotalUsers(null);
       }
+    } catch {
+      // ignore
     }
-    void loadStats();
   }, []);
 
-  // --- Helpers ---
+  // Step “done” flags
+  const step1Done = Boolean(health?.ok && sessionId);
+  const step2Done = Boolean(
+    productImageUrl.trim().length || styleImageUrlsRaw.trim().length
+  );
+  const step3Done = Boolean(brief.trim().length);
+  const step4Done = stillItems.length > 0;
+  const step5Done = motionItems.length > 0;
 
-  const ensureSession = useCallback(async () => {
-    if (sessionId || !customerId) return sessionId;
+  // ============================================
+  // API helpers – core
+  // ============================================
+  const handleCheckHealth = async () => {
+    if (!API_BASE_URL) {
+      setHealthError("Missing API base URL (VITE_MINA_API_BASE_URL).");
+      return;
+    }
     try {
+      setCheckingHealth(true);
+      setHealthError(null);
+      const res = await fetch(`${API_BASE_URL}/health`);
+      if (!res.ok) {
+        throw new Error(`Health error: ${res.status}`);
+      }
+      const data = (await res.json()) as HealthPayload;
+      setHealth(data);
+    } catch (err: any) {
+      setHealthError(err?.message || "Failed to reach Mina API.");
+    } finally {
+      setCheckingHealth(false);
+    }
+  };
+
+  const handleFetchCredits = async () => {
+    const trimmedId = customerId?.trim();
+    if (!trimmedId || !API_BASE_URL) {
+      setCredits(null);
+      return;
+    }
+
+    try {
+      setCreditsLoading(true);
+      setCreditsError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/credits/balance?customerId=${encodeURIComponent(
+          trimmedId
+        )}`
+      );
+      if (!res.ok) {
+        throw new Error(`Credits error: ${res.status}`);
+      }
+      const data = (await res.json()) as CreditsBalance;
+      setCredits(data);
+    } catch (err: any) {
+      setCreditsError(err?.message || "Failed to load credits.");
+    } finally {
+      setCreditsLoading(false);
+    }
+  };
+
+  const handleStartSession = async () => {
+    const trimmedId = customerId?.trim();
+    if (!trimmedId || !API_BASE_URL) {
+      return;
+    }
+
+    try {
+      setSessionStarting(true);
+      setSessionError(null);
       const res = await fetch(`${API_BASE_URL}/sessions/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerId,
+          customerId: trimmedId,
           platform,
-          title: "Mina Studio",
+          title: "Mina Editorial Session",
         }),
       });
-      const json = await res.json();
-      if (json?.ok && json.session?.id) {
-        setSessionId(json.session.id);
-        return json.session.id as string;
+      if (!res.ok) {
+        throw new Error(`Session error: ${res.status}`);
       }
-    } catch (err) {
-      console.error("ensureSession error", err);
+      const data = await res.json();
+      if (data?.session?.id) {
+        setSessionId(data.session.id);
+      } else {
+        throw new Error("Missing session id in response.");
+      }
+    } catch (err: any) {
+      setSessionError(err?.message || "Failed to start session.");
+    } finally {
+      setSessionStarting(false);
     }
-    return null;
-  }, [customerId, platform, sessionId]);
+  };
 
-  const handleGenerateImage = useCallback(async () => {
-    const trimmedBrief = brief.trim();
-    const trimmedTone = tone.trim();
-    const product = productImageUrl.trim();
-
-    if (!trimmedBrief) {
-      setStudioError("Describe how you want your photo to be like.");
+  const fetchHistory = async (cid: string) => {
+    const trimmedId = cid?.trim();
+    if (!trimmedId || !API_BASE_URL) {
+      setHistory(null);
       return;
     }
 
-    setStudioError(null);
-    setStudioLoading(true);
+    try {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/history/customer/${encodeURIComponent(trimmedId)}`
+      );
+      if (!res.ok) {
+        throw new Error(`History error: ${res.status}`);
+      }
+      const data = (await res.json()) as CustomerHistory;
+      setHistory(data);
+    } catch (err: any) {
+      setHistoryError(err?.message || "Failed to load history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // ============================================
+  // Billing & admin helpers
+  // ============================================
+  const fetchBillingSettings = async (cid: string) => {
+    if (!API_BASE_URL) return;
+    try {
+      setBillingLoading(true);
+      setBillingError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/billing/settings?customerId=${encodeURIComponent(
+          cid
+        )}`
+      );
+      if (!res.ok) {
+        throw new Error(`Billing error: ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        enabled?: boolean;
+        monthlyLimitPacks?: number;
+      };
+      setAutoTopupEnabled(Boolean(data.enabled));
+      setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
+    } catch (err: any) {
+      setBillingError(err?.message || "Failed to load billing settings.");
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  const saveBillingSettings = async () => {
+    if (!customerId || !API_BASE_URL) return;
+    try {
+      setBillingSaving(true);
+      setBillingError(null);
+      const res = await fetch(`${API_BASE_URL}/billing/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          enabled: autoTopupEnabled,
+          monthlyLimitPacks: Number(autoTopupLimit || "0"),
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Billing save error: ${res.status}`);
+      }
+      const data = await res.json();
+      setAutoTopupEnabled(Boolean(data.enabled));
+      setAutoTopupLimit(String(data.monthlyLimitPacks ?? 0));
+    } catch (err: any) {
+      setBillingError(err?.message || "Failed to save billing settings.");
+    } finally {
+      setBillingSaving(false);
+    }
+  };
+
+  const loadAdminData = async (secret: string) => {
+    if (!API_BASE_URL || !secret) return;
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const headers = { "x-admin-secret": secret };
+
+      const [summaryRes, customersRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/summary`, { headers }),
+        fetch(`${API_BASE_URL}/admin/customers`, { headers }),
+      ]);
+
+      if (!summaryRes.ok) throw new Error("Admin summary failed");
+      if (!customersRes.ok) throw new Error("Admin customers failed");
+
+      const summary = (await summaryRes.json()) as AdminSummary;
+      const customersJson = await customersRes.json();
+      const customers: AdminCustomer[] =
+        customersJson.customers ?? customersJson;
+
+      setAdminSummary(summary);
+      setAdminCustomers(customers);
+      setAdminMode(true);
+    } catch (err: any) {
+      console.error(err);
+      setAdminError(
+        err?.message || "Failed to load admin data. Check secret."
+      );
+      setAdminMode(false);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleAdminEnter = async () => {
+    if (!adminSecret) return;
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(ADMIN_SECRET_STORAGE_KEY, adminSecret);
+      }
+    } catch {
+      // ignore
+    }
+    await loadAdminData(adminSecret);
+  };
+
+  const handleAdminAdjust = async (targetCustomerId: string) => {
+    if (!API_BASE_URL || !adminSecret) return;
+    const raw = adminAdjust[targetCustomerId];
+    const delta = Number(raw);
+    if (!Number.isFinite(delta) || delta === 0) return;
 
     try {
-      const sid = await ensureSession();
+      setAdminLoading(true);
+      setAdminError(null);
+      const res = await fetch(`${API_BASE_URL}/admin/credits/adjust`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": adminSecret,
+        },
+        body: JSON.stringify({ customerId: targetCustomerId, delta }),
+      });
 
-      const body = {
-        productImageUrl: product || undefined,
-        styleImageUrls,
-        brief: trimmedBrief,
-        tone: trimmedTone || undefined,
-        platform,
-        minaVisionEnabled,
-        stylePresetKey: stylePresetKey || undefined,
-        customerId: customerId || undefined,
-        sessionId: sid || undefined,
-        maxImages: 1,
+      if (!res.ok) throw new Error("Admin adjust failed");
+
+      const data = (await res.json()) as {
+        customerId: string;
+        balance: number;
       };
+
+      setAdminCustomers((prev) =>
+        prev.map((c) =>
+          c.customerId === data.customerId
+            ? { ...c, balance: data.balance }
+            : c
+        )
+      );
+
+      setAdminAdjust((prev) => ({ ...prev, [targetCustomerId]: "" }));
+
+      if (customerId && String(customerId) === String(data.customerId)) {
+        await handleFetchCredits();
+      }
+    } catch (err: any) {
+      console.error(err);
+      setAdminError(err?.message || "Failed to adjust credits.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const fetchAdminOverview = async () => {
+    if (!isAdmin || !ADMIN_KEY || !API_BASE_URL) return;
+    try {
+      setAdminLoading(true);
+      setAdminError(null);
+      const res = await fetch(
+        `${API_BASE_URL}/history/admin/overview?key=${encodeURIComponent(
+          ADMIN_KEY
+        )}`
+      );
+      if (!res.ok) {
+        throw new Error(`Admin error: ${res.status}`);
+      }
+      const data = (await res.json()) as AdminOverview;
+      setAdminOverview(data);
+    } catch (err: any) {
+      setAdminError(err?.message || "Failed to load admin overview.");
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  // ============================================
+  // Bootstrap on customer change
+  // ============================================
+  useEffect(() => {
+    const bootstrap = async () => {
+      await handleCheckHealth();
+
+      const trimmed = customerId?.trim();
+      if (!trimmed) return;
+
+      await handleFetchCredits();
+      await handleStartSession();
+      await fetchHistory(trimmed);
+      await fetchBillingSettings(trimmed);
+
+      if (isAdmin) {
+        await fetchAdminOverview();
+      }
+    };
+
+    void bootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId, isAdmin]);
+
+  // ============================================
+  // Stills & motions – generation helpers
+  // ============================================
+  const handleGenerateStill = async () => {
+    if (!API_BASE_URL) {
+      setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
+      return;
+    }
+    try {
+      setStillGenerating(true);
+      setStillError(null);
+
+      const styleImageUrls = styleImageUrlsRaw
+        .split("\n")
+        .map((v) => v.trim())
+        .filter(Boolean);
 
       const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          customerId,
+          sessionId,
+          productImageUrl: productImageUrl.trim() || null,
+          styleImageUrls,
+          brief,
+          tone,
+          platform,
+          minaVisionEnabled,
+          stylePresetKey,
+          maxImages: 1,
+        }),
       });
 
-      const json: EditorialGenerateResponse = await res.json();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg =
+          errJson?.message ||
+          `Error ${res.status}: Failed to generate editorial still.`;
+        throw new Error(msg);
+      }
 
-      if (!res.ok || !json.ok) {
-        throw new Error(
-          json.message ||
-            json.error ||
-            "Mina could not create this image. Try again."
+      const data = (await res.json()) as EditorialResponse;
+      const url = data.imageUrl || data.imageUrls?.[0];
+      if (!url) {
+        throw new Error("No image URL in Mina response.");
+      }
+
+      setLastStillPrompt(data.prompt);
+      if (data.credits) {
+        setCredits((prev) =>
+          prev
+            ? {
+                ...prev,
+                balance: data.credits.balance,
+              }
+            : prev
         );
       }
 
-      if (json.sessionId && json.sessionId !== sid) {
-        setSessionId(json.sessionId);
-      }
+      const newItem: StillItem = {
+        id: data.generationId,
+        url,
+        prompt: data.prompt,
+        createdAt: new Date().toISOString(),
+      };
 
-      if (json.credits && typeof json.credits.balance === "number") {
-        setCredits((prev) => ({
-          ...prev,
-          balance: json.credits?.balance ?? prev.balance,
-        }));
-      }
+      setStillItems((prev) => {
+        const next = [newItem, ...prev];
+        setStillIndex(0);
+        return next;
+      });
+      setOutputMode("stills");
 
-      const url =
-        json.imageUrl ||
-        (Array.isArray(json.imageUrls) ? json.imageUrls[0] : null);
-
-      if (url) {
-        const item: StudioItem = {
-          id: json.generationId || `gen_${Date.now()}`,
-          url,
-          prompt: json.prompt || trimmedBrief,
-          kind: "image",
-          createdAt: new Date().toISOString(),
-        };
-        setStudioItems((prev) => [item, ...prev]);
-        setStudioIndex(0);
+      void fetchHistory(customerId);
+      if (isAdmin) {
+        void fetchAdminOverview();
       }
     } catch (err: any) {
-      console.error("handleGenerateImage error", err);
-      setStudioError(
-        err?.message || "Mina could not create this image. Try again."
-      );
+      setStillError(err?.message || "Unexpected error generating still.");
     } finally {
-      setStudioLoading(false);
+      setStillGenerating(false);
     }
-  }, [
-    brief,
-    tone,
-    productImageUrl,
-    styleImageUrls,
-    platform,
-    minaVisionEnabled,
-    stylePresetKey,
-    customerId,
-    ensureSession,
-  ]);
+  };
 
-  const sendFeedback = useCallback(
-    async (options: { comment?: string; markLiked?: boolean }) => {
-      const item = currentItem;
-      if (!item || !customerId) return;
-
-      const comment = options.comment?.trim();
-      const markLiked = options.markLiked ?? false;
-
-      setLikeSending(true);
-      try {
-        await fetch(`${API_BASE_URL}/feedback/like`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            customerId,
-            resultType: item.kind,
-            platform,
-            prompt: item.prompt,
-            comment: comment || undefined,
-            imageUrl: item.kind === "image" ? item.url : undefined,
-            videoUrl: item.kind === "video" ? item.url : undefined,
-            sessionId: sessionId || undefined,
-            generationId: item.id,
-          }),
-        });
-
-        if (comment) {
-          setFeedbackText("");
-        }
-        if (markLiked) {
-          setLikedIds((prev) =>
-            prev.includes(item.id) ? prev : [...prev, item.id]
-          );
-        }
-      } catch (err) {
-        console.error("sendFeedback error", err);
-      } finally {
-        setLikeSending(false);
-      }
-    },
-    [currentItem, customerId, platform, sessionId]
-  );
-
-  const handleLikeClick = useCallback(() => {
-    if (!currentItem) return;
-    if (isCurrentLiked) {
-      // Just UI toggle; we don't "unlike" on backend for now.
-      setLikedIds((prev) => prev.filter((id) => id !== currentItem.id));
-      return;
-    }
-    void sendFeedback({ markLiked: true });
-  }, [currentItem, isCurrentLiked, sendFeedback]);
-
-  const handleSendFeedback = useCallback(() => {
-    if (!feedbackText.trim()) return;
-    void sendFeedback({ comment: feedbackText.trim(), markLiked: true });
-  }, [feedbackText, sendFeedback]);
-
-  const handleDownloadCurrent = useCallback(() => {
-    const item = currentItem;
-    if (!item) return;
-    const filename = `Mina-v3-${slugFromPrompt(item.prompt)}${
-      item.kind === "video" ? ".mp4" : ".jpg"
-    }`;
+  const handleSuggestMotion = async () => {
+    if (!stillItems.length || !API_BASE_URL) return;
+    const currentStill = stillItems[stillIndex] || stillItems[0];
+    if (!currentStill) return;
 
     try {
-      const a = document.createElement("a");
-      a.href = item.url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error("download failed, opening in new tab", err);
-      window.open(item.url, "_blank");
-    }
-  }, [currentItem]);
+      setMotionSuggestLoading(true);
+      setMotionSuggestError(null);
+      const res = await fetch(`${API_BASE_URL}/motion/suggest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          referenceImageUrl: currentStill.url,
+          tone,
+          platform,
+          minaVisionEnabled,
+          stylePresetKey,
+        }),
+      });
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length > 0) {
-      touchStartXRef.current = e.touches[0].clientX;
-    }
-  };
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg =
+          errJson?.message ||
+          `Error ${res.status}: Failed to suggest motion idea.`;
+        throw new Error(msg);
+      }
 
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    const startX = touchStartXRef.current;
-    if (startX == null) return;
-    const endX = e.changedTouches[0].clientX;
-    const diff = endX - startX;
-    touchStartXRef.current = null;
-
-    if (Math.abs(diff) < 40) return;
-    if (diff < 0) {
-      // swipe left → next
-      setStudioIndex((prev) =>
-        prev + 1 < studioItems.length ? prev + 1 : prev
+      const data = (await res.json()) as MotionSuggestResponse;
+      setMotionDescription(data.suggestion);
+    } catch (err: any) {
+      setMotionSuggestError(
+        err?.message || "Unexpected error suggesting motion."
       );
-    } else {
-      // swipe right → previous
-      setStudioIndex((prev) => (prev - 1 >= 0 ? prev - 1 : prev));
+    } finally {
+      setMotionSuggestLoading(false);
     }
   };
 
-  const handlePrev = () => {
-    setStudioIndex((prev) => (prev - 1 >= 0 ? prev - 1 : prev));
-  };
+  const handleGenerateMotion = async () => {
+    if (!API_BASE_URL) {
+      setMotionError("Missing API base URL (VITE_MINA_API_BASE_URL).");
+      return;
+    }
 
-  const handleNext = () => {
-    setStudioIndex((prev) =>
-      prev + 1 < studioItems.length ? prev + 1 : prev
-    );
-  };
+    if (!stillItems.length) {
+      setMotionError("Generate at least one still image first.");
+      return;
+    }
 
-  // --- Render ---
+    const currentStill = stillItems[stillIndex] || stillItems[0];
+    if (!currentStill) {
+      setMotionError("No still selected.");
+      return;
+    }
 
-  const briefLongEnough = brief.trim().length >= 20;
+    if (!motionDescription.trim()) {
+      setMotionError("Describe the motion first (or use Mina’s suggestion).");
+      return;
+    }
 
-  return (
-    <div className="mina-shell">
-      {/* Header: transparent bar */}
-      <header className="mina-header">
-        <div className="mina-header-left">
-          <button
-            type="button"
-            className="mina-logo-button"
-            onClick={() => setActiveTab("studio")}
-          >
-            <img
-              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-              alt="Mina"
-            />
-          </button>
-          <nav className="mina-nav">
-            <button
-              type="button"
-              className={
-                activeTab === "studio"
-                  ? "mina-nav-item active"
-                  : "mina-nav-item"
+    try {
+      setMotionGenerating(true);
+      setMotionError(null);
+
+      const res = await fetch(`${API_BASE_URL}/motion/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          sessionId,
+          lastImageUrl: currentStill.url,
+          motionDescription: motionDescription.trim(),
+          tone,
+          platform,
+          minaVisionEnabled,
+          stylePresetKey,
+          durationSeconds: 5,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg =
+          errJson?.message ||
+          `Error ${res.status}: Failed to generate motion.`;
+        throw new Error(msg);
+      }
+
+      const data = (await res.json()) as MotionResponse;
+      const url = data.videoUrl;
+      if (!url) {
+        throw new Error("No video URL in Mina response.");
+      }
+
+      if (data.credits) {
+        setCredits((prev) =>
+          prev
+            ? {
+                ...prev,
+                balance: data.credits.balance,
               }
+            : prev
+        );
+      }
+
+      const newItem: MotionItem = {
+        id: data.generationId,
+        url,
+        prompt: data.prompt,
+        createdAt: new Date().toISOString(),
+      };
+
+      setMotionItems((prev) => {
+        const next = [newItem, ...prev];
+        setMotionIndex(0);
+        return next;
+      });
+      setOutputMode("motion");
+
+      void fetchHistory(customerId);
+      if (isAdmin) {
+        void fetchAdminOverview();
+      }
+    } catch (err: any) {
+      setMotionError(err?.message || "Unexpected error generating motion.");
+    } finally {
+      setMotionGenerating(false);
+    }
+  };
+
+  // ============================================
+  // Feedback & download helpers
+  // ============================================
+  const makeDownloadName = (
+    prefix: string,
+    prompt: string | undefined,
+    ext: "jpg" | "mp4"
+  ) => {
+    const basePrompt = prompt || "";
+    const slug = basePrompt
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+    return `${prefix}-${slug || "mina"}.${ext}`;
+  };
+
+  const handleDownload = (type: "image" | "motion") => {
+    const isImage = type === "image";
+    const item = isImage
+      ? stillItems[stillIndex] || stillItems[0]
+      : motionItems[motionIndex] || motionItems[0];
+
+    if (!item) return;
+
+    const ext = isImage ? "jpg" : "mp4";
+    const fileName = makeDownloadName("Mina-v3", item.prompt, ext);
+
+    try {
+      const link = document.createElement("a");
+      link.href = item.url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleLike = async (type: "image" | "motion") => {
+    if (!API_BASE_URL) return;
+    try {
+      const isImage = type === "image";
+      const item = isImage
+        ? stillItems[stillIndex] || stillItems[0]
+        : motionItems[motionIndex] || motionItems[0];
+
+      if (!item) return;
+
+      const res = await fetch(`${API_BASE_URL}/feedback/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          sessionId,
+          generationId: item.id,
+          platform,
+          resultType: type,
+          prompt: item.prompt,
+          comment: "",
+          imageUrl: isImage ? item.url : "",
+          videoUrl: !isImage ? item.url : "",
+        }),
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const data = (await res.json()) as LikePayload;
+      console.log("Like stored. Total likes:", data.totals.likesForCustomer);
+    } catch {
+      // ignore like errors
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    if (!API_BASE_URL) return;
+    const text = feedbackText.trim();
+    if (!text) return;
+
+    const type: "image" | "motion" =
+      outputMode === "stills" ? "image" : "motion";
+    const isImage = type === "image";
+    const item = isImage
+      ? stillItems[stillIndex] || stillItems[0]
+      : motionItems[motionIndex] || motionItems[0];
+
+    if (!item) return;
+
+    try {
+      setFeedbackSending(true);
+      setFeedbackError(null);
+
+      const res = await fetch(`${API_BASE_URL}/feedback/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId,
+          sessionId,
+          generationId: item.id,
+          platform,
+          resultType: type,
+          prompt: item.prompt,
+          comment: text,
+          imageUrl: isImage ? item.url : "",
+          videoUrl: !isImage ? item.url : "",
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Feedback error: ${res.status}`);
+      }
+
+      setFeedbackText("");
+    } catch (err: any) {
+      setFeedbackError(err?.message || "Failed to send feedback.");
+    } finally {
+      setFeedbackSending(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore Supabase errors
+    }
+
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("minaCustomerId");
+
+        const params = new URLSearchParams(window.location.search);
+        params.delete("customerId");
+        const newUrl =
+          window.location.pathname +
+          (params.toString() ? "?" + params.toString() : "");
+        window.history.replaceState({}, "", newUrl);
+      }
+    } catch {
+      // ignore
+    }
+
+    setCustomerId("");
+    setSessionId(null);
+    setStillItems([]);
+    setStillIndex(0);
+    setMotionItems([]);
+    setMotionIndex(0);
+    setHistory(null);
+    setCredits(null);
+  };
+
+  // ============================================
+  // Derived values
+  // ============================================
+  const currentStill = stillItems[stillIndex] || null;
+  const currentMotion = motionItems[motionIndex] || null;
+
+  const imageCost = credits?.meta?.imageCost ?? 1;
+  const motionCost = credits?.meta?.motionCost ?? 5;
+
+  const hasCreditsForStill = credits ? credits.balance >= imageCost : true;
+  const hasCreditsForMotion = credits ? credits.balance >= motionCost : true;
+
+  const canGenerateStill =
+    !stillGenerating &&
+    !!sessionId &&
+    !!productImageUrl.trim() &&
+    !!brief.trim() &&
+    hasCreditsForStill;
+
+  const canGenerateMotion =
+    !motionGenerating &&
+    !!sessionId &&
+    !!currentStill &&
+    !!motionDescription.trim() &&
+    hasCreditsForMotion;
+
+  const creditsLabel = (() => {
+    if (creditsLoading) return "Credits: …";
+    if (creditsError) return "Credits error";
+
+    const baseDetail = `img ${imageCost} · motion ${motionCost}`;
+
+    if (!credits) {
+      return `Credits: — (${baseDetail})`;
+    }
+
+    const base = `Credits: ${credits.balance}`;
+    if (credits.balance <= 0) {
+      return `${base} (add more to generate) · ${baseDetail}`;
+    }
+    if (!hasCreditsForStill || !hasCreditsForMotion) {
+      return `${base} (not enough for next run) · ${baseDetail}`;
+    }
+    return `${base} (${baseDetail})`;
+  })();
+
+  const isConnected = Boolean(health?.ok);
+
+  const historyStills: ApiGeneration[] =
+    history?.generations.filter((g) => g.type === "image") ?? [];
+  const historyMotions: ApiGeneration[] =
+    history?.generations.filter((g) => g.type === "motion") ?? [];
+
+  // ============================================
+  // Render
+  // ============================================
+  return (
+    <div className="mina-root">
+      {/* Header */}
+      <header className="mina-header">
+        <button
+          type="button"
+          className="mina-logo"
+          onClick={() => setActiveTab("studio")}
+        >
+          <img
+            src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+            alt="Mina"
+          />
+        </button>
+
+        <div className="mina-header-right">
+          <div className="mina-tabs">
+            <button
+              className={classNames("tab", activeTab === "studio" && "active")}
               onClick={() => setActiveTab("studio")}
             >
               Studio
             </button>
             <button
-              type="button"
-              className={
-                activeTab === "profile"
-                  ? "mina-nav-item active"
-                  : "mina-nav-item"
-              }
+              className={classNames("tab", activeTab === "profile" && "active")}
               onClick={() => setActiveTab("profile")}
             >
               Profile
             </button>
-          </nav>
-        </div>
-        <div className="mina-header-right">
-          {credits.balance !== null && (
-            <div className="mina-header-credits">
-              <span className="mina-header-credits-label">Credits</span>
-              <span className="mina-header-credits-value">
-                {credits.balance}
-              </span>
-            </div>
-          )}
-          <button
-            type="button"
-            className="mina-header-signout"
-            onClick={onSignOut}
+            {isAdmin && (
+              <button
+                className={classNames(
+                  "tab",
+                  activeTab === "admin" && "active"
+                )}
+                onClick={() => setActiveTab("admin")}
+              >
+                Admin
+              </button>
+            )}
+          </div>
+
+          <div className="mina-credits-badge">{creditsLabel}</div>
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginLeft: 12,
+              fontSize: 12,
+            }}
           >
-            Sign out
-          </button>
+            <span
+              style={{
+                maxWidth: 160,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {customerId}
+            </span>
+            <button
+              type="button"
+              className="link-button subtle"
+              onClick={handleLogout}
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       </header>
 
+      {/* Main */}
       <main className="mina-main">
+        {/* Studio tab */}
         {activeTab === "studio" && (
-          <div className="mina-studio-layout">
-            {/* LEFT – controllers */}
-            <section className="mina-studio-left">
-              <div className="studio-field">
-                <label className="studio-label">Direction</label>
-                <div className="studio-direction-shell">
-                  <textarea
-                    className="studio-textarea"
-                    placeholder="Describe how you want your photo to be like"
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
+          <div className="mina-layout">
+            {/* Left – controllers */}
+            <div className="mina-left">
+              {/* Step 1 – Connection & session */}
+              <section className="mina-section">
+                <div className="section-title">
+                  <span
+                    className={classNames(
+                      "step-dot",
+                      step1Done && "step-done"
+                    )}
                   />
-                  <p className="studio-helper">
-                    Use natural language, like talking to an art director.
-                  </p>
+                  <span>01 · Connection & session</span>
                 </div>
-              </div>
+                <div className="section-body">
+                  <div className="status-row">
+                    <div className="status-label">API</div>
+                    <div
+                      className={classNames(
+                        "status-chip",
+                        isConnected && "ok",
+                        healthError && "error"
+                      )}
+                    >
+                      {checkingHealth
+                        ? "Checking…"
+                        : isConnected
+                        ? "Connected"
+                        : "Not connected"}
+                    </div>
+                    <button
+                      className="link-button subtle"
+                      onClick={handleCheckHealth}
+                      disabled={checkingHealth}
+                    >
+                      Recheck
+                    </button>
+                  </div>
+                  {health?.time && (
+                    <div className="hint small">
+                      Last ping:{" "}
+                      {new Date(health.time).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  )}
+                  {healthError && (
+                    <div className="status-error">{healthError}</div>
+                  )}
 
-              {briefLongEnough && (
-                <>
-                  <div className="studio-field">
-                    <label className="studio-label">Format</label>
-                    <div className="studio-format-row">
-                      <div className="studio-format-presets">
-                        <button
-                          type="button"
-                          className={
-                            ratioChoice === "vertical"
-                              ? "studio-chip active"
-                              : "studio-chip"
-                          }
-                          onClick={() => setRatioChoice("vertical")}
-                        >
-                          TikTok / Instagram vertical
-                        </button>
-                        <button
-                          type="button"
-                          className={
-                            ratioChoice === "post"
-                              ? "studio-chip active"
-                              : "studio-chip"
-                          }
-                          onClick={() => setRatioChoice("post")}
-                        >
-                          Post 2:3
-                        </button>
-                        <button
-                          type="button"
-                          className={
-                            ratioChoice === "square"
-                              ? "studio-chip active"
-                              : "studio-chip"
-                          }
-                          onClick={() => setRatioChoice("square")}
-                        >
-                          Square 1:1
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        className="studio-orientation-toggle"
-                        onClick={() =>
-                          setOrientation((prev) =>
-                            prev === "vertical" ? "horizontal" : "vertical"
-                          )
-                        }
-                        aria-label="Toggle orientation"
-                      >
-                        <span
-                          className={
-                            orientation === "vertical"
-                              ? "orientation-icon vertical"
-                              : "orientation-icon horizontal"
-                          }
-                        />
-                      </button>
+                  <div className="status-row">
+                    <div className="status-label">Session</div>
+                    <div
+                      className={classNames(
+                        "status-chip",
+                        sessionId && "ok",
+                        sessionError && "error"
+                      )}
+                    >
+                      {sessionStarting
+                        ? "Starting…"
+                        : sessionId
+                        ? "Active"
+                        : "Idle"}
+                    </div>
+                    <button
+                      className="link-button subtle"
+                      onClick={handleStartSession}
+                      disabled={sessionStarting}
+                    >
+                      Restart
+                    </button>
+                  </div>
+                  {sessionError && (
+                    <div className="status-error">{sessionError}</div>
+                  )}
+                </div>
+              </section>
+
+              {/* Step 2 – Product & style */}
+              <section className="mina-section">
+                <div className="section-title">
+                  <span
+                    className={classNames(
+                      "step-dot",
+                      step2Done && "step-done"
+                    )}
+                  />
+                  <span>02 · Product & style</span>
+                </div>
+                <div className="section-body">
+                  <div className="field">
+                    <div className="field-label">Hero product image URL</div>
+                    <input
+                      className="field-input"
+                      placeholder="https://cdn.shopify.com/..."
+                      value={productImageUrl}
+                      onChange={(e) => setProductImageUrl(e.target.value)}
+                    />
+                    <div className="hint small">
+                      Later this becomes real upload / drag & drop. For now,
+                      paste an image URL from Shopify or CDN.
                     </div>
                   </div>
 
-                  <div className="studio-field">
-                    <label className="studio-label">Product image</label>
-                    <div className="studio-drop-line">
-                      <input
-                        className="studio-input"
-                        type="url"
-                        placeholder="Paste product image URL (drag & drop upload coming soon)"
-                        value={productImageUrl}
-                        onChange={(e) => setProductImageUrl(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="studio-field">
-                    <label className="studio-label">
-                      Reference images (optional)
-                    </label>
+                  <div className="field">
+                    <div className="field-label">Extra style reference URLs</div>
                     <textarea
-                      className="studio-textarea small"
-                      placeholder="Paste one image URL per line – mood, lighting, angles..."
+                      className="field-textarea"
+                      placeholder="Optional. One URL per line."
                       value={styleImageUrlsRaw}
                       onChange={(e) => setStyleImageUrlsRaw(e.target.value)}
                     />
                   </div>
 
-                  <div className="studio-field">
-                    <label className="studio-label">Editorial style</label>
-                    <div className="studio-preset-grid">
-                      <button
-                        type="button"
-                        className={
-                          stylePresetKey === "soft-desert-editorial"
-                            ? "studio-preset active"
-                            : "studio-preset"
-                        }
-                        onClick={() =>
-                          setStylePresetKey("soft-desert-editorial")
-                        }
+                  <div className="field-row">
+                    <div className="field field-inline">
+                      <div className="field-label">Style preset</div>
+                      <select
+                        className="field-input"
+                        value={stylePresetKey}
+                        onChange={(e) => setStylePresetKey(e.target.value)}
                       >
-                        Soft desert
-                        <span className="studio-preset-caption">
-                          Warm, hazy, tactile
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={
-                          stylePresetKey === "chrome-neon-night"
-                            ? "studio-preset active"
-                            : "studio-preset"
+                        <option value="soft-desert-editorial">
+                          Soft desert editorial
+                        </option>
+                        <option value="chrome-neon-night">
+                          Chrome neon night
+                        </option>
+                        <option value="bathroom-ritual">
+                          Bathroom ritual
+                        </option>
+                      </select>
+                    </div>
+                    <div className="field-toggle">
+                      <input
+                        type="checkbox"
+                        checked={minaVisionEnabled}
+                        onChange={(e) =>
+                          setMinaVisionEnabled(e.target.checked)
                         }
-                        onClick={() => setStylePresetKey("chrome-neon-night")}
+                      />
+                      <span
+                        className={classNames(
+                          "toggle-label",
+                          minaVisionEnabled ? "on" : "off"
+                        )}
                       >
-                        Chrome neon
-                        <span className="studio-preset-caption">
-                          Night city, sharp
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className={
-                          stylePresetKey === "bathroom-ritual"
-                            ? "studio-preset active"
-                            : "studio-preset"
-                        }
-                        onClick={() => setStylePresetKey("bathroom-ritual")}
-                      >
-                        Bathroom ritual
-                        <span className="studio-preset-caption">
-                          Steam, marble, glow
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="studio-preset ghost"
-                        // Future: open training modal
-                      >
-                        <span className="studio-plus">＋</span> Build your own
-                        style
-                      </button>
+                        Mina Vision Intelligence
+                      </span>
                     </div>
                   </div>
+                </div>
+              </section>
 
-                  <div className="studio-field compact">
-                    <label className="studio-label">Tone (optional)</label>
-                    <input
-                      className="studio-input"
-                      type="text"
-                      placeholder="Soft, sensual, editorial, bold..."
-                      value={tone}
-                      onChange={(e) => setTone(e.target.value)}
+              {/* Step 3 – Brief & format */}
+              <section className="mina-section">
+                <div className="section-title">
+                  <span
+                    className={classNames(
+                      "step-dot",
+                      step3Done && "step-done"
+                    )}
+                  />
+                  <span>03 · Brief & format</span>
+                </div>
+                <div className="section-body">
+                  <div className="field">
+                    <div className="field-label">Brief</div>
+                    <textarea
+                      className="field-textarea"
+                      placeholder="Tell Mina what you want to create…"
+                      value={brief}
+                      onChange={(e) => setBrief(e.target.value)}
                     />
                   </div>
 
-                  <div className="studio-footer-row">
+                  <div className="field-row">
+                    <div className="field field-inline">
+                      <div className="field-label">Tone</div>
+                      <input
+                        className="field-input"
+                        value={tone}
+                        onChange={(e) => setTone(e.target.value)}
+                      />
+                    </div>
+                    <div className="field field-inline">
+                      <div className="field-label">Platform</div>
+                      <select
+                        className="field-input"
+                        value={platform}
+                        onChange={(e) => setPlatform(e.target.value)}
+                      >
+                        <option value="tiktok">TikTok / Reels (9:16)</option>
+                        <option value="instagram">
+                          Instagram post (4:5)
+                        </option>
+                        <option value="youtube">YouTube (16:9)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="section-actions">
                     <button
-                      type="button"
-                      className="studio-vision-toggle"
-                      onClick={() =>
-                        setMinaVisionEnabled((prev) => !prev)
+                      className="primary-button"
+                      onClick={handleGenerateStill}
+                      disabled={!canGenerateStill}
+                    >
+                      {stillGenerating
+                        ? "Creating still…"
+                        : `Create still (−${imageCost} credits)`}
+                    </button>
+                    {stillError && (
+                      <div className="error-text">
+                        {stillError}
+                        {TOPUP_URL && (
+                          <>
+                            {" "}
+                            ·{" "}
+                            <a
+                              href={TOPUP_URL}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Buy credits
+                            </a>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* Step 4 & 5 – Motion loop */}
+              <section className="mina-section">
+                <div className="section-title">
+                  <span
+                    className={classNames(
+                      "step-dot",
+                      step4Done && step5Done && "step-done"
+                    )}
+                  />
+                  <span>04 · Motion loop</span>
+                </div>
+                <div className="section-body">
+                  <div className="hint small">
+                    Mina reads the current still, proposes a motion idea, then
+                    Kling animates it.
+                  </div>
+
+                  <div className="field-row">
+                    <button
+                      className="secondary-button"
+                      onClick={handleSuggestMotion}
+                      disabled={
+                        motionSuggestLoading ||
+                        !stillItems.length ||
+                        stillGenerating
                       }
                     >
-                      Mina Vision intelligence:{" "}
-                      <span className="underline">
-                        {minaVisionEnabled ? "ON" : "OFF"}
-                      </span>
+                      {motionSuggestLoading
+                        ? "Thinking motion…"
+                        : "Suggest motion"}
                     </button>
-
                     <button
-                      type="button"
-                      className="studio-create"
-                      onClick={handleGenerateImage}
-                      disabled={studioLoading}
+                      className="secondary-button"
+                      onClick={handleGenerateMotion}
+                      disabled={!canGenerateMotion}
                     >
-                      {studioLoading ? "Creating…" : "Create"}
+                      {motionGenerating
+                        ? "Animating…"
+                        : `Create motion (−${motionCost} credits)`}
                     </button>
                   </div>
 
-                  {studioError && (
-                    <div className="studio-error">{studioError}</div>
-                  )}
-                </>
-              )}
-            </section>
+                  <div className="field">
+                    <div className="field-label">Motion description</div>
+                    <textarea
+                      className="field-textarea"
+                      placeholder="Wait for Mina’s idea… or type your own motion in 1–2 sentences."
+                      value={motionDescription}
+                      onChange={(e) => setMotionDescription(e.target.value)}
+                    />
+                  </div>
 
-            {/* RIGHT – generation output */}
-            <section className="mina-studio-right">
-              <div className="studio-output">
-                <div
-                  className="studio-output-frame"
-                  onTouchStart={handleTouchStart}
-                  onTouchEnd={handleTouchEnd}
-                >
-                  {currentItem ? (
-                    currentItem.kind === "image" ? (
-                      <img
-                        src={currentItem.url}
-                        alt={currentItem.prompt}
-                        className="studio-output-media"
-                        onClick={handleDownloadCurrent}
-                      />
-                    ) : (
-                      <video
-                        className="studio-output-media"
-                        src={currentItem.url}
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                      />
-                    )
-                  ) : (
-                    <div className="studio-output-placeholder">
-                      <p>Your Mina image will appear here.</p>
-                      <p className="studio-output-sub">
-                        Start on the left, then tap “Create”.
-                      </p>
+                  {motionError && (
+                    <div className="status-error">
+                      {motionError}
+                      {TOPUP_URL && (
+                        <>
+                          {" "}
+                          ·{" "}
+                          <a
+                            href={TOPUP_URL}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Buy credits
+                          </a>
+                        </>
+                      )}
                     </div>
+                  )}
+                  {motionSuggestError && (
+                    <div className="status-error">{motionSuggestError}</div>
                   )}
                 </div>
+              </section>
+            </div>
 
-                {studioItems.length > 1 && (
-                  <div className="studio-carousel-row">
+            {/* Right – Studio output (stills + motion) */}
+            <div className="mina-right">
+              <section className="mina-section studio-section">
+                <div className="section-title">
+                  <span
+                    className={classNames(
+                      "step-dot",
+                      (step4Done || step5Done) && "step-done"
+                    )}
+                  />
+                  <span>Studio · Output</span>
+                </div>
+                <div className="section-body studio-body">
+                  <div className="studio-output-tabs">
                     <button
                       type="button"
-                      className="studio-arrow"
-                      onClick={handlePrev}
-                      disabled={studioIndex === 0}
+                      className={classNames(
+                        "studio-tab",
+                        outputMode === "stills" && "active"
+                      )}
+                      onClick={() => setOutputMode("stills")}
                     >
-                      ‹
+                      Stills
                     </button>
-                    <div className="studio-dots">
-                      {studioItems.map((item, idx) => (
+                    <button
+                      type="button"
+                      className={classNames(
+                        "studio-tab",
+                        outputMode === "motion" && "active"
+                      )}
+                      onClick={() => setOutputMode("motion")}
+                    >
+                      Motion
+                    </button>
+                  </div>
+
+                  <div className="studio-output-shell">
+                    {outputMode === "stills" ? (
+                      stillItems.length === 0 ? (
+                        <div className="output-placeholder">
+                          No stills yet. Fill steps 2 & 3, then “Create still”.
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="studio-output-click"
+                            onClick={() => handleDownload("image")}
+                          >
+                            <div className="studio-output-frame">
+                              {currentStill && (
+                                <img
+                                  src={currentStill.url}
+                                  alt="Mina still"
+                                  loading="lazy"
+                                  className="studio-output-media"
+                                />
+                              )}
+                            </div>
+                          </button>
+                          <div className="studio-dots-row">
+                            {stillItems.map((item, idx) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={classNames(
+                                  "studio-dot",
+                                  idx === stillIndex && "active"
+                                )}
+                                onClick={() => setStillIndex(idx)}
+                                aria-label={`Go to still ${idx + 1}`}
+                              />
+                            ))}
+                          </div>
+                        </>
+                      )
+                    ) : motionItems.length === 0 ? (
+                      <div className="output-placeholder">
+                        No motion yet. Generate a still, let Mina suggest
+                        motion, then animate.
+                      </div>
+                    ) : (
+                      <>
                         <button
-                          key={item.id}
                           type="button"
-                          className={
-                            idx === studioIndex
-                              ? "studio-dot active"
-                              : "studio-dot"
-                          }
-                          onClick={() => setStudioIndex(idx)}
-                        />
-                      ))}
+                          className="studio-output-click"
+                          onClick={() => handleDownload("motion")}
+                        >
+                          <div className="studio-output-frame">
+                            {currentMotion && (
+                              <video
+                                src={currentMotion.url}
+                                className="studio-output-media"
+                                controls
+                                playsInline
+                                loop
+                              />
+                            )}
+                          </div>
+                        </button>
+                        <div className="studio-dots-row">
+                          {motionItems.map((item, idx) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={classNames(
+                                "studio-dot",
+                                idx === motionIndex && "active"
+                              )}
+                              onClick={() => setMotionIndex(idx)}
+                              aria-label={`Go to motion ${idx + 1}`}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="studio-meta">
+                    <div className="studio-meta-top">
+                      <div className="output-tag">
+                        {outputMode === "stills"
+                          ? `${stillItems.length ? stillIndex + 1 : 0} / ${
+                              stillItems.length
+                            }`
+                          : `${motionItems.length ? motionIndex + 1 : 0} / ${
+                              motionItems.length
+                            }`}
+                      </div>
+                      <div className="output-tag subtle">
+                        {outputMode === "stills" ? "Still" : "Motion"}
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="studio-arrow"
-                      onClick={handleNext}
-                      disabled={studioIndex === studioItems.length - 1}
-                    >
-                      ›
-                    </button>
+
+                    <div className="studio-meta-text">
+                      {outputMode === "stills" && currentStill && (
+                        <>
+                          <div className="output-prompt">
+                            {currentStill.prompt}
+                          </div>
+                          <div className="hint small">
+                            {formatTime(currentStill.createdAt)}
+                          </div>
+                        </>
+                      )}
+                      {outputMode === "motion" && currentMotion && (
+                        <>
+                          <div className="output-prompt">
+                            {currentMotion.prompt}
+                          </div>
+                          <div className="hint small">
+                            {formatTime(currentMotion.createdAt)}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    <div className="section-actions studio-actions">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          outputMode === "stills"
+                            ? setStillIndex((prev) =>
+                                prev <= 0
+                                  ? stillItems.length - 1
+                                  : prev - 1
+                              )
+                            : setMotionIndex((prev) =>
+                                prev <= 0
+                                  ? motionItems.length - 1
+                                  : prev - 1
+                              )
+                        }
+                        disabled={
+                          outputMode === "stills"
+                            ? stillItems.length <= 1
+                            : motionItems.length <= 1
+                        }
+                      >
+                        ◀
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() =>
+                          outputMode === "stills"
+                            ? setStillIndex((prev) =>
+                                prev >= stillItems.length - 1 ? 0 : prev + 1
+                              )
+                            : setMotionIndex((prev) =>
+                                prev >= motionItems.length - 1 ? 0 : prev + 1
+                              )
+                        }
+                        disabled={
+                          outputMode === "stills"
+                            ? stillItems.length <= 1
+                            : motionItems.length <= 1
+                        }
+                      >
+                        ▶
+                      </button>
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() =>
+                          handleLike(
+                            outputMode === "stills" ? "image" : "motion"
+                          )
+                        }
+                        disabled={
+                          outputMode === "stills"
+                            ? !currentStill
+                            : !currentMotion
+                        }
+                      >
+                        ♥ Like
+                      </button>
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() =>
+                          handleDownload(
+                            outputMode === "stills" ? "image" : "motion"
+                          )
+                        }
+                        disabled={
+                          outputMode === "stills"
+                            ? !currentStill
+                            : !currentMotion
+                        }
+                      >
+                        Download
+                      </button>
+                    </div>
+
+                    <div className="studio-feedback">
+                      <input
+                        className="customer-input"
+                        placeholder="Type feedback for Mina…"
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={handleSubmitFeedback}
+                        disabled={
+                          !feedbackText.trim() ||
+                          feedbackSending ||
+                          (outputMode === "stills"
+                            ? !currentStill
+                            : !currentMotion)
+                        }
+                      >
+                        {feedbackSending ? "Sending…" : "Send"}
+                      </button>
+                    </div>
+                    {feedbackError && (
+                      <div className="status-error">{feedbackError}</div>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* Profile tab */}
+        {activeTab === "profile" && (
+          <div className="profile-layout">
+            {/* Profile – account, credits, auto top-up, history */}
+            <section className="mina-section wide">
+              <div className="section-title">
+                <span className="step-dot step-done" />
+                <span>Profile · Account & billing</span>
+              </div>
+              <div className="section-body">
+                <div
+                  className="field-row"
+                  style={{ justifyContent: "flex-end", marginBottom: 8 }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      if (customerId) {
+                        void handleFetchCredits();
+                        void fetchHistory(customerId);
+                        void fetchBillingSettings(customerId);
+                      }
+                    }}
+                  >
+                    Refresh data
+                  </button>
+                </div>
+
+                <div className="profile-body">
+                  <div>
+                    <div className="profile-label">Shopify customer id</div>
+                    <div className="profile-value">{customerId}</div>
+                    <div className="profile-hint">
+                      You can link from Shopify like:
+                      <br />
+                      <code>
+                        https://mina.yourdomain.com?customerId=
+                        {"{{ customer.id }}"}
+                      </code>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="profile-label">Credits</div>
+                    <div className="profile-value">
+                      {credits?.balance ?? history?.credits?.balance ?? 0}{" "}
+                      Machta
+                    </div>
+                    <div className="profile-hint">
+                      Image −{imageCost} · Motion −{motionCost} credits
+                    </div>
+                  </div>
+
+                  {/* Auto top-up */}
+                  <div className="auto-topup-row">
+                    <div className="profile-label">Auto top-up</div>
+
+                    <div className="field-toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoTopupEnabled}
+                        onChange={(e) =>
+                          setAutoTopupEnabled(e.target.checked)
+                        }
+                      />
+                      <span
+                        className={classNames(
+                          "toggle-label",
+                          autoTopupEnabled ? "on" : "off"
+                        )}
+                      >
+                        {autoTopupEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
+
+                    <div className="auto-topup-grid">
+                      <div className="field">
+                        <div className="field-label">
+                          Monthly limit{" "}
+                          <span className="field-unit">(packs)</span>
+                        </div>
+                        <input
+                          className="field-input"
+                          type="number"
+                          min={0}
+                          value={autoTopupLimit}
+                          onChange={(e) => setAutoTopupLimit(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="field">
+                        <div className="field-label">Pack</div>
+                        <select
+                          className="field-input"
+                          value={autoTopupPack}
+                          onChange={(e) => setAutoTopupPack(e.target.value)}
+                        >
+                          <option value="MINA-50">Mina 50 Machta</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="field-row" style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={saveBillingSettings}
+                        disabled={billingSaving || billingLoading}
+                      >
+                        {billingSaving ? "Saving…" : "Save auto top-up"}
+                      </button>
+
+                      {billingLoading && (
+                        <div className="profile-hint">Loading settings…</div>
+                      )}
+
+                      {billingError && (
+                        <div className="status-error">{billingError}</div>
+                      )}
+                    </div>
+
+                    <div className="profile-hint">
+                      For now Mina only stores this preference. Later it will
+                      control real auto-purchases via Shopify/Stripe.
+                    </div>
+                  </div>
+
+                  {/* Recent credit events */}
+                  {historyLoading && (
+                    <div className="hint small">Loading history…</div>
+                  )}
+                  {historyError && (
+                    <div className="status-error">{historyError}</div>
+                  )}
+                  {history?.credits?.history?.length ? (
+                    <>
+                      <div className="profile-label">Recent credit events</div>
+                      <ul className="credits-list">
+                        {history.credits.history
+                          .slice()
+                          .reverse()
+                          .slice(0, 5)
+                          .map((h, idx) => (
+                            <li key={idx}>
+                              <span className="credits-delta">
+                                {h.delta > 0 ? "+" : ""}
+                                {h.delta}
+                              </span>
+                              <span className="credits-reason">{h.reason}</span>
+                              <span className="credits-time">
+                                {formatTime(h.at)}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    </>
+                  ) : (
+                    !historyLoading &&
+                    !historyError && (
+                      <div className="hint small">
+                        No credit history yet for this account.
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Admin – credits & customers (secret) */}
+            <section className="mina-section wide">
+              <div className="section-title">ADMIN · CREDITS & CUSTOMERS</div>
+              <div className="section-body">
+                <div className="field-row" style={{ alignItems: "flex-end" }}>
+                  <div className="field" style={{ maxWidth: 260 }}>
+                    <div className="field-label">Admin secret</div>
+                    <input
+                      className="field-input"
+                      type="password"
+                      value={adminSecret}
+                      onChange={(e) => setAdminSecret(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleAdminEnter}
+                    disabled={!adminSecret || adminLoading}
+                  >
+                    {adminMode ? "Refresh admin data" : "Enter admin mode"}
+                  </button>
+                </div>
+
+                {adminError && (
+                  <div className="status-error" style={{ marginTop: 6 }}>
+                    {adminError}
                   </div>
                 )}
 
-                <div className="studio-output-actions">
-                  <button
-                    type="button"
-                    className={
-                      isCurrentLiked
-                        ? "studio-pill-button liked"
-                        : "studio-pill-button"
-                    }
-                    onClick={handleLikeClick}
-                    disabled={!currentItem || likeSending}
-                  >
-                    {isCurrentLiked ? "Liked" : "Like"}
-                  </button>
-                  <button
-                    type="button"
-                    className="studio-pill-button"
-                    onClick={handleDownloadCurrent}
-                    disabled={!currentItem}
-                  >
-                    Download
-                  </button>
-                </div>
+                {adminMode && (
+                  <>
+                    {adminSummary && (
+                      <div style={{ marginTop: 8, fontSize: 13 }}>
+                        <div>Total customers: {adminSummary.totalCustomers}</div>
+                        <div>Total credits: {adminSummary.totalCredits}</div>
+                        <div>
+                          Auto top-up on: {adminSummary.autoTopupOn} customers
+                        </div>
+                      </div>
+                    )}
 
-                <div className="studio-feedback-row">
-                  <input
-                    className="studio-input feedback"
-                    type="text"
-                    placeholder="Tell Mina what worked or what felt off…"
-                    value={feedbackText}
-                    onChange={(e) => setFeedbackText(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="studio-send"
-                    onClick={handleSendFeedback}
-                    disabled={!currentItem || !feedbackText.trim()}
-                  >
-                    Send
-                  </button>
+                    <div style={{ marginTop: 12, fontSize: 13 }}>
+                      <div
+                        className="field-label"
+                        style={{ marginBottom: 4 }}
+                      >
+                        Customers
+                      </div>
+                      <div
+                        style={{
+                          maxHeight: 260,
+                          overflow: "auto",
+                          border: "1px solid rgba(8,10,0,0.18)",
+                          backgroundColor: "#EEEED2",
+                        }}
+                      >
+                        <table
+                          style={{
+                            width: "100%",
+                            borderCollapse: "collapse",
+                            fontSize: 12,
+                          }}
+                        >
+                          <thead>
+                            <tr>
+                              <th
+                                style={{
+                                  textAlign: "left",
+                                  padding: "4px 6px",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
+                                }}
+                              >
+                                Customer ID
+                              </th>
+                              <th
+                                style={{
+                                  textAlign: "right",
+                                  padding: "4px 6px",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
+                                }}
+                              >
+                                Balance
+                              </th>
+                              <th
+                                style={{
+                                  textAlign: "right",
+                                  padding: "4px 6px",
+                                  borderBottom:
+                                    "1px solid rgba(8,10,0,0.18)",
+                                }}
+                              >
+                                Adjust
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {adminCustomers.map((c) => (
+                              <tr key={c.customerId}>
+                                <td
+                                  style={{
+                                    padding: "4px 6px",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
+                                  }}
+                                >
+                                  {c.customerId}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "4px 6px",
+                                    textAlign: "right",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
+                                  }}
+                                >
+                                  {c.balance}
+                                </td>
+                                <td
+                                  style={{
+                                    padding: "4px 6px",
+                                    textAlign: "right",
+                                    borderBottom:
+                                      "1px solid rgba(8,10,0,0.08)",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  <input
+                                    type="number"
+                                    style={{ width: 70, marginRight: 4 }}
+                                    value={adminAdjust[c.customerId] ?? ""}
+                                    onChange={(e) =>
+                                      setAdminAdjust((prev) => ({
+                                        ...prev,
+                                        [c.customerId]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="secondary-button"
+                                    style={{
+                                      padding: "4px 8px",
+                                      fontSize: 11,
+                                    }}
+                                    onClick={() =>
+                                      handleAdminAdjust(c.customerId)
+                                    }
+                                    disabled={adminLoading}
+                                  >
+                                    Apply
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                            {adminCustomers.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={3}
+                                  style={{
+                                    padding: "6px",
+                                    textAlign: "center",
+                                  }}
+                                >
+                                  No customers yet.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+
+            {/* Gallery */}
+            <section className="mina-section wide">
+              <div className="section-title">
+                <span className="step-dot" />
+                <span>Gallery · Recent generations</span>
+              </div>
+              <div className="section-body">
+                <div className="hint small">
+                  This reads from Mina’s server history for this customer id
+                  (not from your browser only).
+                </div>
+                <div className="gallery-grid">
+                  {historyStills.map((g) => (
+                    <div key={g.id} className="gallery-item">
+                      <div className="gallery-media">
+                        <img src={g.outputUrl} alt="Still" loading="lazy" />
+                      </div>
+                      <div className="gallery-meta">
+                        <div className="gallery-meta-top">
+                          <span className="gallery-tag">Still</span>
+                          <span className="gallery-date">
+                            {formatTime(g.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {historyMotions.map((g) => (
+                    <div key={g.id} className="gallery-item">
+                      <div className="gallery-media">
+                        <video src={g.outputUrl} muted playsInline loop />
+                      </div>
+                      <div className="gallery-meta">
+                        <div className="gallery-meta-top">
+                          <span className="gallery-tag subtle">Motion</span>
+                          <span className="gallery-date">
+                            {formatTime(g.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {!historyLoading &&
+                    !historyError &&
+                    historyStills.length === 0 &&
+                    historyMotions.length === 0 && (
+                      <div className="hint small">
+                        No generations in server history yet.
+                      </div>
+                    )}
                 </div>
               </div>
             </section>
           </div>
         )}
 
-        {activeTab === "profile" && (
-          <div className="mina-profile">
-            <div className="mina-profile-card">
-              <h2>Profile</h2>
-              <p className="mina-profile-line">
-                Signed in as{" "}
-                <strong>{customerId ?? "anonymous curator"}</strong>
-              </p>
-              <p className="mina-profile-line">
-                Credits:{" "}
-                <strong>
-                  {credits.balance !== null ? credits.balance : "…"}
-                </strong>
-                {credits.imageCost !== null && (
-                  <span className="mina-profile-meta">
-                    {" "}
-                    · still: {credits.imageCost} · motion:{" "}
-                    {credits.motionCost ?? "—"}
-                  </span>
+        {/* Admin tab */}
+        {activeTab === "admin" && isAdmin && (
+          <div className="profile-layout">
+            <section className="mina-section wide">
+              <div className="section-title">
+                <span className="step-dot step-done" />
+                <span>Admin · Logs & overview</span>
+              </div>
+              <div className="section-body">
+                <div className="field-row">
+                  <div className="field">
+                    <div className="field-label">Admin key status</div>
+                    <div className="profile-value">
+                      {ADMIN_KEY ? "Configured" : "Not set"}
+                    </div>
+                  </div>
+                  <button
+                    className="secondary-button"
+                    onClick={fetchAdminOverview}
+                    disabled={adminLoading || !ADMIN_KEY}
+                  >
+                    {adminLoading ? "Refreshing…" : "Refresh overview"}
+                  </button>
+                </div>
+                {adminError && (
+                  <div className="status-error">{adminError}</div>
                 )}
-              </p>
-              <p className="mina-profile-line">
-                <a
-                  href={TOPUP_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mina-link"
-                >
-                  Buy more Mina credits
-                </a>
-              </p>
-              <p className="mina-profile-caption">
-                Mina Vision learns from your likes and feedback to refine your
-                editorial style over time.
-              </p>
-            </div>
+                {adminOverview && (
+                  <>
+                    <div className="profile-body">
+                      <div>
+                        <div className="profile-label">Customers</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.customersWithCredits}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="profile-label">Generations</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.generations}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="profile-label">Feedback</div>
+                        <div className="profile-value">
+                          {adminOverview.totals.feedbacks}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="admin-columns">
+                      <div className="admin-column">
+                        <div className="profile-label">Recent credits</div>
+                        <ul className="credits-list">
+                          {adminOverview.credits
+                            .flatMap((c) =>
+                              c.history.map((h) => ({
+                                customerId: c.customerId,
+                                ...h,
+                              }))
+                            )
+                            .sort(
+                              (a, b) =>
+                                new Date(b.at).getTime() -
+                                new Date(a.at).getTime()
+                            )
+                            .slice(0, 10)
+                            .map((entry, idx) => (
+                              <li key={idx}>
+                                <span className="credits-delta">
+                                  {entry.delta > 0 ? "+" : ""}
+                                  {entry.delta}
+                                </span>
+                                <span className="credits-reason">
+                                  {entry.reason}
+                                </span>
+                                <span className="credits-time">
+                                  #{entry.customerId} · {formatTime(entry.at)}
+                                </span>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+
+                      <div className="admin-column">
+                        <div className="profile-label">Recent generations</div>
+                        <ul className="credits-list">
+                          {adminOverview.generations.slice(0, 10).map((g) => (
+                            <li key={g.id}>
+                              <span className="credits-reason">
+                                {g.type === "image" ? "Still" : "Motion"}
+                              </span>
+                              <span className="credits-time">
+                                #{g.customerId} · {formatTime(g.createdAt)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {!adminOverview && !adminLoading && !adminError && (
+                  <div className="hint small">
+                    Set <code>ADMIN_DASHBOARD_KEY</code> on the backend and{" "}
+                    <code>VITE_MINA_ADMIN_KEY</code> on the frontend to unlock
+                    full admin overview.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         )}
       </main>
-
-      {/* Bottom-left: curators count + health pill */}
-      <div className="mina-page-footer">
-        <div className="mina-users-pill">
-          {totalUsers !== null
-            ? `${formatUserCount(totalUsers)} curators use Mina`
-            : "curators use Mina"}
-        </div>
-        {healthStatus !== "idle" && (
-          <div
-            className={
-              healthStatus === "ok"
-                ? "mina-health-pill ok"
-                : "mina-health-pill warn"
-            }
-          >
-            {healthMessage || "Connection"}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
