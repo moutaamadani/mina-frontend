@@ -962,7 +962,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               >
                 <textarea
                   className="studio-brief-input"
-                  placeholder="Describe how you want your photo to be like"
+                  placeholder="Describe how you want your still life image to look like"
                   value={brief}
                   onChange={(e) => setBrief(e.target.value)}
                   rows={4}
