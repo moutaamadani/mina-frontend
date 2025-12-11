@@ -953,3 +953,401 @@ button:disabled {
     bottom: 16px;
   }
 }
+
+/* ===========================================================
+   STUDIO LAYOUT – applies ONLY to Mina Studio, not login
+   =========================================================== */
+
+.studio-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  max-width: 1440px;
+  height: calc(100vh - 72px); /* header height approx */
+}
+
+.studio-left,
+.studio-right {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 40px;
+  min-height: 0;
+}
+
+/* drag highlight on left side when dragging files */
+
+.studio-left.drag-active {
+  outline: 1px dashed rgba(8, 10, 0, 0.5);
+}
+
+/* tiny status row */
+
+.studio-status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(8, 10, 0, 0.6);
+  margin-bottom: 12px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(8, 10, 0, 0.4);
+  background: transparent;
+}
+
+.status-dot.ok {
+  background: rgba(8, 10, 0, 1);
+}
+
+.status-label-small {
+  font-size: 11px;
+}
+
+/* main brief block */
+
+.studio-brief-block {
+  margin-top: 16px;
+}
+
+.studio-brief-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: rgba(8, 10, 0, 0.16);
+  margin-bottom: 16px;
+}
+
+.studio-brief-shell {
+  position: relative;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.studio-brief-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: 32px;
+  line-height: 1.08;
+  font-weight: 600;
+  background: transparent;
+  color: var(--mina-text);
+}
+
+.studio-brief-input::placeholder {
+  color: rgba(8, 10, 0, 0.2);
+}
+
+.studio-brief-gradient {
+  position: sticky;
+  left: 0;
+  right: 0;
+  height: 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.studio-brief-gradient--top {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--mina-bg),
+    rgba(242, 240, 223, 0)
+  );
+}
+
+.studio-brief-gradient--bottom {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    #cec2aa,
+    rgba(206, 194, 170, 0)
+  );
+}
+
+/* aspect + upload pills */
+
+.studio-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.studio-pill {
+  border: none;
+  background: rgba(8, 10, 0, 0.05);
+  color: var(--mina-text);
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  transform-origin: center;
+  transition: transform 0.08s ease-out, opacity 0.08s ease-out;
+}
+
+.studio-pill.active {
+  background: rgba(8, 10, 0, 0.16);
+}
+
+.studio-pill:hover {
+  opacity: 0.9;
+}
+
+.studio-pill:active {
+  transform: scale(0.97);
+}
+
+.studio-pill-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.studio-pill-main {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.studio-pill-sub {
+  font-size: 11px;
+  opacity: 0.5;
+}
+
+/* style row */
+
+.studio-style-title {
+  margin-top: 24px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(8, 10, 0, 0.7);
+}
+
+.studio-style-row {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.studio-style-card {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+}
+
+.studio-style-card.add .studio-style-thumb {
+  background: rgba(8, 10, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.studio-style-card.add .studio-style-thumb span {
+  font-size: 20px;
+}
+
+.studio-style-card.active .studio-style-thumb {
+  outline: 1px solid rgba(8, 10, 0, 0.6);
+}
+
+.studio-style-thumb {
+  width: 72px;
+  height: 72px;
+  overflow: hidden;
+}
+
+.studio-style-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-style-label {
+  margin-top: 4px;
+}
+
+.studio-vision-toggle {
+  margin-top: 12px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.studio-vision-state {
+  font-weight: 600;
+}
+
+/* create */
+
+.studio-create-block {
+  margin-top: 40px;
+}
+
+.studio-create-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.studio-create-link.disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* footer label */
+
+.studio-footer {
+  margin-top: auto;
+  font-size: 12px;
+}
+
+/* right side */
+
+.studio-right {
+  border-left: 1px solid rgba(8, 10, 0, 0.16);
+}
+
+.studio-right-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.studio-right-title {
+  opacity: 0.6;
+}
+
+.studio-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* output area */
+
+.studio-output-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+.studio-output-click {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.studio-output-click:disabled {
+  cursor: default;
+}
+
+.studio-output-frame {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  max-height: 520px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: #cec2aa;
+}
+
+.studio-output-media {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+  object-fit: contain;
+  align-self: center;
+}
+
+.output-placeholder {
+  padding: 40px 24px;
+  font-size: 14px;
+  color: rgba(8, 10, 0, 0.7);
+}
+
+/* dots */
+
+.studio-dots-row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.studio-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(8, 10, 0, 0.4);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.studio-dot.active {
+  background: rgba(8, 10, 0, 1);
+}
+
+/* motion helpers + feedback */
+
+.studio-motion-helpers {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.studio-feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 12px;
+  background: rgba(8, 10, 0, 0.03);
+}
+
+.studio-feedback-hint {
+  flex: 1;
+  opacity: 0.6;
+}
+
+.studio-feedback-input {
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 4px 0;
+  font-family: inherit;
+  font-size: 12px;
+  min-width: 80px;
+}
