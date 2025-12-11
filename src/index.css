@@ -579,9 +579,12 @@ video {
 }
 .studio-left-main {
   flex: 0 0 auto;
-  margin-top: auto;
-  margin-bottom: auto; /* centers the block vertically */
+  display: flex;
+  flex-direction: column;
+  margin-top: 0;
+  margin-bottom: 0;   /* anchor to the top padding of .studio-left */
 }
+
 .studio-right {
   border-left: 1px solid var(--mina-border-soft);
 }
