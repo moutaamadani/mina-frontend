@@ -880,10 +880,9 @@ video {
 }
 
 .studio-credits-small {
-  margin-top: 8px;
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.6);
+  display: none;
 }
+
 
 /* footer */
 
