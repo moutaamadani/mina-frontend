@@ -751,22 +751,22 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
            /* hide scrollbars */
            scrollbar-width: none; /* Firefox */
          
-           /* soft fade top + bottom */
+                   /* soft fade at bottom only, longer fade */
+         .your-element {
            -webkit-mask-image: linear-gradient(
              to bottom,
-             transparent 0,
-             #000 18px,
-             #000 calc(100% - 18px),
+             #000 0,
+             #000 calc(100% - 60px),
              transparent 100%
            );
            mask-image: linear-gradient(
              to bottom,
-             transparent 0,
-             #000 18px,
-             #000 calc(100% - 18px),
+             #000 0,
+             #000 calc(100% - 60px),
              transparent 100%
            );
          }
+
          
          .studio-brief-shell::-webkit-scrollbar {
            width: 0 !important;
