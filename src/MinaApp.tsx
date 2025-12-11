@@ -305,11 +305,21 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ============================================
   // 5. Derived values
   // ============================================
+  
+ const ASPECT_ICON_URLS: Record<AspectKey, string> = {
+  "9-16":
+    "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/tiktokreels_icon_e116174c-afc7-4174-9cf0-f24a07c8517b.svg?v=1765425956",
+  "4-5":
+    "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/post_icon_f646fcb5-03be-4cf5-b25c-b1ec38f6794e.svg?v=1765425956",
+  "2-3":
+    "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Printing_icon_c7252c7d-863e-4efb-89c4-669261119d61.svg?v=1765425956",
+  "1-1":
+    "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956",
+};
   const briefLength = brief.trim().length;
   const showPills = briefLength >= 10;
-  const showStylesStep = briefLength >= 20;
-  const canCreateStill = briefLength >= 20 && !stillGenerating;
-
+  const showStylesStep = briefLength >= 40;
+  const canCreateStill = briefLength >= 40 && !stillGenerating;
 
   const currentAspect = ASPECT_OPTIONS[aspectIndex];
   const currentStill: StillItem | null =
@@ -861,218 +871,226 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ============================================
   // 12. Render – helper sections
   // ============================================
-    const renderStudioLeft = () => (
-  <div
-    className={classNames(
-      "studio-left",
-      draggingUpload && "drag-active"
-    )}
-    onDragOver={handleDragOver}
-    onDragLeave={handleDragLeave}
-    onDrop={handleDrop}
-  >
-    {/* main stack that we keep vertically centered */}
-    <div className="studio-left-main">
-      {/* pills – only after 10 characters */}
-      {showPills && (
-        <div className="studio-row studio-row--pills studio-pills-animate">
-          <button
-            type="button"
-            className={classNames(
-              "studio-pill",
-              "studio-pill--aspect"
-            )}
-            onClick={handleCycleAspect}
-          >
-            <div
-              className="studio-pill-icon studio-pill-icon--device"
-              aria-hidden="true"
-            />
-            <div className="studio-pill-text">
-              <div className="studio-pill-main">
-                {currentAspect.label}
-              </div>
-              <div className="studio-pill-sub">
-                {currentAspect.subtitle}
-              </div>
-            </div>
-          </button>
+      const renderStudioLeft = () => {
+    const aspectIconUrl = ASPECT_ICON_URLS[currentAspect.key];
 
-          <button
-            type="button"
-            className={classNames(
-              "studio-pill",
-              "studio-pill--upload",
-              productImageAdded && "active"
-            )}
-            onClick={handleProductUploadClick}
-          >
-            <div className="studio-pill-icon studio-pill-icon--thumb">
-              <span className="studio-pill-plus" aria-hidden="true">
-                +
-              </span>
-            </div>
-            <div className="studio-pill-text">
-              <div className="studio-pill-main">Product image</div>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            className={classNames(
-              "studio-pill",
-              "studio-pill--upload",
-              brandImageAdded && "active"
-            )}
-            onClick={handleBrandUploadClick}
-          >
-            <div className="studio-pill-icon studio-pill-icon--thumb">
-              <span className="studio-pill-plus" aria-hidden="true">
-                +
-              </span>
-            </div>
-            <div className="studio-pill-text">
-              <div className="studio-pill-main">Add inspiration</div>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {/* describe field (state zero = only this) */}
-      <div className="studio-brief-block">
-        <div className="studio-brief-shell">
-          <textarea
-            className="studio-brief-input"
-            placeholder="Describe how you want your photo to be like"
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            rows={4}
-          />
-          <div className="studio-brief-gradient studio-brief-gradient--top" />
-          <div className="studio-brief-gradient studio-brief-gradient--bottom" />
-        </div>
-      </div>
-
-      {/* styles + create – only after 40 characters */}
+    return (
       <div
         className={classNames(
-          "studio-step",
-          showStylesStep && "visible"
+          "studio-left",
+          draggingUpload && "drag-active"
         )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
-        <div className="studio-style-title">
-          Pick one editorial style
-        </div>
+        {/* Pills overlay – does NOT affect layout of the text */}
+        {showPills && (
+          <div className="studio-pills-layer">
+            <div className="studio-row studio-row--pills studio-pills-animate">
+              {/* Aspect pill */}
+              <button
+                type="button"
+                className={classNames(
+                  "studio-pill",
+                  "studio-pill--aspect"
+                )}
+                onClick={handleCycleAspect}
+              >
+                <span className="studio-pill-icon">
+                  <img src={aspectIconUrl} alt="" />
+                </span>
+                <span className="studio-pill-main">
+                  {currentAspect.label}
+                </span>
+                <span className="studio-pill-sub">
+                  {currentAspect.subtitle}
+                </span>
+              </button>
 
-        <div className="studio-style-row">
-          {["Vintage", "Gradient", "Back light"].map(
-            (label, idx) => {
-              const keys = [
-                "vintage",
-                "gradient",
-                "back-light",
-                "soft-desert-editorial",
-              ] as const;
-              const presetKey = keys[idx];
+              {/* Product pill */}
+              <button
+                type="button"
+                className={classNames(
+                  "studio-pill",
+                  "studio-pill--upload",
+                  productImageAdded && "active"
+                )}
+                onClick={handleProductUploadClick}
+              >
+                <span className="studio-pill-icon studio-pill-icon--square">
+                  <span className="studio-pill-plus" aria-hidden="true">
+                    +
+                  </span>
+                </span>
+                <span className="studio-pill-main">
+                  Product image
+                </span>
+              </button>
 
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  className={classNames(
-                    "studio-style-card",
-                    stylePresetKey === presetKey && "active"
-                  )}
-                  onClick={() => setStylePresetKey(presetKey)}
-                >
-                  <div className="studio-style-thumb" />
-                  <div className="studio-style-label">
-                    {label}
-                  </div>
-                </button>
-              );
-            }
-          )}
-
-          <button
-            type="button"
-            className="studio-style-card add"
-          >
-            <div className="studio-style-thumb">
-              <span>+</span>
+              {/* Inspiration pill */}
+              <button
+                type="button"
+                className={classNames(
+                  "studio-pill",
+                  "studio-pill--upload",
+                  brandImageAdded && "active"
+                )}
+                onClick={handleBrandUploadClick}
+              >
+                <span className="studio-pill-icon studio-pill-icon--square">
+                  <span className="studio-pill-plus" aria-hidden="true">
+                    +
+                  </span>
+                </span>
+                <span className="studio-pill-main">
+                  Add inspiration
+                </span>
+              </button>
             </div>
-            <div className="studio-style-label">Add yours</div>
-          </button>
+          </div>
+        )}
+
+        {/* Vertically centered stack: text + styles + create */}
+        <div className="studio-left-main">
+          {/* main brief field */}
+          <div className="studio-brief-block">
+            <div className="studio-brief-shell">
+              <textarea
+                className="studio-brief-input"
+                placeholder="Describe how you want your photo to be like"
+                value={brief}
+                onChange={(e) => setBrief(e.target.value)}
+                rows={4}
+              />
+              <div className="studio-brief-gradient studio-brief-gradient--top" />
+              <div className="studio-brief-gradient studio-brief-gradient--bottom" />
+            </div>
+          </div>
+
+          {/* Styles + vision + create */}
+          <div
+            className={classNames(
+              "studio-step",
+              showStylesStep && "visible"
+            )}
+          >
+            <div className="studio-style-title">
+              Pick one editorial style
+            </div>
+
+            <div className="studio-style-row">
+              {["Vintage", "Gradient", "Back light"].map(
+                (label, idx) => {
+                  const presetKeys = [
+                    "vintage",
+                    "gradient",
+                    "back-light",
+                  ] as const;
+                  const key = presetKeys[idx];
+
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      className={classNames(
+                        "studio-style-card",
+                        stylePresetKey === key && "active"
+                      )}
+                      onClick={() => setStylePresetKey(key)}
+                    >
+                      <div className="studio-style-thumb" />
+                      <div className="studio-style-label">
+                        {label}
+                      </div>
+                    </button>
+                  );
+                }
+              )}
+
+              <button
+                type="button"
+                className="studio-style-card add"
+              >
+                <div className="studio-style-thumb">
+                  <span>+</span>
+                </div>
+                <div className="studio-style-label">
+                  Add yours
+                </div>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              className="studio-vision-toggle"
+              onClick={() =>
+                setMinaVisionEnabled((prev) => !prev)
+              }
+            >
+              Mina Vision Intelligence:{" "}
+              <span className="studio-vision-state">
+                {minaVisionEnabled ? "ON" : "OFF"}
+              </span>
+            </button>
+
+            <div className="studio-create-block">
+              <button
+                type="button"
+                className={classNames(
+                  "studio-create-link",
+                  !canCreateStill && "disabled"
+                )}
+                disabled={!canCreateStill}
+                onClick={handleGenerateStill}
+              >
+                {stillGenerating ? "Creating…" : "Create"}
+              </button>
+            </div>
+
+            <div className="studio-credits-small">
+              {creditsLoading ? (
+                "Checking credits…"
+              ) : credits ? (
+                <>
+                  Credits: {credits.balance} (img −{imageCost} ·
+                  motion −{motionCost})
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <button
-          type="button"
-          className="studio-vision-toggle"
-          onClick={() =>
-            setMinaVisionEnabled((prev) => !prev)
-          }
-        >
-          Mina Vision Intelligence:{" "}
-          <span className="studio-vision-state">
-            {minaVisionEnabled ? "ON" : "OFF"}
-          </span>
-        </button>
+        {/* hidden inputs */}
+        <input
+          ref={productInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleProductFileChange}
+        />
+        <input
+          ref={brandInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={handleBrandFileChange}
+        />
 
-        <div className="studio-create-block">
+        {/* footer */}
+        <div className="studio-footer">
           <button
             type="button"
-            className={classNames(
-              "studio-create-link",
-              !canCreateStill && "disabled"
-            )}
-            disabled={!canCreateStill}
-            onClick={handleGenerateStill}
+            className="link-button subtle"
+            onClick={() => setActiveTab("profile")}
           >
-            {stillGenerating ? "Creating…" : "Create"}
+            Profile
           </button>
-        </div>
-
-        <div className="studio-credits-small">
-          {creditsLoading ? (
-            "Checking credits…"
-          ) : credits ? (
-            <>
-              Credits: {credits.balance} (img −{imageCost} ·
-              motion −{motionCost})
-            </>
-          ) : null}
         </div>
       </div>
-    </div>
+    );
+  };
 
-    {/* hidden file inputs (no layout impact) */}
-    <input
-      ref={productInputRef}
-      type="file"
-      accept="image/*"
-      style={{ display: "none" }}
-      onChange={handleProductFileChange}
-    />
-    <input
-      ref={brandInputRef}
-      type="file"
-      accept="image/*"
-      style={{ display: "none" }}
-      onChange={handleBrandFileChange}
-    />
-
-    {/* footer at bottom */}
-    <div className="studio-footer">
-      <button
-        type="button"
-        className="link-button subtle"
-        onClick={() => setActiveTab("profile")}
-      >
-        Profile
-      </button>
-    </div>
-  </div>
-);
 
 
 
