@@ -965,7 +965,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         </div>
 
         <div className="studio-style-row">
-          {["Vintage", "Gradient", "Back light", "Style 1"].map(
+          {["Vintage", "Gradient", "Back light"].map(
             (label, idx) => {
               const keys = [
                 "vintage",
