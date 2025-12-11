@@ -563,16 +563,16 @@ video {
   flex-direction: column;
   min-height: 0;
 }
+
+
+.studio-left {
+  border-right: 1px solid var(--mina-border-soft);
+}
 .studio-left-main {
   flex: 0 0 auto;
   margin-top: auto;
   margin-bottom: auto; /* centers the block vertically */
 }
-
-.studio-left {
-  border-right: 1px solid var(--mina-border-soft);
-}
-
 .studio-right {
   border-left: 1px solid var(--mina-border-soft);
 }
