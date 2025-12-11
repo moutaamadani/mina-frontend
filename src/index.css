@@ -599,16 +599,6 @@ video {
 .studio-row--pills {
   margin-bottom: 24px;
 }
-@keyframes studioPillsIn {
-  from {
-    opacity: 0;
-    transform: translateY(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 .studio-pill {
   flex: 0 0 auto;
   display: inline-flex;
@@ -718,7 +708,16 @@ video {
   background: transparent;
   color: var(--mina-text);
 }
-
+@keyframes studioPillsIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 .studio-brief-input::placeholder {
   color: rgba(8, 10, 0, 0.2);
 }
