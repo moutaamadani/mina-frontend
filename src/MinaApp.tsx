@@ -326,10 +326,10 @@ const [historyError, setHistoryError] = useState<string | null>(null);
 const [historyGenerations, setHistoryGenerations] = useState<
 GenerationRecord[]
 
-> ([]);
-> const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>(
-> []
-> );
+([]);
+const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>(
+[]
+);
 
 // 4.5 Drag & upload refs
 const [draggingUpload, setDraggingUpload] = useState(false);
