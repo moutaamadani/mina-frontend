@@ -214,13 +214,13 @@ if (fromUrl && fromUrl.trim().length > 0) {
 return fromUrl.trim();
 }
 
-```
+ 
   const stored = window.localStorage.getItem("minaCustomerId");
   if (stored && stored.trim().length > 0) {
     return stored.trim();
   }
 }
-```
+ 
 
 } catch (err) {
 // ignore
@@ -355,7 +355,7 @@ const ensureSession = async (): Promise<string | null> => {
 if (sessionId) return sessionId;
 if (!API_BASE_URL || !customerId) return null;
 
-```
+ 
 try {
   const res = await fetch(`${API_BASE_URL}/sessions/start`, {
     method: "POST",
@@ -381,7 +381,7 @@ try {
   // ignore
 }
 return null;
-```
+ 
 
 };
 
@@ -396,7 +396,7 @@ if (!res.ok) throw new Error(`Status ${res.status}`);
 const json = (await res.json()) as HistoryResponse;
 if (!json.ok) throw new Error("History error");
 
-```
+ 
   setCredits((prev) => ({
     balance: json.credits.balance,
     meta: prev?.meta,
@@ -408,7 +408,7 @@ if (!json.ok) throw new Error("History error");
 } finally {
   setHistoryLoading(false);
 }
-```
+ 
 
 };
 
@@ -419,7 +419,7 @@ const handleGenerateStill = async () => {
 const trimmed = brief.trim();
 if (trimmed.length < 40) return;
 
-```
+ 
 if (!API_BASE_URL) {
   setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
   return;
@@ -487,7 +487,7 @@ try {
 } finally {
   setStillGenerating(false);
 }
-```
+ 
 
 };
 
@@ -497,7 +497,7 @@ try {
 const handleSuggestMotion = async () => {
 if (!API_BASE_URL || !currentStill) return;
 
-```
+ 
 try {
   setMotionSuggestLoading(true);
   setMotionSuggestError(null);
@@ -533,7 +533,7 @@ try {
 } finally {
   setMotionSuggestLoading(false);
 }
-```
+ 
 
 };
 
@@ -542,7 +542,7 @@ if (!API_BASE_URL || !currentStill || !motionDescription.trim()) {
 return;
 }
 
-```
+ 
 const sid = await ensureSession();
 if (!sid) {
   setMotionError("Could not start Mina session.");
@@ -601,7 +601,7 @@ try {
 } finally {
   setMotionGenerating(false);
 }
-```
+ 
 
 };
 
@@ -611,7 +611,7 @@ try {
 const handleLikeCurrentStill = async () => {
 if (!API_BASE_URL || !currentStill) return;
 
-```
+ 
 try {
   await fetch(`${API_BASE_URL}/feedback/like`, {
     method: "POST",
@@ -630,7 +630,7 @@ try {
 } catch {
   // non-blocking
 }
-```
+ 
 
 };
 
@@ -638,7 +638,7 @@ const handleSubmitFeedback = async () => {
 if (!API_BASE_URL || !feedbackText.trim()) return;
 const comment = feedbackText.trim();
 
-```
+ 
 const targetVideo = currentMotion?.url || "";
 const targetImage = currentStill?.url || "";
 
@@ -667,7 +667,7 @@ try {
 } finally {
   setFeedbackSending(false);
 }
-```
+ 
 
 };
 
@@ -675,7 +675,7 @@ const handleDownloadCurrentStill = () => {
 const target = currentMotion?.url || currentStill?.url;
 if (!target) return;
 
-```
+ 
 const a = document.createElement("a");
 a.href = target;
 const safePrompt =
@@ -687,7 +687,7 @@ a.download = `Mina-v3-${safePrompt}`;
 document.body.appendChild(a);
 a.click();
 document.body.removeChild(a);
-```
+ 
 
 };
 
@@ -716,14 +716,14 @@ e: React.ChangeEvent<HTMLInputElement>
 const file = e.target.files && e.target.files[0];
 if (!file) return;
 
-```
+ 
 setProductImageAdded(true);
 const url = URL.createObjectURL(file);
 setProductImageThumb((prev) => {
   if (prev) URL.revokeObjectURL(prev);
   return url;
 });
-```
+ 
 
 };
 
@@ -731,14 +731,14 @@ const handleBrandFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 const file = e.target.files && e.target.files[0];
 if (!file) return;
 
-```
+ 
 setBrandImageAdded(true);
 const url = URL.createObjectURL(file);
 setBrandImageThumb((prev) => {
   if (prev) URL.revokeObjectURL(prev);
   return url;
 });
-```
+ 
 
 };
 
@@ -755,7 +755,7 @@ setCustomStylePanelOpen(false);
 const handleCustomStyleFiles = (files: FileList | null) => {
 if (!files) return;
 
-```
+ 
 const remainingSlots = Math.max(0, 10 - customStyleImages.length);
 if (!remainingSlots) return;
 
@@ -790,7 +790,7 @@ setCustomStyleImages((prev) => {
 
   return merged;
 });
-```
+ 
 
 };
 
@@ -821,7 +821,7 @@ return img.url;
 const handleTrainCustomStyle = async () => {
 if (!customStyleImages.length || !customStyleHeroId) return;
 
-```
+ 
 try {
   setCustomStyleTraining(true);
   setCustomStyleError(null);
@@ -838,7 +838,7 @@ try {
 } finally {
   setCustomStyleTraining(false);
 }
-```
+ 
 
 };
 
@@ -905,7 +905,7 @@ const handleBriefScroll = () => {
 const renderStudioLeft = () => {
 const aspectIconUrl = ASPECT_ICON_URLS[currentAspect.key];
 
-```
+ 
 return (
   <div
     className={classNames("studio-left", draggingUpload && "drag-active")}
@@ -1149,7 +1149,7 @@ return (
     </div>
   </div>
 );
-```
+ 
 
 };
 
@@ -1177,7 +1177,7 @@ disabled={!currentStill && !currentMotion}
 Describe your image on the left to see it here. </div>
 )} </div> </button>
 
-```
+ 
     {stillItems.length > 1 && (
       <div className="studio-dots-row">
         {stillItems.map((item, idx) => (
@@ -1257,14 +1257,14 @@ Describe your image on the left to see it here. </div>
     )}
   </div>
 </div>
-```
+ 
 
 );
 
 const renderCustomStyleModal = () => {
 if (!customStylePanelOpen) return null;
 
-```
+ 
 return (
   <div
     className="mina-modal-backdrop"
@@ -1356,7 +1356,7 @@ return (
     </div>
   </div>
 );
-```
+ 
 
 };
 
@@ -1380,7 +1380,7 @@ onChange={(e) => setCustomerIdInput(e.target.value)}
          >
 Switch </button> </form> </div>
 
-```
+ 
     <div className="profile-row">
       <div className="profile-label">Credits</div>
       <div className="profile-value">
@@ -1450,7 +1450,7 @@ Switch </button> </form> </div>
     </div>
   </div>
 </div>
-```
+ 
 
 );
 
@@ -1501,14 +1501,14 @@ onClick={() => setActiveTab("studio")}
 Back to studio </button>
 )} </div> </div>
 
-```
+ 
     {/* Body (50/50 like login) */}
     {activeTab === "studio" ? renderStudioBody() : renderProfileBody()}
   </div>
 
   {renderCustomStyleModal()}
 </div>
-```
+ 
 
 );
 };
