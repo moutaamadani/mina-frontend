@@ -710,7 +710,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   margin-top: 8px;
 }
 
-/* Input 1 scroll container with fade on top/bottom */
+/* Input 1 scroll container with bottom fade only */
 .studio-brief-shell {
   position: relative;
   max-height: 260px;
@@ -722,19 +722,17 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   /* hide scrollbars */
   scrollbar-width: none; /* Firefox */
 
-  /* soft fade top + bottom */
+  /* bottom fade (~36px), top solid */
   -webkit-mask-image: linear-gradient(
     to bottom,
-    transparent 0,
-    #000 18px,
-    #000 calc(100% - 18px),
+    #000 0,
+    #000 calc(100% - 48px),
     transparent 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    transparent 0,
-    #000 18px,
-    #000 calc(100% - 18px),
+    #000 0,
+    #000 calc(100% - 36px),
     transparent 100%
   );
 }
@@ -744,6 +742,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   height: 0 !important;
   background: transparent;
 }
+
 
 
 
