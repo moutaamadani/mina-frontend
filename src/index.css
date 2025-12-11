@@ -3,7 +3,7 @@
    =========================================================== */
 
 :root {
-  --mina-bg: #EEEEE2;               /* white */
+  --mina-bg: #EEEEE2;               /* paper */
   --mina-text: #080A00;             /* black */
   --mina-border-soft: rgba(8, 10, 0, 0.16);
   --mina-border-strong: rgba(8, 10, 0, 0.32);
@@ -43,8 +43,7 @@ body {
   color: var(--mina-text);
   font-family: "Schibsted Grotesk", system-ui, -apple-system, BlinkMacSystemFont,
     "SF Pro Text", sans-serif;
-     letter-spacing: -0.02em;
-
+  letter-spacing: -0.02em;
 }
 
 a {
@@ -53,8 +52,11 @@ a {
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
+
 button {
-  transition: opacity 0.08s ease-out, transform 0.08s ease-out,
+  transition:
+    opacity 0.08s ease-out,
+    transform 0.08s ease-out,
     background 0.08s ease-out;
 }
 
@@ -153,7 +155,7 @@ video {
   color: rgba(8, 10, 0, 0.8);
 }
 
-/* fade / slide helpers (used on login) */
+/* fade / slide helpers */
 
 .mina-fade,
 .fade-block {
@@ -187,7 +189,7 @@ video {
 }
 
 /* ===========================================================
-   2. LOGIN LAYOUT (unchanged logic)
+   2. LOGIN LAYOUT
    =========================================================== */
 
 .mina-auth-shell {
@@ -499,7 +501,7 @@ video {
 }
 
 /* ===========================================================
-   3. STUDIO LAYOUT (50/50, like login)
+   3. STUDIO LAYOUT (50/50)
    =========================================================== */
 
 .mina-studio-root {
@@ -576,6 +578,13 @@ video {
   min-height: 0;
 }
 
+/* NO border-left here – we removed the middle divider */
+
+/* left dragging highlight */
+.studio-left.drag-active {
+  outline: 1px dashed rgba(8, 10, 0, 0.4);
+}
+
 /* center Input 1 + Input 2 on the left */
 
 .studio-left-main {
@@ -603,15 +612,6 @@ video {
   align-items: center;
 }
 
-
-
-/* drag highlight */
-
-.studio-left.drag-active {
-  outline: 1px dashed rgba(8, 10, 0, 0.4);
-}
-
-
 /* ===========================================================
    3.1 LEFT SIDE – describe + pills + styles
    =========================================================== */
@@ -624,21 +624,23 @@ video {
   gap: 16px;
 }
 
-/* upper pills – ~22px height, compact */
+/* upper pills – compact */
+
 .studio-row--pills {
- display: flex;
+  display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
+
 .studio-pill {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-padding: 8px 12px 8px 8px;                /* bigger, but still clean */
+  padding: 8px 12px 8px 8px;
   border: none;
   background: rgba(8, 10, 0, 0.02);  /* 2% black */
   cursor: pointer;
-  font-size: 13px;                   /* ≈10pt */
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -647,8 +649,6 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
     opacity 0.08s ease-out,
     transform 0.08s ease-out;
 }
-
-
 
 .studio-pill.active,
 .studio-pill:hover {
@@ -659,8 +659,8 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   transform: scale(0.98);
 }
 
-
 /* default icon size (small icons) */
+
 .studio-pill-icon {
   width: 18px;
   height: 18px;
@@ -669,7 +669,8 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   justify-content: center;
 }
 
-/* upload pills – big image/plus thumbnail */
+/* upload pills – image/plus thumbnail */
+
 .studio-pill-icon--square {
   min-width: 26px;
   min-height: 26px;
@@ -690,13 +691,14 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   display: block;
 }
 
-/* Aspect pill – 32px grey square with padding around icon */
+/* Aspect pill – 32px block, icon centered */
+
 .studio-pill--aspect .studio-pill-icon {
   min-width: 32px;
   min-height: 32px;
   width: 32px;
   height: 32px;
-  background: rgba(8, 10, 0, 0.0);   /* same soft grey block */
+  background: rgba(8, 10, 0, 0.0);
   border: none;
   display: flex;
   align-items: center;
@@ -704,34 +706,31 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 }
 
 .studio-pill--aspect .studio-pill-icon img {
-  width: 18px;   /* smaller than the square = padding */
+  width: 18px;
   height: 18px;
   display: block;
   object-fit: contain;
 }
-
 
 .studio-pill-plus {
   font-size: 14px;
   line-height: 1;
 }
 
+/* pill text */
 
-
-/* text: 10pt-ish, semi bold + muted subtitle */
 .studio-pill-main,
 .studio-pill-sub {
-  font-size: 13px;      /* ≈10pt */
-  font-weight: 600;     /* all semibold */
-  letter-spacing: -0.00em;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .studio-pill-sub {
   opacity: 0.6;
 }
 
-
-      /* brief block (state zero) */
+/* brief block */
 
 .studio-brief-block {
   margin-top: 8px;
@@ -747,10 +746,8 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
 
-  /* hide scrollbars */
   scrollbar-width: none; /* Firefox */
 
-  /* soft fade ONLY on the bottom (~60px) */
   -webkit-mask-image: linear-gradient(
     to bottom,
     #000 0,
@@ -804,6 +801,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   pointer-events: none;
 }
 
+/* styles section */
 
 /* completely hidden until .visible is added */
 .studio-step {
@@ -869,7 +867,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 .studio-style-thumb {
   width: 72px;
   height: 72px;
-  background: rgba(8, 10, 0, 0.1); /* 10% black */
+  background: rgba(8, 10, 0, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -911,8 +909,6 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   cursor: pointer;
 }
 
-
-
 .studio-vision-state {
   font-weight: 600;
 }
@@ -931,7 +927,6 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   cursor: pointer;
 }
 
-
 .studio-create-link.disabled {
   opacity: 0.4;
   cursor: default;
@@ -940,7 +935,6 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 .studio-credits-small {
   display: none;
 }
-
 
 /* footer */
 
@@ -953,6 +947,21 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
    3.2 RIGHT SIDE – output + motion + feedback
    =========================================================== */
 
+/* base right column */
+.studio-right {
+  position: relative;
+  padding: 96px 64px 40px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* EMPTY STATE – full-bleed block */
+.studio-right--full {
+  padding: 0;
+}
+
+/* main container on the right */
 .studio-output-main {
   display: flex;
   flex-direction: column;
@@ -961,18 +970,12 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   min-height: 0;
 }
 
-.studio-output-click {
-  border: none;
-  background: none;
-  padding: 0;
-  cursor: pointer;
-  text-align: inherit;
+/* tighter when empty – only one block */
+.studio-output-main--empty {
+  gap: 0;
 }
 
-.studio-output-click:disabled {
-  cursor: default;
-}
-
+/* frame always fills available height */
 .studio-output-frame {
   position: relative;
   width: 100%;
@@ -989,7 +992,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   object-fit: cover;
 }
 
-/* state-zero placeholder: full cover, centered text */
+/* full-cover placeholder with centered text */
 .output-placeholder {
   flex: 1;
   display: flex;
@@ -1003,6 +1006,18 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   color: rgba(8, 10, 0, 0.75);
 }
 
+/* click wrapper in non-empty state */
+.studio-output-click {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+
+.studio-output-click:disabled {
+  cursor: default;
+}
 
 /* dots for still history */
 
@@ -1064,6 +1079,119 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   font-family: inherit;
   font-size: 12px;
   min-width: 80px;
+}
+
+/* ===========================================================
+   3.2.b CUSTOM STYLE MODAL
+   =========================================================== */
+
+.mina-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 10, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+}
+
+.mina-modal {
+  width: 100%;
+  max-width: 640px;
+  max-height: 80vh;
+  background: var(--mina-bg);
+  border: 1px solid rgba(8, 10, 0, 0.16);
+  padding: 16px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mina-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.mina-modal-close {
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.mina-modal-drop {
+  border: 1px dashed rgba(8, 10, 0, 0.4);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mina-modal-drop-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.mina-modal-drop-help {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.mina-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.mina-modal-thumb {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.mina-modal-thumb img {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
+}
+
+.mina-modal-thumb.hero {
+  outline: 2px solid rgba(8, 10, 0, 0.8);
+}
+
+.mina-modal-thumb-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  padding: 2px 4px;
+  font-size: 10px;
+  background: rgba(8, 10, 0, 0.9);
+  color: #fdfdf6;
+}
+
+.mina-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mina-modal-train {
+  border: none;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 /* ===========================================================
@@ -1181,60 +1309,11 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
     border-left: none;
     border-right: none;
   }
-.studio-right {
-  position: relative;
-  padding: 96px 64px 40px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  /* no border-left, so no separation line */
-}
 
-/* main container on the right */
-.studio-output-main {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
-}
+  .studio-right {
+    border-top: 1px solid var(--mina-border-soft);
+  }
 
-/* tighter when empty – only one block */
-.studio-output-main--empty {
-  gap: 0;
-}
-
-/* frame always fills available height */
-.studio-output-frame {
-  position: relative;
-  width: 100%;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  background: rgba(8, 10, 0, 0.05); /* 5% black */
-}
-
-.studio-output-media {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* full-cover placeholder with centered text */
-.output-placeholder {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 24px;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: rgba(8, 10, 0, 0.75);
-}
-
-  
   .studio-profile-body {
     grid-template-columns: minmax(0, 1fr);
     padding: 96px 20px 40px;
