@@ -125,7 +125,14 @@ type MotionItem = {
   prompt: string;
 };
 
+type CustomStyleImage = {
+  id: string;
+  url: string;
+  file: File;
+};
+
 type AspectKey = "9-16" | "4-5" | "2-3" | "1-1";
+
 
 type AspectOption = {
   key: AspectKey;
@@ -179,6 +186,26 @@ const ASPECT_ICON_URLS: Record<AspectKey, string> = {
   "1-1":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956",
 };
+const STYLE_PRESETS = [
+  {
+    key: "vintage",
+    label: "Vintage",
+    thumb:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Vintage_1.png?v=1765457775",
+  },
+  {
+    key: "gradient",
+    label: "Gradient",
+    thumb:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Gradient.png?v=1765457775",
+  },
+  {
+    key: "back-light",
+    label: "Back light",
+    thumb:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Backlight.png?v=1765457775",
+  },
+] as const;
 
 function getInitialCustomerId(initialCustomerId?: string): string {
   try {
