@@ -1182,10 +1182,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
     border-right: none;
   }
 
-  .studio-right {
-    border-top: 1px solid var(--mina-border-soft);
-  }
-
+  
   .studio-profile-body {
     grid-template-columns: minmax(0, 1fr);
     padding: 96px 20px 40px;
