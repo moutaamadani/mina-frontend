@@ -879,9 +879,9 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   border: none;
   padding: 0;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.00em;
   text-decoration: underline;
   cursor: pointer;
 }
