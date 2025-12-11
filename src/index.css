@@ -774,23 +774,32 @@ video {
 
 /* styles section */
 
+/* styles section – completely removed until it becomes visible */
 .studio-step {
+  display: none;               /* no layout in state zero */
+}
+
+/* when React adds .visible, it pops in and can animate if you want */
+.studio-step.visible {
+  display: block;
   margin-top: 40px;
   padding-top: 32px;
   border-top: 1px solid rgba(8, 10, 0, 0.08);
-  opacity: 0;
-  transform: translateY(16px);
-  transition:
-    opacity var(--mina-anim-fade) ease-out,
-    transform var(--mina-anim-slide) ease-out;
-  pointer-events: none;
+  animation: studioStepIn 0.45s ease-out forwards;
 }
 
-.studio-step.visible {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+/* optional soft fade/slide */
+@keyframes studioStepIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 
 .studio-style-title {
   font-size: 24px;
