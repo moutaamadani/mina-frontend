@@ -673,10 +673,10 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 
 /* upload pills – big image/plus thumbnail */
 .studio-pill-icon--square {
-  min-width: 48px;
-  min-height: 48px;
-  width: 48px;
-  height: 48px;
+  min-width: 32px;
+  min-height: 32px;
+  width: 32px;
+  height: 32px;
   background: rgba(8, 10, 0, 0.1);   /* 10% black */
   border: none;
   display: flex;
