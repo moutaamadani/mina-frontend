@@ -752,20 +752,20 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
            scrollbar-width: none; /* Firefox */
          
                    /* soft fade bottom only */
-            .your-element-selector {
-              -webkit-mask-image: linear-gradient(
-                to bottom,
-                #000 0,
-                #000 calc(100% - 60px),
-                transparent 100%
-              );
-              mask-image: linear-gradient(
-                to bottom,
-                #000 0,
-                #000 calc(100% - 60px),
-                transparent 100%
-              );
-            }
+                  .your-selector (
+                 -webkit-mask-image: linear-gradient(
+                   to bottom,
+                   #000 0,
+                   #000 calc(100% - 60px),
+                   transparent 100%
+                 );
+                 mask-image: linear-gradient(
+                   to bottom,
+                   #000 0,
+                   #000 calc(100% - 60px),
+                   transparent 100%
+                 );
+               }
 
 
          
