@@ -654,7 +654,7 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
 }
 
 
-/* default icon size (aspect pill) */
+/* default icon size (small icons) */
 .studio-pill-icon {
   width: 18px;
   height: 18px;
@@ -663,12 +663,12 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   justify-content: center;
 }
 
-/* image/plus box – visible thumbnail */
+/* upload pills – big image/plus thumbnail */
 .studio-pill-icon--square {
-  min-width: 32px;
-  min-height: 32px;
-  width: 32px;
-  height: 32px;
+  min-width: 48px;
+  min-height: 48px;
+  width: 48px;
+  height: 48px;
   background: rgba(8, 10, 0, 0.1);   /* 10% black */
   border: none;
   display: flex;
@@ -683,18 +683,27 @@ padding: 8px 12px 8px 8px;                /* bigger, but still clean */
   object-fit: cover;
   display: block;
 }
-/* Aspect pill icon – 32px square */
+
+/* Aspect pill – 32px grey square with padding around icon */
 .studio-pill--aspect .studio-pill-icon {
+  min-width: 32px;
+  min-height: 32px;
   width: 32px;
   height: 32px;
+  background: rgba(8, 10, 0, 0.1);   /* same soft grey block */
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .studio-pill--aspect .studio-pill-icon img {
-  width: 100%;
-  height: 100%;
+  width: 18px;   /* smaller than the square = padding */
+  height: 18px;
   display: block;
   object-fit: contain;
 }
+
 
 .studio-pill-plus {
   font-size: 14px;
