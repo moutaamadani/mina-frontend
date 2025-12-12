@@ -185,7 +185,7 @@ const ASPECT_ICON_URLS: Record<AspectKey, string> = {
   "1-1":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956",
 };
-const NON_ASPECT_PILL_ICON =
+const GENERIC_PILL_ICON_URL =
   "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956";
 
 // Map our UI ratios to Replicate-safe values
@@ -1077,70 +1077,74 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
             {/* Pills slot – always reserve height so textarea never moves */}
             <div className="studio-pills-slot">
               {showPills && (
-                <div className="studio-row studio-row--pills studio-pills-animate">
-                  {/* Product pill */}
-                  <button
-                      type="button"
-                      className={classNames(
-                        "studio-pill",
-                        "studio-pill--upload",
-                        productImageAdded && "active"
-                      )}
-                      onClick={handleProductUploadClick}
-                    >
-                      <span className="studio-pill-icon studio-pill-icon--square">
-                        {productImageThumb ? (
-                          <img src={productImageThumb} alt="" />
-                        ) : (
-                          <img src={NON_ASPECT_PILL_ICON} alt="" />
-                        )}
+                <div className="studio-row studio-row--pills">
+                {/* Product pill */}
+                <button
+                  type="button"
+                  className={classNames(
+                    "studio-pill",
+                    productImageAdded && "active"
+                  )}
+                  onClick={handleProductUploadClick}
+                >
+                  <span className="studio-pill-icon studio-pill-icon--square">
+                    {productImageAdded ? (
+                      <span className="studio-pill-check" aria-hidden="true">
+                        ✓
                       </span>
-                      <span className="studio-pill-main">Add Product</span>
-                    </button>
-
-
-                  {/* Inspiration pill (brand / ref) */}
-                  <button
-                      type="button"
-                      className={classNames(
-                        "studio-pill",
-                        "studio-pill--upload",
-                        brandImageAdded && "active"
-                      )}
-                      onClick={handleBrandUploadClick}
-                    >
-                      <span className="studio-pill-icon studio-pill-icon--square">
-                        {brandImageThumb ? (
-                          <img src={brandImageThumb} alt="" />
-                        ) : (
-                          <img src={NON_ASPECT_PILL_ICON} alt="" />
-                        )}
-                      </span>
-                    
-                      <span className="studio-pill-main">Inspiration</span>
-                    </button>
-
-
-                  {/* Aspect pill */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "studio-pill--aspect"
+                    ) : (
+                      <img
+                        src={GENERIC_PILL_ICON_URL}
+                        alt=""
+                        className="studio-pill-glyph"
+                      />
                     )}
-                    onClick={handleCycleAspect}
-                  >
-                    <span className="studio-pill-icon">
-                      <img src={aspectIconUrl} alt="" />
-                    </span>
-                    <span className="studio-pill-main">
-                      {currentAspect.label}
-                    </span>
-                    <span className="studio-pill-sub">
-                      {currentAspect.subtitle}
-                    </span>
-                  </button>
-                </div>
+                  </span>
+                  <span className="studio-pill-main">Product image</span>
+                </button>
+              
+                {/* Inspiration pill */}
+                <button
+                  type="button"
+                  className={classNames(
+                    "studio-pill",
+                    brandImageAdded && "active"
+                  )}
+                  onClick={handleBrandUploadClick}
+                >
+                  <span className="studio-pill-icon studio-pill-icon--square">
+                    {brandImageAdded ? (
+                      <span className="studio-pill-check" aria-hidden="true">
+                        ✓
+                      </span>
+                    ) : (
+                      <img
+                        src={GENERIC_PILL_ICON_URL}
+                        alt=""
+                        className="studio-pill-glyph"
+                      />
+                    )}
+                  </span>
+                  <span className="studio-pill-main">Add inspiration</span>
+                </button>
+              
+                {/* Aspect pill – KEEP THIS LAST */}
+                <button
+                  type="button"
+                  className={classNames(
+                    "studio-pill",
+                    "studio-pill--aspect"
+                  )}
+                  onClick={cycleAspect}
+                >
+                  <span className="studio-pill-icon">
+                    <img src={ASPECT_ICON_URLS[aspectKey]} alt={currentAspect.label} />
+                  </span>
+                  <span className="studio-pill-main">{currentAspect.label}</span>
+                  <span className="studio-pill-sub">{currentAspect.subtitle}</span>
+                </button>
+              </div>
+
               )}
             </div>
 
