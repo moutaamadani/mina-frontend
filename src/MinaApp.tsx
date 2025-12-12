@@ -1606,47 +1606,39 @@ const deleteCustomStyle = (key: string) => {
   };
 
   const handleTrainCustomStyle = async () => {
-    if (!customStyleImages.length || !customStyleHeroId) return;
+  if (!customStyleImages.length || !customStyleHeroId) return;
 
-    try {
-      setCustomStyleTraining(true);
-      setCustomStyleError(null);
+  try {
+    setCustomStyleTraining(true);
+    setCustomStyleError(null);
 
-      // Keep “fake training” for now (your request: keep mechanism)
-      await new Promise((resolve) => setTimeout(resolve, 900));
+    const hero = customStyleImages.find((x) => x.id === customStyleHeroId);
+    if (!hero?.file) throw new Error("Pick a hero image.");
 
-      // Persist new custom preset (thumb as dataURL so it survives refresh)
-      const hero = customStyleImages.find((x) => x.id === customStyleHeroId);
-      if (!hero) throw new Error("Pick a hero image.");
+    // Persistable thumb (dataURL)
+    const thumbUrl = await fileToDataUrl(hero.file);
 
-      const thumbDataUrl = await fileToDataUrl(hero.file);
-      const nextKey = `custom-${Date.now()}`;
-      const nextLabel = `Style ${customPresets.length + 1}`;
+    const newKey = `custom-${Date.now()}`;
+    const newStyle: CustomStyle = {
+      id: newKey,
+      key: newKey,
+      label: `Style ${customStyles.length + 1}`,
+      thumbUrl,
+      createdAt: new Date().toISOString(),
+    };
 
-      const nextPreset: CustomStylePreset = {
-        key: nextKey,
-        label: nextLabel,
-        thumbDataUrl,
-      };
+    setCustomStyles((prev) => [newStyle, ...prev]);
+    setStylePresetKey(newKey);
 
-      const nextList = [...customPresets, nextPreset];
-      setCustomPresets(nextList);
-      saveCustomStyles(nextList);
+    // close modal
+    setCustomStylePanelOpen(false);
+  } catch (err: any) {
+    setCustomStyleError(err?.message || "Unable to create style right now.");
+  } finally {
+    setCustomStyleTraining(false);
+  }
+};
 
-      // Select it
-      setStylePresetKey(nextKey);
-
-      // Close modal
-      setCustomStylePanelOpen(false);
-      setCustomStyleImages([]);
-      setCustomStyleHeroId(null);
-      setCustomStyleHeroThumb(null);
-    } catch (err: any) {
-      setCustomStyleError(err?.message || "Unable to train style right now.");
-    } finally {
-      setCustomStyleTraining(false);
-    }
-  };
 
   const handleRenameCustomPreset = (key: string) => {
     const preset = customPresets.find((p) => p.key === key);
