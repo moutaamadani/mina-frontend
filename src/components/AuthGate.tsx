@@ -6,7 +6,8 @@ type AuthGateProps = {
   children: React.ReactNode;
 };
 
-const API_BASE_URL = "https://mina-editorial-ai-api.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_MINA_API_BASE_URL || "https://mina-editorial-ai-api.onrender.com";
 
 async function syncShopifyWelcome(email: string | null | undefined) {
   const clean = (email || "").trim().toLowerCase();
