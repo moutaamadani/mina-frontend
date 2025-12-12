@@ -1202,18 +1202,6 @@ const openPanel = (key: PanelKey) => {
   setUiStage((s) => (s < 2 ? 2 : s));
 };
 
-const hoverSelectPanel = (key: PanelKey) => {
-  if (!showPills) return;
-
-  setActivePanel(key);
-
-  // Hover must also reveal the drop area
-  setUiStage((s) => (s < 2 ? 2 : s));
-};
-
-
-
-
 const capForPanel = (panel: UploadPanelKey) => {
   if (panel === "inspiration") return 4;
   return 1; // product + logo
