@@ -355,7 +355,7 @@ const Collapse: React.FC<{
     const el = innerRef.current;
     if (!el) return;
 
-    const D = 360;
+    const D = 650;
 
     if (open) {
       const h = el.scrollHeight;
@@ -386,7 +386,7 @@ const Collapse: React.FC<{
         opacity: open ? 1 : 0,
         transform: open ? "translateY(0)" : "translateY(-6px)",
         transition:
-          "height 360ms cubic-bezier(0.16,1,0.3,1), opacity 360ms cubic-bezier(0.16,1,0.3,1), transform 360ms cubic-bezier(0.16,1,0.3,1)",
+          "height 650ms cubic-bezier(0.16,1,0.3,1), opacity 650ms cubic-bezier(0.16,1,0.3,1), transform 650ms cubic-bezier(0.16,1,0.3,1)",
         transitionDelay: open ? `${delayMs}ms` : "0ms",
       }}
     >
@@ -615,10 +615,12 @@ useEffect(() => {
   setActivePanel((prev) => prev ?? "product");
 
   // Stage 2: panels appear shortly after
-  const t2 = window.setTimeout(() => setUiStage(2), 420);
+ const t2 = window.setTimeout(() => setUiStage(2), 900);
+
 
   // Stage 3: controls (Vision + Create) appear later (premium)
-  const t3 = window.setTimeout(() => setUiStage(3), 2000);
+ const t3 = window.setTimeout(() => setUiStage(3), 3200);
+
 
   return () => {
     window.clearTimeout(t2);
