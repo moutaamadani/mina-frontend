@@ -1101,26 +1101,25 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
                   {/* Inspiration pill (brand / ref) */}
                   <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "studio-pill--upload",
-                      brandImageAdded && "active"
-                    )}
-                    onClick={handleBrandUploadClick}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon--square">
-                      {brandImageThumb ? (
-                        <img src={brandImageThumb} alt="" />
-                      ) : (
-                        <span className="studio-pill-plus" aria-hidden="true">
-                          +
-                        </span>
+                      type="button"
+                      className={classNames(
+                        "studio-pill",
+                        "studio-pill--upload",
+                        brandImageAdded && "active"
                       )}
-                    </span>
+                      onClick={handleBrandUploadClick}
+                    >
+                      <span className="studio-pill-icon studio-pill-icon--square">
+                        {brandImageThumb ? (
+                          <img src={brandImageThumb} alt="" />
+                        ) : (
+                          <img src={NON_ASPECT_PILL_ICON} alt="" />
+                        )}
+                      </span>
+                    
+                      <span className="studio-pill-main">Add inspiration</span>
+                    </button>
 
-                    <span className="studio-pill-main">Add inspiration</span>
-                  </button>
 
                   {/* Aspect pill */}
                   <button
