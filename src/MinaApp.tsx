@@ -131,7 +131,7 @@ type CustomStyleImage = {
   file: File;
 };
 
-type AspectKey = "9-16" | "4-5" | "2-3" | "1-1";
+type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
 type AspectOption = {
   key: AspectKey;
@@ -153,9 +153,9 @@ const ASPECT_OPTIONS: AspectOption[] = [
     platformKey: "tiktok",
   },
   {
-    key: "4-5",
-    ratio: "4:5",
-    label: "4:5",
+    key: "3-4",              // was "4-5"
+    ratio: "3:4",            // was "4:5"
+    label: "3:4",            // text shown on pill
     subtitle: "Post",
     platformKey: "instagram-post",
   },
@@ -178,7 +178,7 @@ const ASPECT_OPTIONS: AspectOption[] = [
 const ASPECT_ICON_URLS: Record<AspectKey, string> = {
   "9-16":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/tiktokreels_icon_e116174c-afc7-4174-9cf0-f24a07c8517b.svg?v=1765425956",
-  "4-5":
+  "3-4":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/post_icon_f646fcb5-03be-4cf5-b25c-b1ec38f6794e.svg?v=1765425956",
   "2-3":
     "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Printing_icon_c7252c7d-863e-4efb-89c4-669261119d61.svg?v=1765425956",
@@ -189,10 +189,11 @@ const ASPECT_ICON_URLS: Record<AspectKey, string> = {
 // Map our UI ratios to Replicate-safe values
 const REPLICATE_ASPECT_RATIO_MAP: Record<string, string> = {
   "9:16": "9:16",
-  "4:5": "3:4", // closest supported ratio
+  "3:4": "3:4",  // now 3:4 is the real value
   "2:3": "2:3",
   "1:1": "1:1",
 };
+
 
 const STYLE_PRESETS = [
   {
