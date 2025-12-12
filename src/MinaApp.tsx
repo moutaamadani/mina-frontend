@@ -346,7 +346,7 @@ const Collapse: React.FC<{
     const el = innerRef.current;
     if (!el) return;
 
-    const D = 280;
+    const D = 360;
 
     if (open) {
       const h = el.scrollHeight;
@@ -377,7 +377,7 @@ const Collapse: React.FC<{
         opacity: open ? 1 : 0,
         transform: open ? "translateY(0)" : "translateY(-6px)",
         transition:
-          "height 280ms ease, opacity 280ms ease, transform 280ms ease",
+          "height 360ms cubic-bezier(0.16,1,0.3,1), opacity 360ms cubic-bezier(0.16,1,0.3,1), transform 360ms cubic-bezier(0.16,1,0.3,1)",
         transitionDelay: open ? `${delayMs}ms` : "0ms",
       }}
     >
