@@ -542,7 +542,11 @@ const inspirationInputRef = useRef<HTMLInputElement | null>(null);
 // [PART 5 START] Derived values (the “rules” you requested)
 // ========================================================================
 const briefLength = brief.trim().length;
-const canCreateStill = briefLength >= 40 && !stillGenerating;
+const uploadsPending = Object.values(uploads).some((arr) =>
+  arr.some((it) => it.uploading)
+);
+
+const canCreateStill = briefLength >= 40 && !stillGenerating && !uploadsPending;
 
 // UI stages
 const showPills = uiStage >= 1;
@@ -762,6 +766,91 @@ useEffect(() => {
   // ========================================================================
   // [PART 7 END]
   // ========================================================================
+// ==============================
+// R2 helpers (upload + store)
+// ==============================
+function pickUrlFromR2Response(json: any): string | null {
+  if (!json) return null;
+  if (typeof json.url === "string" && json.url.startsWith("http")) return json.url;
+  if (typeof json.signedUrl === "string" && json.signedUrl.startsWith("http")) return json.signedUrl;
+  if (typeof json.publicUrl === "string" && json.publicUrl.startsWith("http")) return json.publicUrl;
+  if (json.result && typeof json.result.url === "string" && json.result.url.startsWith("http")) return json.result.url;
+  if (json.data && typeof json.data.url === "string" && json.data.url.startsWith("http")) return json.data.url;
+  return null;
+}
+
+async function uploadFileToR2(panel: UploadPanelKey, file: File): Promise<string> {
+  if (!API_BASE_URL) throw new Error("Missing API base URL");
+  const dataUrl = await fileToDataUrl(file);
+
+  const res = await fetch(`${API_BASE_URL}/api/r2/upload-signed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      dataUrl,
+      kind: panel,          // "product" | "logo" | "inspiration"
+      customerId,           // so you can track who uploaded
+    }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.ok === false) {
+    throw new Error(json?.message || json?.error || `Upload failed (${res.status})`);
+  }
+
+  const url = pickUrlFromR2Response(json);
+  if (!url) throw new Error("Upload succeeded but no URL returned");
+  return url;
+}
+
+async function storeRemoteToR2(url: string, kind: string): Promise<string> {
+  if (!API_BASE_URL) throw new Error("Missing API base URL");
+
+  const res = await fetch(`${API_BASE_URL}/api/r2/store-remote-signed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      url,
+      kind,        // "generations" | "motions" | etc.
+      customerId,
+    }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json?.ok === false) {
+    // if storing fails, just return original url (non-blocking)
+    return url;
+  }
+
+  return pickUrlFromR2Response(json) || url;
+}
+
+function patchUploadItem(panel: UploadPanelKey, id: string, patch: Partial<UploadItem>) {
+  setUploads((prev) => ({
+    ...prev,
+    [panel]: prev[panel].map((it) => (it.id === id ? { ...it, ...patch } : it)),
+  }));
+}
+
+async function startUploadForFileItem(panel: UploadPanelKey, id: string, file: File) {
+  try {
+    patchUploadItem(panel, id, { uploading: true, error: undefined });
+    const remoteUrl = await uploadFileToR2(panel, file);
+    patchUploadItem(panel, id, { remoteUrl, uploading: false });
+  } catch (err: any) {
+    patchUploadItem(panel, id, { uploading: false, error: err?.message || "Upload failed" });
+  }
+}
+
+async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: string) {
+  try {
+    patchUploadItem(panel, id, { uploading: true, error: undefined });
+    const remoteUrl = await storeRemoteToR2(url, panel);
+    patchUploadItem(panel, id, { remoteUrl, uploading: false });
+  } catch (err: any) {
+    patchUploadItem(panel, id, { uploading: false, error: err?.message || "Store failed" });
+  }
+}
 
   
 
@@ -1127,41 +1216,72 @@ const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
   const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
   if (!incoming.length) return;
 
+  // For product/logo, we replace the current item (only 1)
+  const replace = panel !== "inspiration";
+
+  // Compute how many we can accept right now
+  const existingCount = uploads[panel].length;
+  const remaining = replace ? max : Math.max(0, max - existingCount);
+  const slice = incoming.slice(0, remaining);
+  if (!slice.length) return;
+
+  const created: Array<{ id: string; file: File }> = [];
+
   setUploads((prev) => {
-    const existing = prev[panel];
-    const remaining = Math.max(0, max - existing.length);
-    const slice = incoming.slice(0, remaining);
+    // Revoke old blobs if replacing product/logo
+    if (replace) {
+      prev[panel].forEach((it) => {
+        if (it.kind === "file" && it.url.startsWith("blob:")) {
+          try { URL.revokeObjectURL(it.url); } catch {}
+        }
+      });
+    }
 
-    // product/logo should replace (only 1)
-    const base = panel === "inspiration" ? existing : [];
+    const base = replace ? [] : prev[panel];
 
-    const nextItems: UploadItem[] = slice.map((file) => ({
-      id: `${panel}_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-      url: URL.createObjectURL(file),
-      kind: "file",
-      file,
-    }));
+    const nextItems: UploadItem[] = slice.map((file) => {
+      const id = `${panel}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      const previewUrl = URL.createObjectURL(file);
+      created.push({ id, file });
+
+      return {
+        id,
+        kind: "file",
+        url: previewUrl,     // blob preview
+        remoteUrl: undefined, // will become https after upload
+        file,
+        uploading: true,
+      };
+    });
 
     return {
       ...prev,
       [panel]: [...base, ...nextItems].slice(0, max),
     };
   });
+
+  // Kick off uploads AFTER state update
+  created.forEach(({ id, file }) => {
+    void startUploadForFileItem(panel, id, file);
+  });
 };
 
 const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
   const max = capForPanel(panel);
 
-  setUploads((prev) => {
-    const existing = prev[panel];
+  const replace = panel !== "inspiration";
 
-    // product/logo should replace (only 1)
-    const base = panel === "inspiration" ? existing : [];
+  const id = `${panel}_url_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+  setUploads((prev) => {
+    const base = replace ? [] : prev[panel];
 
     const next: UploadItem = {
-      id: `${panel}_url_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-      url,
+      id,
       kind: "url",
+      url,                 // original http url (preview)
+      remoteUrl: undefined, // will become R2 url
+      uploading: true,
     };
 
     return {
@@ -1169,7 +1289,10 @@ const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
       [panel]: [...base, next].slice(0, max),
     };
   });
+
+  void startStoreForUrlItem(panel, id, url);
 };
+
 
 const removeUploadItem = (panel: UploadPanelKey, id: string) => {
   setUploads((prev) => {
