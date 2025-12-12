@@ -2,9 +2,8 @@
 // ============================================================================
 // [PART 1 START] Imports & environment
 // ============================================================================
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
-
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
   "https://mina-editorial-ai-api.onrender.com";
@@ -303,6 +302,112 @@ function saveCustomStyles(styles: CustomStylePreset[]) {
 // ============================================================================
 // [PART 3 END]
 // ============================================================================
+// ==============================================
+// PART UI HELPERS (pills/panels)
+// ==============================================
+type PanelKey = "product" | "logo" | "inspiration" | "style" | null;
+type UploadPanelKey = "product" | "logo" | "inspiration";
+
+type UploadItem = {
+  id: string;
+  url: string; // blob:... or https://...
+  kind: "file" | "url";
+  file?: File;
+};
+
+type CustomStyle = {
+  id: string; // custom-...
+  key: string; // used as stylePresetKey
+  label: string;
+  thumbUrl: string; // dataURL or https
+  createdAt: string;
+};
+
+function isHttpUrl(url: string) {
+  return /^https?:\/\//i.test(url);
+}
+
+function extractFirstHttpUrl(text: string) {
+  const m = text.match(/https?:\/\/[^\s)]+/i);
+  return m ? m[0] : null;
+}
+
+async function fileToDataUrl(file: File): Promise<string> {
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("FileReader failed"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Smooth open/close without "display:none" jumps.
+ * (Your CSS can style inside; TSX handles the height animation.)
+ */
+const Collapse: React.FC<{
+  open: boolean;
+  delayMs?: number;
+  children: React.ReactNode;
+}> = ({ open, delayMs = 0, children }) => {
+  const innerRef = useRef<HTMLDivElement | null>(null);
+  const [mounted, setMounted] = useState(open);
+  const [height, setHeight] = useState<number | "auto">(open ? "auto" : 0);
+
+  // mount immediately when opening
+  useEffect(() => {
+    if (open) setMounted(true);
+  }, [open]);
+
+  useLayoutEffect(() => {
+    const el = innerRef.current;
+    if (!el) return;
+
+    const D = 280;
+
+    if (open) {
+      // from 0 -> content height -> auto
+      const h = el.scrollHeight;
+      setHeight(h);
+
+      const t = window.setTimeout(() => {
+        setHeight("auto");
+      }, D + delayMs);
+
+      return () => window.clearTimeout(t);
+    }
+
+    // closing: from auto -> measured -> 0, then unmount
+    const current = el.scrollHeight;
+    setHeight(current);
+
+    const raf = requestAnimationFrame(() => setHeight(0));
+    const t = window.setTimeout(() => setMounted(false), D);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t);
+    };
+  }, [open, delayMs]);
+
+  if (!mounted) return null;
+
+  return (
+    <div
+      style={{
+        overflow: "hidden",
+        height: open ? height : height,
+        opacity: open ? 1 : 0,
+        transform: open ? "translateY(0)" : "translateY(-6px)",
+        transition:
+          "height 280ms ease, opacity 280ms ease, transform 280ms ease",
+        transitionDelay: open ? `${delayMs}ms` : "0ms",
+      }}
+    >
+      <div ref={innerRef}>{children}</div>
+    </div>
+  );
+};
 
 // ============================================================================
 // [PART 4 START] Component
@@ -341,16 +446,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [productItems, setProductItems] = useState<UploadItem[]>([]);
   const [logoItems, setLogoItems] = useState<UploadItem[]>([]);
   const [inspirationItems, setInspirationItems] = useState<UploadItem[]>([]);
-
   // Style step toggle (by Style pill)
   const [styleStepOpen, setStyleStepOpen] = useState(false);
-
   // Style preset (UI key; built-ins or custom-*)
   const [stylePresetKey, setStylePresetKey] = useState<string>("vintage");
-
   // Vision toggle (Input 3) — ALWAYS visible
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
-
   // Stills
   const [stillItems, setStillItems] = useState<StillItem[]>([]);
   const [stillIndex, setStillIndex] = useState(0);
@@ -371,6 +472,53 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+// Panels (only one open at a time)
+const [activePanel, setActivePanel] = useState<PanelKey>(null);
+
+// Stage 0 = only textarea
+// Stage 1 = pills fade in (stagger)
+// Stage 2 = panels area available
+// Stage 3 = vision + create available
+const [uiStage, setUiStage] = useState<0 | 1 | 2 | 3>(0);
+
+// Global drag overlay (whole page)
+const [globalDragging, setGlobalDragging] = useState(false);
+const dragDepthRef = useRef(0);
+
+// Upload buckets
+const [uploads, setUploads] = useState<Record<UploadPanelKey, UploadItem[]>>({
+  product: [],
+  logo: [],
+  inspiration: [],
+});
+
+// Style selection (hover selects too)
+const [stylePresetKey, setStylePresetKey] = useState<string>("vintage");
+const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
+
+// Inline rename for styles (no new panel)
+const [styleLabelOverrides, setStyleLabelOverrides] = useState<
+  Record<string, string>
+>(() => {
+  try {
+    const raw = window.localStorage.getItem("minaStyleLabelOverrides");
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+});
+
+const [customStyles, setCustomStyles] = useState<CustomStyle[]>(() => {
+  try {
+    const raw = window.localStorage.getItem("minaCustomStyles");
+    return raw ? (JSON.parse(raw) as CustomStyle[]) : [];
+  } catch {
+    return [];
+  }
+});
+
+const [editingStyleKey, setEditingStyleKey] = useState<string | null>(null);
+const [editingStyleValue, setEditingStyleValue] = useState<string>("");
 
   // -------------------------
   // 4.4 History (profile)
@@ -383,10 +531,10 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // -------------------------
   // 4.5 Upload refs / drag state
   // -------------------------
-  const [draggingUpload, setDraggingUpload] = useState(false);
-  const productInputRef = useRef<HTMLInputElement | null>(null);
-  const logoInputRef = useRef<HTMLInputElement | null>(null);
-  const inspirationInputRef = useRef<HTMLInputElement | null>(null);
+ const productInputRef = useRef<HTMLInputElement | null>(null);
+const logoInputRef = useRef<HTMLInputElement | null>(null);
+const inspirationInputRef = useRef<HTMLInputElement | null>(null);
+
 
   // -------------------------
   // 4.6 Brief helper hint ("Describe more")
@@ -419,12 +567,16 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // [PART 5 START] Derived values (the “rules” you requested)
   // ========================================================================
   const briefLength = brief.trim().length;
-
-  // IMPORTANT: pills appear only after 10 chars (your latest request)
-  const showPills = briefLength >= 10;
-
-  // Create is still locked to >= 40 chars (same logic you had)
   const canCreateStill = briefLength >= 40 && !stillGenerating;
+  
+  const showPills = uiStage >= 1;
+  const showPanels = uiStage >= 2;
+  const showControls = uiStage >= 3;
+  
+  const productCount = uploads.product.length;
+  const logoCount = uploads.logo.length;
+  const inspirationCount = uploads.inspiration.length;
+
 
   const currentAspect = ASPECT_OPTIONS[aspectIndex];
   const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
@@ -470,6 +622,51 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
   // [PART 5 END]
   // ========================================================================
+// ============================================
+// PART UI STAGING (premium reveal / no jumping)
+// ============================================
+useEffect(() => {
+  // Persist style storage
+  try {
+    window.localStorage.setItem(
+      "minaStyleLabelOverrides",
+      JSON.stringify(styleLabelOverrides)
+    );
+  } catch {
+    // ignore
+  }
+}, [styleLabelOverrides]);
+
+useEffect(() => {
+  try {
+    window.localStorage.setItem("minaCustomStyles", JSON.stringify(customStyles));
+  } catch {
+    // ignore
+  }
+}, [customStyles]);
+
+useEffect(() => {
+  // Stage 0: only textarea
+  if (briefLength <= 0) {
+    setUiStage(0);
+    setActivePanel(null);
+    setGlobalDragging(false);
+    dragDepthRef.current = 0;
+    return;
+  }
+
+  // First time you type: open Product by default
+  setUiStage(1);
+  setActivePanel((prev) => prev ?? "product");
+
+  const t2 = window.setTimeout(() => setUiStage(2), 140);
+  const t3 = window.setTimeout(() => setUiStage(3), 280);
+
+  return () => {
+    window.clearTimeout(t2);
+    window.clearTimeout(t3);
+  };
+}, [briefLength]);
 
   // ========================================================================
   // [PART 6 START] Effects – persist customer + bootstrap
@@ -781,6 +978,19 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
       return;
     }
+      const productUrl = uploads.product[0]?.url;
+      if (productUrl && isHttpUrl(productUrl)) {
+        payload.productImageUrl = productUrl;
+      }
+      
+      const inspirationUrls = uploads.inspiration
+        .map((u) => u.url)
+        .filter((u) => isHttpUrl(u))
+        .slice(0, 4);
+      
+      if (inspirationUrls.length) {
+        payload.styleImageUrls = inspirationUrls;
+      }
 
     const sid = await ensureSession();
     if (!sid) {
@@ -1052,47 +1262,241 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // [PART 11 END]
   // ========================================================================
 
-  // ========================================================================
-  // [PART 12 START] UI handlers – pills / accordion / drag drop / logout
-  // ========================================================================
-  const handleCycleAspect = () => {
-    setAspectIndex((prev) => {
-      const next = (prev + 1) % ASPECT_OPTIONS.length;
-      setPlatform(ASPECT_OPTIONS[next].platformKey);
-      return next;
-    });
-  };
+  // ==============================================
+// 12. UI helpers – aspect + uploads + logout
+// ==============================================
+const handleCycleAspect = () => {
+  setAspectIndex((prev) => {
+    const next = (prev + 1) % ASPECT_OPTIONS.length;
+    setPlatform(ASPECT_OPTIONS[next].platformKey);
+    return next;
+  });
+};
 
-  const togglePanel = (panel: UploadPanelKey) => {
-    if (!showPills) return;
-    setOpenPanel((prev) => (prev === panel ? null : panel));
-  };
+const openPanel = (key: PanelKey) => {
+  setActivePanel((prev) => {
+    if (prev === key) return null; // toggle close
+    return key;
+  });
+};
 
-  const handleToggleStyleStep = () => {
-    if (!showPills) return;
-    setStyleStepOpen((prev) => !prev);
-  };
+const hoverSelectPanel = (key: PanelKey) => {
+  // Only do hover-select when UI is visible (avoid weird "ghost" opening)
+  if (!showPills) return;
+  setActivePanel(key);
+};
 
-  // Full-page drag/drop (applies to the whole left side)
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!showPills) return;
+const capForPanel = (panel: UploadPanelKey) => {
+  if (panel === "inspiration") return 4;
+  return 1; // product + logo
+};
+
+const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
+  const max = capForPanel(panel);
+  const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
+  if (!incoming.length) return;
+
+  setUploads((prev) => {
+    const existing = prev[panel];
+    const remaining = Math.max(0, max - existing.length);
+    const slice = incoming.slice(0, remaining);
+
+    // product/logo should replace (only 1)
+    const base = panel === "inspiration" ? existing : [];
+
+    const nextItems: UploadItem[] = slice.map((file) => ({
+      id: `${panel}_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      url: URL.createObjectURL(file),
+      kind: "file",
+      file,
+    }));
+
+    return {
+      ...prev,
+      [panel]: [...base, ...nextItems].slice(0, max),
+    };
+  });
+};
+
+const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
+  const max = capForPanel(panel);
+
+  setUploads((prev) => {
+    const existing = prev[panel];
+
+    // product/logo should replace (only 1)
+    const base = panel === "inspiration" ? existing : [];
+
+    const next: UploadItem = {
+      id: `${panel}_url_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      url,
+      kind: "url",
+    };
+
+    return {
+      ...prev,
+      [panel]: [...base, next].slice(0, max),
+    };
+  });
+};
+
+const removeUploadItem = (panel: UploadPanelKey, id: string) => {
+  setUploads((prev) => {
+    const item = prev[panel].find((x) => x.id === id);
+    if (item?.kind === "file" && item.url.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(item.url);
+      } catch {
+        // ignore
+      }
+    }
+    return {
+      ...prev,
+      [panel]: prev[panel].filter((x) => x.id !== id),
+    };
+  });
+};
+
+const moveUploadItem = (panel: UploadPanelKey, from: number, to: number) => {
+  setUploads((prev) => {
+    const arr = [...prev[panel]];
+    if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return prev;
+    const [moved] = arr.splice(from, 1);
+    arr.splice(to, 0, moved);
+    return { ...prev, [panel]: arr };
+  });
+};
+
+const triggerPick = (panel: UploadPanelKey) => {
+  if (panel === "product") productInputRef.current?.click();
+  if (panel === "logo") logoInputRef.current?.click();
+  if (panel === "inspiration") inspirationInputRef.current?.click();
+};
+
+const handleFileInput = (panel: UploadPanelKey, e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = e.target.files;
+  if (files && files.length) addFilesToPanel(panel, files);
+  e.target.value = "";
+};
+
+// Whole-page drag/drop + paste (silent, no big text)
+useEffect(() => {
+  if (uiStage === 0) return;
+
+  const targetPanel: UploadPanelKey =
+    activePanel === "logo" ? "logo" : activePanel === "inspiration" ? "inspiration" : "product";
+
+  const onDragEnter = (e: DragEvent) => {
+    if (!e.dataTransfer) return;
+    if (!Array.from(e.dataTransfer.types || []).includes("Files")) return;
     e.preventDefault();
-    setDraggingUpload(true);
+    dragDepthRef.current += 1;
+    setGlobalDragging(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+  const onDragOver = (e: DragEvent) => {
+    if (!e.dataTransfer) return;
+    if (!Array.from(e.dataTransfer.types || []).includes("Files")) return;
     e.preventDefault();
-    setDraggingUpload(false);
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!showPills) return;
-    e.preventDefault();
-    setDraggingUpload(false);
-    const files = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-    if (!files.length) return;
-    addFilesToPanel(currentUploadTarget, files);
+  const onDragLeave = (e: DragEvent) => {
+    if (!e.dataTransfer) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setGlobalDragging(false);
   };
+
+  const onDrop = (e: DragEvent) => {
+    if (!e.dataTransfer) return;
+    if (!Array.from(e.dataTransfer.types || []).includes("Files")) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setGlobalDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length) addFilesToPanel(targetPanel, files);
+  };
+
+  const onPaste = (e: ClipboardEvent) => {
+    if (!e.clipboardData) return;
+
+    // image paste
+    const items = Array.from(e.clipboardData.items || []);
+    const imgItem = items.find((it) => it.type && it.type.startsWith("image/"));
+    if (imgItem) {
+      const file = imgItem.getAsFile();
+      if (file) {
+        e.preventDefault();
+        const list = {
+          0: file,
+          length: 1,
+          item: (i: number) => (i === 0 ? file : null),
+        } as unknown as FileList;
+        addFilesToPanel(targetPanel, list);
+        return;
+      }
+    }
+
+    // url paste (silent)
+    const text = e.clipboardData.getData("text/plain") || "";
+    const url = extractFirstHttpUrl(text);
+    if (url && /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) {
+      e.preventDefault();
+      addUrlToPanel(targetPanel, url);
+    }
+  };
+
+  window.addEventListener("dragenter", onDragEnter);
+  window.addEventListener("dragover", onDragOver);
+  window.addEventListener("dragleave", onDragLeave);
+  window.addEventListener("drop", onDrop);
+  window.addEventListener("paste", onPaste);
+
+  return () => {
+    window.removeEventListener("dragenter", onDragEnter);
+    window.removeEventListener("dragover", onDragOver);
+    window.removeEventListener("dragleave", onDragLeave);
+    window.removeEventListener("drop", onDrop);
+    window.removeEventListener("paste", onPaste);
+  };
+}, [uiStage, activePanel]);
+
+// Style hover-select + inline rename
+const getStyleLabel = (key: string, fallback: string) =>
+  (styleLabelOverrides[key] || fallback).trim() || fallback;
+
+const beginRenameStyle = (key: string, currentLabel: string) => {
+  setEditingStyleKey(key);
+  setEditingStyleValue(currentLabel);
+};
+
+const commitRenameStyle = () => {
+  if (!editingStyleKey) return;
+  const next = editingStyleValue.trim();
+  setStyleLabelOverrides((prev) => ({
+    ...prev,
+    [editingStyleKey]: next,
+  }));
+  setEditingStyleKey(null);
+  setEditingStyleValue("");
+};
+
+const cancelRenameStyle = () => {
+  setEditingStyleKey(null);
+  setEditingStyleValue("");
+};
+
+const deleteCustomStyle = (key: string) => {
+  setCustomStyles((prev) => prev.filter((s) => s.key !== key));
+  setStyleLabelOverrides((prev) => {
+    const copy = { ...prev };
+    delete copy[key];
+    return copy;
+  });
+  // if deleting selected, fall back to vintage
+  if (stylePresetKey === key) setStylePresetKey("vintage");
+};
+
 
   const handleChangeCustomer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1470,164 +1874,373 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   };
 
   const renderStudioLeft = () => {
-    const aspectIconUrl = ASPECT_ICON_URLS[currentAspect.key];
+  // pills are text-only (+ / ✓), except ratio pill keeps its icon
+  const pillBaseStyle = (index: number): React.CSSProperties => ({
+    transitionDelay: showPills ? `${index * 55}ms` : "0ms",
+  });
 
-    return (
-      <div
-        className={classNames("studio-left", draggingUpload && "drag-active")}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="studio-left-main">
-          {/* Input 1 */}
-          <div className="studio-input1-block">
-            {/* Pills slot (reserved height) */}
-            <div className="studio-pills-slot">
-              {showPills && (
-                <div className={classNames("studio-row", "studio-row--pills", "pills-visible")}>
-                  {/* Product */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", openPanel === "product" && "active")}
-                    onClick={() => togglePanel("product")}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon--square">
-                      {productHasMedia ? (
-                        <span className="studio-pill-check" aria-hidden="true">✓</span>
-                      ) : (
-                        <span className="studio-pill-plus" aria-hidden="true">+</span>
-                      )}
-                    </span>
-                    <span className="studio-pill-main">Product</span>
-                  </button>
+  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
 
-                  {/* Logo */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", openPanel === "logo" && "active")}
-                    onClick={() => togglePanel("logo")}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon--square">
-                      {logoHasMedia ? (
-                        <span className="studio-pill-check" aria-hidden="true">✓</span>
-                      ) : (
-                        <span className="studio-pill-plus" aria-hidden="true">+</span>
-                      )}
-                    </span>
-                    <span className="studio-pill-main">Logo</span>
-                  </button>
+  const allStyleCards: Array<{
+    key: string;
+    label: string;
+    thumb: string;
+    isCustom: boolean;
+  }> = [
+    ...STYLE_PRESETS.map((p) => ({
+      key: p.key,
+      label: getStyleLabel(p.key, p.label),
+      thumb: p.thumb,
+      isCustom: false,
+    })),
+    ...customStyles.map((s) => ({
+      key: s.key,
+      label: getStyleLabel(s.key, s.label),
+      thumb: s.thumbUrl,
+      isCustom: true,
+    })),
+  ];
 
-                  {/* Inspiration */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", openPanel === "inspiration" && "active")}
-                    onClick={() => togglePanel("inspiration")}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon--square">
-                      {inspirationHasMedia ? (
-                        <span className="studio-pill-check" aria-hidden="true">✓</span>
-                      ) : (
-                        <span className="studio-pill-plus" aria-hidden="true">+</span>
-                      )}
-                    </span>
-                    <span className="studio-pill-main">Inspiration</span>
-                  </button>
+  return (
+    <div className={classNames("studio-left", globalDragging && "drag-active")}>
+      <div className="studio-left-main">
+        {/* Input 1 */}
+        <div className="studio-input1-block">
+          {/* Pills slot (staggered + smooth) */}
+          <div className="studio-pills-slot">
+            <div className={classNames("studio-row", "studio-row--pills", "mina-slide", !showPills && "hidden")}>
+              {/* Product */}
+              <button
+                type="button"
+                className={classNames("studio-pill", activePanel === "product" && "active")}
+                style={pillBaseStyle(0)}
+                onMouseEnter={() => hoverSelectPanel("product")}
+                onClick={() => openPanel("product")}
+              >
+                <span className="studio-pill-main">Product</span>
+                <span aria-hidden="true">{plusOrTick(productCount)}</span>
+              </button>
 
-                  {/* Style */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", styleStepOpen && "active")}
-                    onClick={handleToggleStyleStep}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon--square">
-                      <span className="studio-pill-plus" aria-hidden="true">+</span>
-                    </span>
-                    <span className="studio-pill-main">Style</span>
-                  </button>
+              {/* Logo */}
+              <button
+                type="button"
+                className={classNames("studio-pill", activePanel === "logo" && "active")}
+                style={pillBaseStyle(1)}
+                onMouseEnter={() => hoverSelectPanel("logo")}
+                onClick={() => openPanel("logo")}
+              >
+                <span className="studio-pill-main">Logo</span>
+                <span aria-hidden="true">{plusOrTick(logoCount)}</span>
+              </button>
 
-                  {/* Aspect (ratio) — keep icon */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", "studio-pill--aspect")}
-                    onClick={handleCycleAspect}
-                  >
-                    <span className="studio-pill-icon">
-                      <img src={aspectIconUrl} alt={currentAspect.label} />
-                    </span>
-                    <span className="studio-pill-main">{currentAspect.label}</span>
-                    <span className="studio-pill-sub">{currentAspect.subtitle}</span>
-                  </button>
+              {/* Inspiration */}
+              <button
+                type="button"
+                className={classNames("studio-pill", activePanel === "inspiration" && "active")}
+                style={pillBaseStyle(2)}
+                onMouseEnter={() => hoverSelectPanel("inspiration")}
+                onClick={() => openPanel("inspiration")}
+              >
+                <span className="studio-pill-main">Inspiration</span>
+                <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
+              </button>
+
+              {/* Style (same system as others — NOT an extra step) */}
+              <button
+                type="button"
+                className={classNames("studio-pill", activePanel === "style" && "active")}
+                style={pillBaseStyle(3)}
+                onMouseEnter={() => hoverSelectPanel("style")}
+                onClick={() => openPanel("style")}
+              >
+                <span className="studio-pill-main">Style</span>
+                <span aria-hidden="true">✓</span>
+              </button>
+
+              {/* Ratio (keeps icon) */}
+              <button
+                type="button"
+                className={classNames("studio-pill", "studio-pill--aspect")}
+                style={pillBaseStyle(4)}
+                onClick={handleCycleAspect}
+              >
+                <span className="studio-pill-icon">
+                  <img
+                    src={ASPECT_ICON_URLS[currentAspect.key]}
+                    alt=""
+                  />
+                </span>
+                <span className="studio-pill-main">{currentAspect.label}</span>
+                <span className="studio-pill-sub">{currentAspect.subtitle}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Textarea (state zero shows only this) */}
+          <div className="studio-brief-block">
+            <div
+              className={classNames(
+                "studio-brief-shell",
+                briefHintVisible && "has-brief-hint"
+              )}
+              ref={briefShellRef}
+              onScroll={handleBriefScroll}
+            >
+              <textarea
+                className="studio-brief-input"
+                placeholder="Describe how you want your still life image to look like"
+                value={brief}
+                onChange={(e) => handleBriefChange(e.target.value)}
+                rows={4}
+              />
+              {briefHintVisible && (
+                <div className="studio-brief-hint">Describe more</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Panels (smooth open/close, no jumps) */}
+        <div className={classNames("mina-slide", !showPanels && "hidden")}>
+          <Collapse open={activePanel === "product"} delayMs={80}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add your product</div>
+
+              <button
+                type="button"
+                className="studio-plusbox"
+                onClick={() => triggerPick("product")}
+              >
+                {uploads.product.length ? null : <span aria-hidden="true">+</span>}
+              </button>
+
+              {!!uploads.product.length && (
+                <div className="studio-thumbs">
+                  {uploads.product.map((it) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      className="studio-thumb"
+                      onClick={() => removeUploadItem("product", it.id)}
+                      title="Click to delete"
+                    >
+                      <img src={it.url} alt="" />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
+          </Collapse>
 
-            {/* Brief */}
-            <div className="studio-brief-block">
-              <div
-                className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
-                ref={briefShellRef}
+          <Collapse open={activePanel === "logo"} delayMs={110}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add your logo</div>
+
+              <button
+                type="button"
+                className="studio-plusbox"
+                onClick={() => triggerPick("logo")}
               >
-                <textarea
-                  className="studio-brief-input"
-                  placeholder="Describe how you want your still life image to look like"
-                  value={brief}
-                  onChange={(e) => handleBriefChange(e.target.value)}
-                  rows={4}
-                />
+                {uploads.logo.length ? null : <span aria-hidden="true">+</span>}
+              </button>
 
-                {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
+              {!!uploads.logo.length && (
+                <div className="studio-thumbs">
+                  {uploads.logo.map((it) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      className="studio-thumb"
+                      onClick={() => removeUploadItem("logo", it.id)}
+                      title="Click to delete"
+                    >
+                      <img src={it.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Collapse>
+
+          <Collapse open={activePanel === "inspiration"} delayMs={140}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add inspiration</div>
+
+              <button
+                type="button"
+                className="studio-plusbox"
+                onClick={() => triggerPick("inspiration")}
+              >
+                {uploads.inspiration.length >= 4 ? null : <span aria-hidden="true">+</span>}
+              </button>
+
+              {!!uploads.inspiration.length && (
+                <div className="studio-thumbs">
+                  {uploads.inspiration.map((it, idx) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      className="studio-thumb"
+                      draggable
+                      onDragStart={() => {
+                        // store index in dataset
+                        (window as any).__minaDragIndex = idx;
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = Number((window as any).__minaDragIndex);
+                        const to = idx;
+                        if (Number.isFinite(from) && from !== to) {
+                          moveUploadItem("inspiration", from, to);
+                        }
+                        (window as any).__minaDragIndex = null;
+                      }}
+                      onClick={() => removeUploadItem("inspiration", it.id)}
+                      title="Click to delete • Drag to reorder"
+                    >
+                      <img src={it.url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Collapse>
+
+          <Collapse open={activePanel === "style"} delayMs={170}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Pick a style</div>
+
+              <div className="studio-style-row">
+                {allStyleCards.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={classNames(
+                      "studio-style-card",
+                      stylePresetKey === s.key && "active"
+                    )}
+                    onMouseEnter={() => setStylePresetKey(s.key)}
+                    onClick={() => setStylePresetKey(s.key)}
+                  >
+                    <div className="studio-style-thumb">
+                      <img src={s.thumb} alt="" />
+                    </div>
+
+                    {/* Inline rename (no new panel) */}
+                    <div
+                      className="studio-style-label"
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (s.isCustom) deleteCustomStyle(s.key);
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        beginRenameStyle(s.key, s.label);
+                      }}
+                    >
+                      {editingStyleKey === s.key ? (
+                        <input
+                          autoFocus
+                          value={editingStyleValue}
+                          onChange={(e) => setEditingStyleValue(e.target.value)}
+                          onBlur={commitRenameStyle}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRenameStyle();
+                            if (e.key === "Escape") cancelRenameStyle();
+                          }}
+                          style={{ width: 90 }}
+                        />
+                      ) : (
+                        s.label
+                      )}
+                    </div>
+                  </button>
+                ))}
+
+                {/* Create style (opens modal) */}
+                <button
+                  type="button"
+                  className={classNames("studio-style-card", "add")}
+                  onMouseEnter={() => {}}
+                  onClick={handleOpenCustomStylePanel}
+                >
+                  <div className="studio-style-thumb">
+                    <span aria-hidden="true">+</span>
+                  </div>
+                  <div className="studio-style-label">Create style</div>
+                </button>
               </div>
             </div>
-          </div>
+          </Collapse>
+        </div>
 
-          {/* Panels (accordion under textarea) */}
-          {showPills && (
-            <>
-              {openPanel === "product" && renderUploadPanel("product")}
-              {openPanel === "logo" && renderUploadPanel("logo")}
-              {openPanel === "inspiration" && renderUploadPanel("inspiration")}
-              {renderStyleStep()}
-            </>
-          )}
+        {/* Input 3 (always after typing starts; smooth) */}
+        <div className={classNames("mina-slide", !showControls && "hidden")}>
+          <button
+            type="button"
+            className="studio-vision-toggle"
+            onClick={() => setMinaVisionEnabled((prev) => !prev)}
+          >
+            Mina Vision Intelligence:{" "}
+            <span className="studio-vision-state">
+              {minaVisionEnabled ? "ON" : "OFF"}
+            </span>
+          </button>
 
-          {/* Input 3 (ALWAYS visible) */}
-          {renderInput3Always()}
-
-          {/* hidden file inputs */}
-          <input
-            ref={productInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={handleProductFileChange}
-          />
-          <input
-            ref={logoInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={handleLogoFileChange}
-          />
-          <input
-            ref={inspirationInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            style={{ display: "none" }}
-            onChange={handleInspirationFileChange}
-          />
-
-          {/* footer */}
-          <div className="studio-footer">
-            <button type="button" className="link-button subtle" onClick={() => setActiveTab("profile")}>
-              Profile
+          <div className="studio-create-block">
+            <button
+              type="button"
+              className={classNames("studio-create-link", !canCreateStill && "disabled")}
+              disabled={!canCreateStill}
+              onClick={handleGenerateStill}
+            >
+              {stillGenerating ? "Creating…" : "Create"}
             </button>
           </div>
+
+          {stillError && <div className="error-text">{stillError}</div>}
         </div>
+
+        {/* Hidden file inputs */}
+        <input
+          ref={productInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => handleFileInput("product", e)}
+        />
+        <input
+          ref={logoInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => handleFileInput("logo", e)}
+        />
+        <input
+          ref={inspirationInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => handleFileInput("inspiration", e)}
+        />
       </div>
-    );
-  };
+
+      {/* Profile button: bottom-left, no underline (CSS will handle) */}
+      <button
+        type="button"
+        className="studio-profile-float"
+        onClick={() => setActiveTab("profile")}
+      >
+        Profile
+      </button>
+    </div>
+  );
+};
+
   // ========================================================================
   // [PART 14 END]
   // ========================================================================
