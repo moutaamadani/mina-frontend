@@ -1595,17 +1595,9 @@ const deleteCustomStyle = (key: string) => {
           <Collapse open={activePanel === "product"} delayMs={80}>
             <div className="studio-panel">
               <div className="studio-panel-title">Add your product</div>
-
-              <button
-                type="button"
-                className="studio-plusbox"
-                onClick={() => triggerPick("product")}
-              >
-                {uploads.product.length ? null : <span aria-hidden="true">+</span>}
-              </button>
-
-              {!!uploads.product.length && (
-                <div className="studio-thumbs">
+          
+              <div className="studio-panel-row">
+                <div className="studio-thumbs studio-thumbs--inline">
                   {uploads.product.map((it) => (
                     <button
                       key={it.id}
@@ -1617,55 +1609,65 @@ const deleteCustomStyle = (key: string) => {
                       <img src={it.url} alt="" />
                     </button>
                   ))}
+          
+                  {/* Product: 1 image → once uploaded, + disappears */}
+                  {uploads.product.length === 0 && (
+                    <button
+                      type="button"
+                      className="studio-plusbox studio-plusbox--inline"
+                      onClick={() => triggerPick("product")}
+                      title="Add image"
+                    >
+                      <span aria-hidden="true">+</span>
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </Collapse>
+
 
           <Collapse open={activePanel === "logo"} delayMs={110}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add your logo</div>
-
-              <button
-                type="button"
-                className="studio-plusbox"
-                onClick={() => triggerPick("logo")}
-              >
-                {uploads.logo.length ? null : <span aria-hidden="true">+</span>}
-              </button>
-
-              {!!uploads.logo.length && (
-                <div className="studio-thumbs">
-                  {uploads.logo.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      onClick={() => removeUploadItem("logo", it.id)}
-                      title="Click to delete"
-                    >
-                      <img src={it.url} alt="" />
-                    </button>
-                  ))}
-                </div>
-              )}
+          <div className="studio-panel">
+            <div className="studio-panel-title">Add your logo</div>
+        
+            <div className="studio-panel-row">
+              <div className="studio-thumbs studio-thumbs--inline">
+                {uploads.logo.map((it) => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    className="studio-thumb"
+                    onClick={() => removeUploadItem("logo", it.id)}
+                    title="Click to delete"
+                  >
+                    <img src={it.url} alt="" />
+                  </button>
+                ))}
+        
+                {/* Logo: 1 image → once uploaded, + disappears */}
+                {uploads.logo.length === 0 && (
+                  <button
+                    type="button"
+                    className="studio-plusbox studio-plusbox--inline"
+                    onClick={() => triggerPick("logo")}
+                    title="Add image"
+                  >
+                    <span aria-hidden="true">+</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </Collapse>
+          </div>
+        </Collapse>
+
 
           <Collapse open={activePanel === "inspiration"} delayMs={140}>
             <div className="studio-panel">
               <div className="studio-panel-title">Add inspiration</div>
-
-              <button
-                type="button"
-                className="studio-plusbox"
-                onClick={() => triggerPick("inspiration")}
-              >
-                {uploads.inspiration.length >= 4 ? null : <span aria-hidden="true">+</span>}
-              </button>
-
-              {!!uploads.inspiration.length && (
-                <div className="studio-thumbs">
+          
+              <div className="studio-panel-row">
+                <div className="studio-thumbs studio-thumbs--inline">
                   {uploads.inspiration.map((it, idx) => (
                     <button
                       key={it.id}
@@ -1673,7 +1675,6 @@ const deleteCustomStyle = (key: string) => {
                       className="studio-thumb"
                       draggable
                       onDragStart={() => {
-                        // store index in dataset
                         (window as any).__minaDragIndex = idx;
                       }}
                       onDragOver={(e) => e.preventDefault()}
@@ -1692,10 +1693,23 @@ const deleteCustomStyle = (key: string) => {
                       <img src={it.url} alt="" />
                     </button>
                   ))}
+          
+                  {/* Inspiration: + stays and gets pushed right until limit */}
+                  {uploads.inspiration.length < 4 && (
+                    <button
+                      type="button"
+                      className="studio-plusbox studio-plusbox--inline"
+                      onClick={() => triggerPick("inspiration")}
+                      title="Add image"
+                    >
+                      <span aria-hidden="true">+</span>
+                    </button>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </Collapse>
+
 
           <Collapse open={activePanel === "style"} delayMs={170}>
             <div className="studio-panel">
