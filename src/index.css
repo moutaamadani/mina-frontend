@@ -635,6 +635,107 @@ video {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* ===========================================================
+   PATCH — uniform pill height + cleaner row alignment
+   =========================================================== */
+
+.studio-row--pills {
+  align-items: center;
+}
+
+.studio-pill {
+  min-height: 32px; /* all same height */
+}
+
+/* keep aspect pill same height too (reduce icon area slightly) */
+.studio-pill--aspect {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.studio-pill--aspect .studio-pill-icon {
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
+}
+
+.studio-pill--aspect .studio-pill-icon img {
+  width: 14px;
+  height: 14px;
+}
+
+/* ===========================================================
+   PATCH — panels inline row (thumbs + plus)
+   =========================================================== */
+
+.studio-panel-row {
+  display: flex;
+  align-items: center;
+}
+
+.studio-thumbs--inline {
+  margin-top: 0;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* plus behaves like a thumb in the row */
+.studio-plusbox--inline {
+  width: 72px;
+  height: 72px;
+}
+
+/* ===========================================================
+   PATCH — divider + padding above Vision/Create controls
+   =========================================================== */
+
+.studio-controls-divider {
+  border-top: 1px solid rgba(8, 10, 0, 0.08);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+/* ===========================================================
+   PATCH — placeholder typography
+   =========================================================== */
+
+.output-placeholder {
+  font-size: 10px;
+  color: rgba(8, 10, 0, 0.4);
+}
+
+/* ===========================================================
+   PATCH — mobile polish
+   =========================================================== */
+
+@media (max-width: 480px) {
+  .studio-header-overlay {
+    left: 16px;
+    right: 16px;
+    top: 14px;
+  }
+
+  .studio-left,
+  .studio-right {
+    padding: 72px 16px 24px;
+  }
+
+  .studio-plusbox,
+  .studio-plusbox--inline,
+  .studio-thumb,
+  .studio-style-thumb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .studio-brief-input {
+    font-size: 26px;
+    line-height: 1.08;
+  }
+}
 
 /* ✅ Smaller pills + font 12 */
 .studio-pill {
