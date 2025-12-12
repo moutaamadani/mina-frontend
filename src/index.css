@@ -1447,3 +1447,15 @@ video {
 .studio-dropzone {
   display: none !important;
 }
+/* ===========================================================
+   PATCH — Premium motion (studio only)
+   =========================================================== */
+
+.mina-studio-root .studio-pill,
+.mina-studio-root .studio-plusbox,
+.mina-studio-root .studio-thumb,
+.mina-studio-root .studio-style-card,
+.mina-studio-root .studio-output-click,
+.mina-studio-root .mina-slide {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
