@@ -900,21 +900,23 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
         aspectRatio: safeAspectRatio,
       };
 
-      // Forward product (http only)
-        const productUrl = uploads.product[0]?.url;
-        if (productUrl && isHttpUrl(productUrl)) {
-          payload.productImageUrl = productUrl;
-        }
-        
-        // Forward inspiration up to 4 (http only)
-        const inspirationUrls = uploads.inspiration
-          .map((u) => u.url)
-          .filter((u) => isHttpUrl(u))
-          .slice(0, 4);
-        
-        if (inspirationUrls.length) {
-          payload.styleImageUrls = inspirationUrls;
-        }
+      // Forward product (R2 first, then http only)
+            const productItem = uploads.product[0];
+            const productUrl = productItem?.remoteUrl || productItem?.url;
+            if (productUrl && isHttpUrl(productUrl)) {
+              payload.productImageUrl = productUrl;
+            }
+            
+            // Forward inspiration up to 4 (R2 first, then http only)
+            const inspirationUrls = uploads.inspiration
+              .map((u) => u.remoteUrl || u.url)
+              .filter((u) => isHttpUrl(u))
+              .slice(0, 4);
+            
+            if (inspirationUrls.length) {
+              payload.styleImageUrls = inspirationUrls;
+            }
+
 
 
       const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
@@ -932,15 +934,18 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 
       const data = (await res.json()) as EditorialResponse;
       const url = data.imageUrl || data.imageUrls?.[0];
-      if (!url) throw new Error("No image URL in Mina response.");
+            if (!url) throw new Error("No image URL in Mina response.");
+            
+            const storedUrl = await storeRemoteToR2(url, "generations");
+            
+            const item: StillItem = {
+              id: data.generationId || `still_${Date.now()}`,
+              url: storedUrl,
+              createdAt: new Date().toISOString(),
+              prompt: data.prompt || trimmed,
+              aspectRatio: currentAspect.ratio,
+            };
 
-      const item: StillItem = {
-        id: data.generationId || `still_${Date.now()}`,
-        url,
-        createdAt: new Date().toISOString(),
-        prompt: data.prompt || trimmed,
-        aspectRatio: currentAspect.ratio,
-      };
 
       setStillItems((prev) => [...prev, item]);
       setStillIndex((prev) => prev + 1);
@@ -1036,13 +1041,16 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
       const data = (await res.json()) as MotionResponse;
       const url = data.videoUrl;
       if (!url) throw new Error("No video URL in Mina response.");
-
+      
+      const storedUrl = await storeRemoteToR2(url, "motions");
+      
       const item: MotionItem = {
         id: data.generationId || `motion_${Date.now()}`,
-        url,
+        url: storedUrl,
         createdAt: new Date().toISOString(),
         prompt: data.prompt || motionDescription.trim(),
       };
+
 
       setMotionItems((prev) => [...prev, item]);
       setMotionIndex((prev) => prev + 1);
