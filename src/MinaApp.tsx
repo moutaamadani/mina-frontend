@@ -1805,11 +1805,6 @@ const renderStudioLeft = () => {
             </div>
           </div>
         </div>
-
-        <div className="studio-debug-line" style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
-          stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
-        </div>
-
         {/* Panels (smooth open/close, no jumps) */}
         <div className="mina-slide">
           <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
