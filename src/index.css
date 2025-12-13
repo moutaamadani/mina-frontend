@@ -1,1067 +1,184 @@
-/* src/index.css
-/* ===========================================================
-   0. Root + resets
-   =========================================================== */
+/* src/StudioRight.css */
 
-:root {
-  --mina-bg: #eeeee2; /* paper */
-  --mina-text: #080a00; /* black */
-  --mina-border-soft: rgba(8, 10, 0, 0.16);
-  --mina-border-strong: rgba(8, 10, 0, 0.32);
-  --mina-muted: rgba(8, 10, 0, 0.6);
-  --mina-anim-fade: 0.3s;
-  --mina-anim-slide: 0.45s;
-}
-
-/* Safari / iOS friendly viewport */
-html,
-body {
-  width: 100%;
-  min-height: 100vh;
-  min-height: 100dvh;
-  margin: 0;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: auto;
-  -webkit-text-size-adjust: 100%;
-  -webkit-font-smoothing: antialiased;
-}
-
-#root {
-  min-height: 100vh;
-  min-height: 100dvh;
-}
-
-/* reset */
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  background: var(--mina-bg);
-  color: var(--mina-text);
-  font-family: "Schibsted Grotesk", system-ui, -apple-system, BlinkMacSystemFont,
-    "SF Pro Text", sans-serif;
-  letter-spacing: -0.02em;
-}
-
-a {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 1px;
-}
-
-button {
-  transition: opacity 0.08s ease-out, transform 0.08s ease-out,
-    background 0.08s ease-out;
-}
-
-button:active {
-  opacity: 0.6;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border-radius: 0;
-}
-
-button {
-  cursor: pointer;
-  border: none;
-  padding: 0;
-  background: none;
-}
-
-button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
-img,
-video {
-  max-width: 100%;
-  height: auto;
-  display: block;
-}
-
-/* ===========================================================
-   1. Generic buttons / helpers
-   =========================================================== */
-
-.link-button,
-.primary-button,
-.secondary-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0;
-  border: none;
-  background: none;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-thickness: 1px;
-  font-size: 12px;
-}
-
-.primary-button {
-  font-weight: 600;
-  opacity: 0.9;
-}
-
-.primary-button:hover {
-  opacity: 1;
-}
-
-.primary-button:active {
-  opacity: 0.6;
-}
-
-.link-button,
-.secondary-button {
-  font-weight: 400;
-  opacity: 0.75;
-}
-
-.link-button:hover,
-.secondary-button:hover {
-  opacity: 0.9;
-}
-
-.link-button:active,
-.secondary-button:active {
-  opacity: 0.5;
-}
-
-.link-button.subtle {
-  font-size: 12px;
-  opacity: 0.6;
-}
-
-.link-button.subtle:hover {
-  opacity: 0.85;
-}
-
-.error-text {
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.8);
-}
-
-/* ===========================================================
-   GLOBAL: hide scrollbars (still scrollable)
-   =========================================================== */
-
-* {
-  scrollbar-width: none; /* Firefox */
-}
-
-*::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-}
-
-/* ===========================================================
-   fade / slide helpers
-   =========================================================== */
-
-.mina-fade,
-.fade-block {
-  transition: opacity var(--mina-anim-fade) ease-out;
-  opacity: 1;
-}
-
-.mina-fade.hidden,
-.fade-block.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.mina-fade.delay,
-.fade-block.delay {
-  transition-delay: 0.12s;
-}
-
-.mina-slide {
-  transition: opacity var(--mina-anim-slide) ease-out,
-    transform var(--mina-anim-slide) ease-out;
-  opacity: 1;
-  transform: translateY(0);
-  will-change: opacity, transform;
-}
-
-.mina-slide.hidden {
-  opacity: 0;
-  transform: translateY(-12px);
-  pointer-events: none;
-}
-
-/* ===========================================================
-   2. LOGIN LAYOUT  (UNCHANGED)
-   =========================================================== */
-
-.mina-auth-shell {
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  background: var(--mina-bg);
-  color: var(--mina-text);
+/* Right side NEVER scrolls */
+.studio-right {
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-}
 
-.mina-auth-left,
-.mina-auth-right {
-  flex: 1;
-  min-width: 0;
-}
-
-.mina-auth-left {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px 40px;
-  border-right: 1px solid var(--mina-border-soft);
-}
-
-.mina-auth-right {
-  background-image: url("https://cdn.shopify.com/s/files/1/0678/9254/3571/files/g-form-121277-appearance.imageUrl-mijzwt6a-cropped.jpg?v=1764402871");
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* brand + card + footer */
-
-.mina-auth-card {
-  width: 100%;
-  max-width: 420px;
   display: flex;
   flex-direction: column;
-  transform: translateY(-40px);
-}
 
-.mina-auth-brand {
-  position: absolute;
-  top: 16px;
-  left: 40px;
-}
-
-.mina-auth-brand img {
-  height: 18px;
-  display: block;
-}
-
-.mina-auth-footer {
-  position: absolute;
-  left: 40px;
-  bottom: 16px;
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.4);
-}
-
-/* auth copy */
-
-.mina-auth-title {
-  font-size: 18px;
-  margin: 0 0 4px;
-}
-
-.mina-auth-text {
-  font-size: 13px;
-  line-height: 1.4;
-  margin: 0;
-  max-width: 340px;
-  color: rgba(8, 10, 0, 0.3);
-}
-
-/* top back button */
-
-.mina-auth-back-wrapper {
-  margin-bottom: 4px;
-}
-
-.mina-auth-back {
-  display: inline-flex;
-  padding: 4px 0 4px;
-  border: none;
-  background: none;
-  cursor: pointer;
-}
-
-.mina-auth-back img {
-  width: 22px;
-  height: 22px;
-  display: block;
-  opacity: 0.5;
-  transition: opacity 0.2s ease-out;
-}
-
-.mina-auth-back:hover img {
-  opacity: 0.8;
-}
-
-.mina-auth-back:active img {
-  opacity: 0.4;
-}
-
-/* hero links */
-
-.mina-auth-actions {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.mina-auth-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   padding: 0;
-  border: none;
-  background: none;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-  cursor: pointer;
+  margin: 0;
 }
 
-.mina-auth-main {
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  opacity: 0.9;
-  text-decoration: underline;
-}
-
-.mina-auth-main:hover {
-  opacity: 1;
-}
-
-.mina-auth-main:active {
-  opacity: 0.6;
-}
-
-.mina-auth-main.small {
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  opacity: 0.85;
-}
-
-.mina-auth-main.small:hover {
-  opacity: 1;
-}
-
-.mina-auth-main.small:active {
-  opacity: 0.6;
-}
-
-.mina-auth-link.secondary {
-  text-decoration: none;
-  font-weight: 400;
-  opacity: 0.75;
-  font-size: 14px;
-}
-
-.mina-auth-link.secondary:hover {
-  opacity: 0.9;
-}
-
-.mina-auth-link.secondary:active {
-  opacity: 0.5;
-}
-
-/* stacked hero states */
-
-.mina-auth-stack {
-  margin-top: 4px;
+/* FULL BLEED grey surface (NO radius) */
+.studio-right-surface {
   position: relative;
-  height: 72px;
+  flex: 1 1 auto;
+  min-height: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+  border-radius: 0;
+
+  /* ✅ same “black opacity system” */
+  background: rgba(0, 0, 0, 0.06);
 }
 
-.fade-overlay.auth-panel {
+/* Stage 0 center text */
+.studio-empty-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Click surface (zones + zoom) */
+.studio-output-click {
+  width: 100%;
+  height: 100%;
+  display: block;
+
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+
+/* Frame is full size, NO radius */
+.studio-output-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Media fills surface (luxury cover) */
+.studio-output-media {
+  width: 100%;
+  height: 100%;
+  display: block;
+
+  object-fit: cover;
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), object-fit 0ms linear 0ms;
+}
+
+/* Click toggles to contain (scale down centered) */
+.studio-output-frame.is-contain .studio-output-media {
+  object-fit: contain;
+  transform: scale(0.92);
+}
+
+/* Dots overlay inside the image surface */
+.studio-dots-row {
   position: absolute;
   left: 0;
-  top: 0;
-  width: 100%;
-  opacity: 0;
-  pointer-events: none;
-}
+  right: 0;
+  bottom: 22px;
 
-/* base transition */
-
-.auth-panel {
-  transition: opacity var(--mina-anim-fade) ease-out,
-    transform var(--mina-anim-slide) ease-out;
-}
-
-/* google panel */
-
-.auth-panel--google.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-.auth-panel--google.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-12px);
-}
-
-/* email panel */
-
-.auth-panel--email.hidden {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(12px);
-}
-
-.auth-panel--email.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-  transition-delay: var(--mina-anim-fade);
-}
-
-/* check-email panel */
-
-.auth-panel--check.visible {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
-}
-
-/* email form */
-
-.mina-auth-form {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.mina-auth-label {
-  display: flex;
-  flex-direction: column;
-}
-
-.mina-auth-input {
-  border: none;
-  padding: 8px 0;
-  font-size: 24px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  background: transparent;
-  outline: none;
-  color: var(--mina-text);
-}
-
-.mina-auth-input::placeholder {
-  color: rgba(8, 10, 0, 0.3);
-  font-weight: 600;
-}
-
-.mina-auth-hint {
-  margin-top: 8px;
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.3);
-  max-width: 340px;
-}
-
-.mina-auth-error {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--mina-text);
-}
-
-/* responsive auth */
-
-@media (max-width: 960px) {
-  .mina-auth-shell {
-    flex-direction: column;
-  }
-
-  .mina-auth-left {
-    border-right: none;
-    border-bottom: 1px solid var(--mina-border-soft);
-  }
-
-  .mina-auth-right {
-    height: 260px;
-  }
-
-  .mina-auth-card {
-    max-width: 360px;
-    transform: translateY(-24px);
-  }
-
-  .mina-auth-brand {
-    left: 20px;
-    top: 16px;
-  }
-
-  .mina-auth-footer {
-    left: 20px;
-    bottom: 16px;
-  }
-}
-
-/* ===========================================================
-   3. STUDIO LAYOUT (50/50)
-   =========================================================== */
-
-.mina-studio-root {
-  background: var(--mina-bg);
-  color: var(--mina-text);
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  align-items: stretch;
   justify-content: center;
+  gap: 8px;
 }
 
-.studio-frame {
-  position: relative;
-  width: 100%;
-  max-width: 1440px;
-}
-
-/* header overlay over both columns */
-
-.studio-header-overlay {
-  position: absolute;
-  top: 24px;
-  left: 40px;
-  right: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  pointer-events: none;
-  font-size: 14px;
-}
-
-.studio-header-left,
-.studio-header-center,
-.studio-header-right {
-  pointer-events: auto;
-}
-
-.studio-logo-link {
-  font-size: 18px;
-  font-weight: 600;
-  text-decoration: none;
-  color: var(--mina-text);
-}
-
-.studio-header-center {
-  text-align: center;
-  opacity: 0.7;
-}
-
-.studio-header-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-/* main two-column body */
-
-.studio-body--two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  height: 100vh;
-  height: 100dvh;
-}
-
-/* left / right columns */
-
-.studio-left,
-.studio-right {
-  position: relative;
-  padding: 96px 64px 40px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* ✅ Whole-page drag highlight: NO outline, subtle darken */
-.studio-left.drag-active {
-  background: rgba(8, 10, 0, 0.02);
-}
-
-/* ✅ When dragging: plusbox becomes darker (10%) */
-.studio-left.drag-active .studio-plusbox {
-  background: rgba(8, 10, 0, 0.1);
-}
-
-/* center Input 1 + later blocks on the left */
-
-.studio-left-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.studio-input1-block {
-  margin-bottom: 10px;
-}
-
-/* Pills slot – keeps constant height so textarea never jumps */
-.studio-pills-slot {
-  min-height: 30px;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-}
-
-/* ===========================================================
-   3.2.b CUSTOM STYLE MODAL  (single source of truth)
-   =========================================================== */
-
-.mina-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(8, 10, 0, 0.18);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 40;
-}
-
-.mina-modal {
-  width: 100%;
-  max-width: 640px;
-  max-height: 80vh;
-  background: var(--mina-bg);
-  border: 1px solid rgba(8, 10, 0, 0.16);
-  padding: 16px 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.mina-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.mina-modal-close {
-  font-size: 12px;
-  text-decoration: underline;
-}
-
-.mina-modal-drop {
-  border: 1px dashed rgba(8, 10, 0, 0.4);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.mina-modal-drop-main {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-}
-
-.mina-modal-drop-help {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.mina-modal-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 6px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.mina-modal-thumb {
-  position: relative;
-  border: none;
-  padding: 0;
-  background: none;
+.studio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.35);
   cursor: pointer;
 }
 
-.mina-modal-thumb img {
-  width: 100%;
-  height: 80px;
-  object-fit: cover;
-  display: block;
+.studio-dot.active {
+  background: rgba(255, 255, 255, 0.85);
 }
 
-.mina-modal-thumb.hero {
-  outline: 2px solid rgba(8, 10, 0, 0.8);
-}
-
-.mina-modal-thumb-tag {
-  position: absolute;
-  left: 4px;
-  bottom: 4px;
-  padding: 2px 4px;
-  font-size: 10px;
-  background: rgba(8, 10, 0, 0.9);
-  color: #fdfdf6;
-}
-
-.mina-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.mina-modal-train {
-  border: none;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* ===========================================================
-   3.3 PROFILE
-   =========================================================== */
-
-.studio-profile-body {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  height: 100vh;
-  height: 100dvh;
-  padding: 96px 64px 40px;
-  gap: 40px;
-}
-
-.studio-profile-left {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.studio-profile-right {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.profile-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.profile-row.small {
-  font-size: 12px;
-}
-
-.profile-label {
-  width: 110px;
-  font-size: 12px;
-  color: rgba(8, 10, 0, 0.7);
-}
-
-.profile-value {
-  font-size: 14px;
-}
-
-.profile-inline-form {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.profile-input {
-  border: 1px solid rgba(8, 10, 0, 0.2);
-  padding: 4px 6px;
-  font-family: inherit;
-  font-size: 12px;
-  background: transparent;
-}
-
-.profile-history-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 8px;
-}
-
-.profile-history-card {
-  display: flex;
-  flex-direction: column;
-  text-decoration: none;
-  color: inherit;
-}
-
-.profile-history-thumb {
-  width: 100%;
-  height: 80px;
-  background: rgba(8, 10, 0, 0.06);
-}
-
-.profile-history-meta {
-  font-size: 11px;
-  margin-top: 4px;
-}
-
-.profile-history-type {
-  text-transform: uppercase;
-  opacity: 0.7;
-}
-
-.profile-history-time {
-  opacity: 0.6;
-}
-
-/* ===========================================================
-   4. Responsive studio
-   =========================================================== */
-
-@media (max-width: 960px) {
-  .studio-header-overlay {
-    top: 16px;
-    left: 20px;
-    right: 20px;
-  }
-
-  .studio-body--two-col {
-    grid-template-columns: minmax(0, 1fr);
-    height: auto;
-    min-height: 100vh;
-  }
-
- .studio-left,
-.studio-right {
+/* Feedback bar (beige) — NO radius, full width */
+.studio-feedback-bar {
   position: relative;
+  flex: 0 0 auto;
+
+  width: 100%;
+  padding: 18px 18px;
+
+  background: #cec2aa;
+  border-radius: 0;
+
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-  .studio-profile-body {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 96px 20px 40px;
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .studio-profile-float {
-    left: 20px;
-    bottom: 18px;
-  }
-}
-
-/* ===========================================================
-   OPTIONAL: in case any old dropzone remains in TSX, hide it
-   =========================================================== */
-.studio-dropzone {
-  display: none !important;
-}
-/* ===========================================================
-   PATCH — Premium motion (studio only)
-   =========================================================== */
-
-.mina-studio-root .studio-pill,
-.mina-studio-root .studio-plusbox,
-.mina-studio-root .studio-thumb,
-.mina-studio-root .studio-style-card,
-.mina-studio-root .studio-output-click,
-.mina-studio-root .mina-slide {
-  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-}
-/* ===========================================================
-   FINAL OVERRIDE — pills animation speed (single source of truth)
-   Put this at the very end of the file.
-   =========================================================== */
-
-.mina-studio-root .studio-pill {
-  transition:
-    background 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 360ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* ===========================================================
-   PATCH: Pills same height + panels always feel visible + drag overlay
-   =========================================================== */
-
-/* Make the pills row align perfectly */
-.studio-row--pills {
   align-items: center;
-}
-
-/* Force identical pill height (including the aspect pill) */
-.studio-pill {
-  height: 34px;
-  min-height: 34px;
-  white-space: nowrap;
-}
-
-/* The aspect pill was wrapping and becoming tall */
-.studio-pill--aspect {
-  height: 34px;
-  min-height: 34px;
-  white-space: nowrap;
-}
-
-/* Keep subtitle inline and small so it never wraps to a new line */
-.studio-pill--aspect .studio-pill-sub {
-  font-size: 11px;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-/* Whole-screen drag overlay (5% black) */
-.mina-drag-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.05);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 160ms ease-out;
-  z-index: 9999;
-}
-
-.mina-drag-overlay.show {
-  opacity: 1;
-}
-
-/* === PATCH: push left column content inward + stop bottom/left cropping === */
-.studio-left-main{
-  /* nudge content away from the viewport edges */
-   padding-left: 56px;
-  padding-bottom: 72px;
-
-  /* safety: if content grows, scroll instead of clipping */
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-/* extra safety: prevents the + tile from being clipped by parent wrappers */
-.studio-panel-row,
-.studio-thumbs--inline{
-  padding-left: 0px;
-  padding-bottom: 6px;
-  box-sizing: border-box;
-}
-/* === PATCH: Style selector not clipped + labels visible/clickable === */
-
-/* prevent Collapse/slide wrappers from clipping the label area */
-.mina-slide,
-.studio-panel{
-  overflow: visible !important;
-}
-
-/* nudge the whole panel content a bit so nothing is cut on the left */
-.studio-panel{
-  padding-left: 0px;
-  box-sizing: border-box;
-}
-
-/* style cards row: allow wrapping + no clipping */
-.studio-style-row{
-  display: flex;
-  flex-wrap: wrap;
   gap: 14px;
-  overflow: visible !important;
-  padding-bottom: 12px;
 }
 
-/* card must be allowed to grow to fit the label */
-.studio-style-card{
-  overflow: visible !important;
-  height: auto !important;
+/* “Speak to me” */
+.studio-feedback-input--compact {
+  flex: 1 1 auto;
+  height: 26px;
+
+  border: 0;
+  outline: none;
+  background: transparent;
+
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.85);
 }
 
-/* label must take space + be clickable */
-.studio-style-label{
-  display: block;
-  margin-top: 8px;
-  width: 80%;
-  max-width: 48px;          /* keep label aligned with thumb width */
-  white-space: normal;
-  word-break: break-word;
-  cursor: text;
-  pointer-events: auto;
-  position: relative;
-  z-index: 5;
+.studio-feedback-input--compact::placeholder {
+  color: rgba(0, 0, 0, 0.2);
+  font-weight: 700;
 }
 
-/* rename input should match thumbnail width */
-.studio-style-label input{
-  width: 80% !important;
-  max-width: 48px !important;
-  box-sizing: border-box;
+/* ✅ actions aligned right */
+.studio-feedback-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
 }
 
-
-/* ===== STUDIO LAYOUT: 60/40 ===== */
-.studio-header-overlay {
-  z-index: 50; /* keep header buttons above the full-bleed right surface */
-}
-
-.studio-body--two-col {
-  display: flex;
-  height: 100vh;
-  height: 100dvh;
-}
-
-.studio-left {
-  flex: 0 0 60%;
-  max-width: 60%;
-  min-width: 0;
-}
-
-.studio-right {
-  flex: 0 0 40%;
-  max-width: 40%;
-  min-width: 0;
-}
-
-/* ===========================================================
-   HEADER CTAs — bold, no underline (match StudioRight "Send")
-   (ONLY affects buttons we tag with .studio-header-cta)
-   =========================================================== */
-.studio-header-cta {
+/* ✅ Like / Download / Send = same vibe as old Send */
+.studio-action-btn {
   border: 0;
   background: transparent;
-  padding: 0;
+  cursor: pointer;
 
   font-weight: 700;
   font-size: 13px;
   color: rgba(0, 0, 0, 0.9);
 
-  text-decoration: none !important;
-  text-underline-offset: 0;
-  text-decoration-thickness: 0;
-
-  cursor: pointer;
+  text-decoration: none; /* ✅ no underline */
 }
 
-.studio-header-cta:hover {
-  opacity: 0.9;
-}
-
-.studio-header-cta:active {
-  opacity: 0.6;
-}
-
-.studio-header-cta:disabled {
+.studio-action-btn:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+.studio-action-btn.is-on {
+  color: var(--mina-accent, #858e47);
+}
+
+/* Error (if any) floats above bar without changing layout */
+.studio-feedback-error {
+  position: absolute;
+  left: 18px;
+  top: -18px;
+
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
 }
