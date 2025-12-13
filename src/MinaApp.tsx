@@ -1643,7 +1643,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // [PART 13 END]
   // ========================================================================
 
-  // ========================================================================
+ // ========================================================================
 // [PART 14 START] Render – LEFT side (Input1 + pills + panels + style + Input3)
 // ========================================================================
 const renderStudioLeft = () => {
@@ -1651,25 +1651,13 @@ const renderStudioLeft = () => {
     transitionDelay: showPills ? `${PILL_INITIAL_DELAY_MS + index * PILL_STAGGER_MS}ms` : "0ms",
   });
 
+  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
   const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
 
-  // hover = same as click (only after typing started)
   const hoverOpenPanel = (p: PanelKey) => {
     if (uiStage === 0) return;
     openPanel(p);
   };
-
-  // pill left thumb (product/logo/first inspiration) OR "+" if empty
-  const thumbUrlFor = (k: "product" | "logo" | "inspiration") => {
-    const arr = uploads[k];
-    if (!arr || arr.length === 0) return null;
-    const it = arr[0];
-    return it.remoteUrl || it.url || null;
-  };
-
-  const productThumb = thumbUrlFor("product");
-  const logoThumb = thumbUrlFor("logo");
-  const inspirationThumb = thumbUrlFor("inspiration");
 
   const allStyleCards: Array<{
     key: string;
@@ -1691,10 +1679,81 @@ const renderStudioLeft = () => {
     })),
   ];
 
-  // > 4 styles (excluding "Create style") => horizontal carousel
-  const styleCount = STYLE_PRESETS.length + customStyles.length;
-  const useStyleCarousel = styleCount > 4;
+  // ------------------------------------------------------------
+  // Auto-hide LOWER area with timing:
+  // - When typing continuously: after 2s it hides
+  // - When idle (no typing): after 2s it shows back
+  // ------------------------------------------------------------
+  type MinaLowerAutoState = {
+    lastAt: number;
+    hideT: number | null;
+    idleT: number | null;
+  };
 
+  const getLeftRoot = (): HTMLElement | null => {
+    const node = briefShellRef.current as HTMLElement | null;
+    return (node?.closest?.(".studio-left") as HTMLElement | null) ?? null;
+  };
+
+  const getAutoState = (): MinaLowerAutoState => {
+    const w = window as any;
+    if (!w.__minaLowerAutoState) {
+      w.__minaLowerAutoState = { lastAt: 0, hideT: null, idleT: null } as MinaLowerAutoState;
+    }
+    return w.__minaLowerAutoState as MinaLowerAutoState;
+  };
+
+  const clearTimer = (t: number | null) => {
+    if (t != null) window.clearTimeout(t);
+  };
+
+  const forceShowLowerNow = () => {
+    const root = getLeftRoot();
+    if (root) root.removeAttribute("data-lower-hidden");
+
+    const st = getAutoState();
+    clearTimer(st.hideT);
+    clearTimer(st.idleT);
+    st.hideT = null;
+    st.idleT = null;
+  };
+
+  const pulseTyping = () => {
+    const root = getLeftRoot();
+    if (!root) return;
+
+    const st = getAutoState();
+    st.lastAt = Date.now();
+
+    clearTimer(st.idleT);
+    st.idleT = window.setTimeout(() => {
+      st.idleT = null;
+      root.removeAttribute("data-lower-hidden");
+      clearTimer(st.hideT);
+      st.hideT = null;
+    }, 2000);
+
+    const alreadyHidden = root.getAttribute("data-lower-hidden") === "1";
+    if (!alreadyHidden && st.hideT == null) {
+      st.hideT = window.setTimeout(() => {
+        st.hideT = null;
+
+        const now = Date.now();
+        const activeEl = document.activeElement as HTMLElement | null;
+        const isBriefFocused = !!activeEl?.classList?.contains("studio-brief-input");
+        const stillActivelyTyping = now - st.lastAt < 450;
+
+        if (isBriefFocused && stillActivelyTyping) {
+          root.setAttribute("data-lower-hidden", "1");
+        }
+      }, 2000);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // Smooth Panels (NO JUMP):
+  // max-height + opacity + translate (same vibe as Create)
+  // ------------------------------------------------------------
   const productOpen = showPanels && (effectivePanel === "product" || activePanel === null);
   const logoOpen = showPanels && activePanel === "logo";
   const inspirationOpen = showPanels && activePanel === "inspiration";
@@ -1710,7 +1769,7 @@ const renderStudioLeft = () => {
     children: React.ReactNode;
   }) => (
     <div
-      className={classNames("mina-panel-wrap", "mina-slide", open && "show")}
+      className={classNames("mina-panel-wrap", open && "show")}
       style={{
         transitionDelay: open ? `${PANEL_REVEAL_DELAY_MS}ms` : "0ms",
         ["--minaPanelMax" as any]: `${maxH}px`,
@@ -1720,16 +1779,29 @@ const renderStudioLeft = () => {
     </div>
   );
 
-  const PillLeft = ({ thumb }: { thumb: string | null }) => (
-    <span className="studio-pill-left" aria-hidden="true">
-      {thumb ? <img className="studio-pill-thumb" src={thumb} alt="" /> : <span className="studio-pill-plus">+</span>}
-    </span>
-  );
-
   return (
     <div className={classNames("studio-left", globalDragging && "drag-active")}>
       <style>{`
-        /* Panels: premium smooth (no jump) */
+        /* Premium hide/show wrapper */
+        .mina-lower-wrap {
+          overflow: hidden;
+          max-height: 1400px;
+          opacity: 1;
+          transform: translateY(0);
+          transition:
+            max-height 520ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 260ms ease,
+            transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+          will-change: max-height, opacity, transform;
+        }
+        .studio-left[data-lower-hidden="1"] .mina-lower-wrap {
+          max-height: 0px;
+          opacity: 0;
+          transform: translateY(-10px);
+          pointer-events: none;
+        }
+
+        /* Smooth panels (NO JUMP) */
         .mina-panel-wrap{
           overflow: hidden;
           max-height: 0px;
@@ -1752,66 +1824,28 @@ const renderStudioLeft = () => {
           transform: translateY(0);
         }
 
-        /* Pills: left icon/thumb, no right +/✓ */
-        .studio-pill{
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-        }
-        .studio-pill-left{
-          width: 22px;
-          height: 22px;
-          border-radius: 6px;
-          overflow: hidden;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: rgba(0,0,0,0.06);
-          flex: 0 0 22px;
-        }
-        .studio-pill-thumb{
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-        .studio-pill-plus{
-          font-weight: 700;
-          font-size: 16px;
-          line-height: 1;
-          opacity: 0.9;
-        }
-
-        /* Prevent left crop on panels + keep consistent padding */
+        /* Prevent left crop in panel rows */
         .studio-panel,
         .studio-thumbs,
-        .studio-style-row{
+        .studio-style-row {
+          margin-left: 0 !important;
           padding-left: 12px !important;
           padding-right: 12px !important;
           box-sizing: border-box !important;
         }
 
-        /* Styles: single-row, fixed height; carousel only when >4 styles */
-        .studio-style-row{
+        /* Style cards layout (wrap nicely) */
+        .studio-style-row {
           display: flex;
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
           gap: 18px;
           align-items: flex-start;
-          overflow-y: hidden;
-          padding-bottom: 8px;
+          overflow: visible !important;
         }
-        .studio-style-row.no-scroll{
-          overflow-x: hidden;
-          justify-content: flex-start;
-        }
-        .studio-style-row.carousel{
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-          scroll-behavior: smooth;
-        }
+        .studio-style-card { flex: 0 0 auto; }
 
-        /* Labels: centered, one line under thumb; rename input full width */
-        .studio-style-label{
+        /* Label under thumbnail: centered, one line, ellipsis */
+        .studio-style-label {
           width: 100%;
           margin-top: 8px;
           text-align: center;
@@ -1821,7 +1855,7 @@ const renderStudioLeft = () => {
           line-height: 16px;
           height: 16px;
         }
-        .studio-style-label input{
+        .studio-style-label input {
           width: 100% !important;
           box-sizing: border-box !important;
           height: 18px;
@@ -1829,7 +1863,7 @@ const renderStudioLeft = () => {
           padding: 0 6px;
         }
 
-        /* Profile positioning */
+        /* Profile button position */
         .studio-profile-float{
           left: 40px !important;
           bottom: 16px !important;
@@ -1838,11 +1872,9 @@ const renderStudioLeft = () => {
 
       <div className="studio-left-main">
         {/* Input 1 */}
-        <div className={classNames("studio-input1-block", "mina-slide")}>
-          {/* Pills slot */}
+        <div className="studio-input1-block">
           <div className="studio-pills-slot">
             <div className={classNames("studio-row", "studio-row--pills", "mina-slide", !showPills && "hidden")}>
-              {/* Product */}
               <button
                 type="button"
                 className={classNames("studio-pill", effectivePanel === "product" && "active")}
@@ -1850,11 +1882,10 @@ const renderStudioLeft = () => {
                 onMouseEnter={() => hoverOpenPanel("product")}
                 onClick={() => openPanel("product")}
               >
-                <PillLeft thumb={productThumb} />
                 <span className="studio-pill-main">Product</span>
+                <span aria-hidden="true">{plusOrTick(productCount)}</span>
               </button>
 
-              {/* Logo */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "logo" && "active")}
@@ -1862,11 +1893,10 @@ const renderStudioLeft = () => {
                 onMouseEnter={() => hoverOpenPanel("logo")}
                 onClick={() => openPanel("logo")}
               >
-                <PillLeft thumb={logoThumb} />
                 <span className="studio-pill-main">Logo</span>
+                <span aria-hidden="true">{plusOrTick(logoCount)}</span>
               </button>
 
-              {/* Inspiration */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "inspiration" && "active")}
@@ -1874,11 +1904,10 @@ const renderStudioLeft = () => {
                 onMouseEnter={() => hoverOpenPanel("inspiration")}
                 onClick={() => openPanel("inspiration")}
               >
-                <PillLeft thumb={inspirationThumb} />
                 <span className="studio-pill-main">Inspiration</span>
+                <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
               </button>
 
-              {/* Style */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "style" && "active")}
@@ -1887,9 +1916,9 @@ const renderStudioLeft = () => {
                 onClick={() => openPanel("style")}
               >
                 <span className="studio-pill-main">Style</span>
+                <span aria-hidden="true">✓</span>
               </button>
 
-              {/* Ratio (keeps icon) */}
               <button
                 type="button"
                 className={classNames("studio-pill", "studio-pill--aspect")}
@@ -1905,8 +1934,7 @@ const renderStudioLeft = () => {
             </div>
           </div>
 
-          {/* Textarea */}
-          <div className={classNames("studio-brief-block", "mina-slide")}>
+          <div className="studio-brief-block">
             <div
               className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
               ref={briefShellRef}
@@ -1916,7 +1944,12 @@ const renderStudioLeft = () => {
                 className="studio-brief-input"
                 placeholder="Describe how you want your still life image to look like"
                 value={brief}
-                onChange={(e) => handleBriefChange(e.target.value)}
+                onFocus={() => pulseTyping()}
+                onBlur={() => forceShowLowerNow()}
+                onChange={(e) => {
+                  handleBriefChange(e.target.value);
+                  pulseTyping();
+                }}
                 rows={4}
               />
               {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
@@ -1924,203 +1957,208 @@ const renderStudioLeft = () => {
           </div>
         </div>
 
-        {/* Panels */}
-        <div className="mina-slide">
-          <MinaPanel open={productOpen} maxH={420}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add your product</div>
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.product.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      onClick={() => removeUploadItem("product", it.id)}
-                      title="Click to delete"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-                  {uploads.product.length === 0 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("product")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </MinaPanel>
-
-          <MinaPanel open={logoOpen} maxH={420}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add your logo</div>
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.logo.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      onClick={() => removeUploadItem("logo", it.id)}
-                      title="Click to delete"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-                  {uploads.logo.length === 0 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("logo")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </MinaPanel>
-
-          <MinaPanel open={inspirationOpen} maxH={520}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add inspiration</div>
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.inspiration.map((it, idx) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      draggable
-                      onDragStart={() => {
-                        (window as any).__minaDragIndex = idx;
-                      }}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const from = Number((window as any).__minaDragIndex);
-                        const to = idx;
-                        if (Number.isFinite(from) && from !== to) {
-                          moveUploadItem("inspiration", from, to);
-                        }
-                        (window as any).__minaDragIndex = null;
-                      }}
-                      onClick={() => removeUploadItem("inspiration", it.id)}
-                      title="Click to delete • Drag to reorder"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-                  {uploads.inspiration.length < 4 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("inspiration")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </MinaPanel>
-
-          <MinaPanel open={styleOpen} maxH={320}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Pick a style</div>
-
-              <div className={classNames("studio-style-row", useStyleCarousel ? "carousel" : "no-scroll")}>
-                {allStyleCards.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    className={classNames("studio-style-card", "mina-slide", stylePresetKey === s.key && "active")}
-                    onMouseEnter={() => setStylePresetKey(s.key)}
-                    onClick={() => setStylePresetKey(s.key)}
-                    title={s.label}
-                  >
-                    <div className="studio-style-thumb">
-                      <img src={s.thumb} alt="" />
-                    </div>
-
-                    {/* Rename for ALL styles; delete only custom */}
-                    <div
-                      className="studio-style-label"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        beginRenameStyle(s.key, s.label);
-                      }}
-                      onDoubleClick={(e) => {
-                        if (!s.isCustom) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                        deleteCustomStyle(s.key);
-                      }}
-                    >
-                      {editingStyleKey === s.key ? (
-                        <input
-                          autoFocus
-                          value={editingStyleValue}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={(e) => setEditingStyleValue(e.target.value)}
-                          onBlur={commitRenameStyle}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitRenameStyle();
-                            if (e.key === "Escape") cancelRenameStyle();
-                          }}
-                        />
-                      ) : (
-                        s.label
-                      )}
-                    </div>
-                  </button>
-                ))}
-
-                {/* Create style */}
-                <button
-                  type="button"
-                  className={classNames("studio-style-card", "mina-slide", "add")}
-                  onClick={handleOpenCustomStylePanel}
-                >
-                  <div className="studio-style-thumb">
-                    <span aria-hidden="true">+</span>
-                  </div>
-                  <div className="studio-style-label">Create style</div>
-                </button>
-              </div>
-            </div>
-          </MinaPanel>
-        </div>
-
-        {/* Create area (placement stays stable) */}
-        <div className={classNames("mina-slide", !showControls && "hidden")}>
-          <div className="studio-controls-divider" />
-
-          <button type="button" className="studio-vision-toggle" onClick={() => setMinaVisionEnabled((prev) => !prev)}>
-            Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
-          </button>
-
-          <div className="studio-create-block mina-slide">
-            <button
-              type="button"
-              className={classNames("studio-create-link", !canCreateStill && "disabled")}
-              disabled={!canCreateStill}
-              onClick={handleGenerateStill}
-            >
-              {stillGenerating ? "Creating…" : "Create"}
-            </button>
+        {/* BELOW auto-hides + smooth */}
+        <div className="mina-lower-wrap">
+          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
+            stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
           </div>
 
-          {stillError && <div className="error-text">{stillError}</div>}
+          {/* Panels (smooth) */}
+          <div className="mina-slide">
+            <MinaPanel open={productOpen} maxH={420}>
+              <div className="studio-panel">
+                <div className="studio-panel-title">Add your product</div>
+                <div className="studio-panel-row">
+                  <div className="studio-thumbs studio-thumbs--inline">
+                    {uploads.product.map((it) => (
+                      <button
+                        key={it.id}
+                        type="button"
+                        className="studio-thumb"
+                        onClick={() => removeUploadItem("product", it.id)}
+                        title="Click to delete"
+                      >
+                        <img src={it.remoteUrl || it.url} alt="" />
+                      </button>
+                    ))}
+                    {uploads.product.length === 0 && (
+                      <button
+                        type="button"
+                        className="studio-plusbox studio-plusbox--inline"
+                        onClick={() => triggerPick("product")}
+                        title="Add image"
+                      >
+                        <span aria-hidden="true">+</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </MinaPanel>
+
+            <MinaPanel open={logoOpen} maxH={420}>
+              <div className="studio-panel">
+                <div className="studio-panel-title">Add your logo</div>
+                <div className="studio-panel-row">
+                  <div className="studio-thumbs studio-thumbs--inline">
+                    {uploads.logo.map((it) => (
+                      <button
+                        key={it.id}
+                        type="button"
+                        className="studio-thumb"
+                        onClick={() => removeUploadItem("logo", it.id)}
+                        title="Click to delete"
+                      >
+                        <img src={it.remoteUrl || it.url} alt="" />
+                      </button>
+                    ))}
+                    {uploads.logo.length === 0 && (
+                      <button
+                        type="button"
+                        className="studio-plusbox studio-plusbox--inline"
+                        onClick={() => triggerPick("logo")}
+                        title="Add image"
+                      >
+                        <span aria-hidden="true">+</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </MinaPanel>
+
+            <MinaPanel open={inspirationOpen} maxH={520}>
+              <div className="studio-panel">
+                <div className="studio-panel-title">Add inspiration</div>
+                <div className="studio-panel-row">
+                  <div className="studio-thumbs studio-thumbs--inline">
+                    {uploads.inspiration.map((it, idx) => (
+                      <button
+                        key={it.id}
+                        type="button"
+                        className="studio-thumb"
+                        draggable
+                        onDragStart={() => {
+                          (window as any).__minaDragIndex = idx;
+                        }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const from = Number((window as any).__minaDragIndex);
+                          const to = idx;
+                          if (Number.isFinite(from) && from !== to) {
+                            moveUploadItem("inspiration", from, to);
+                          }
+                          (window as any).__minaDragIndex = null;
+                        }}
+                        onClick={() => removeUploadItem("inspiration", it.id)}
+                        title="Click to delete • Drag to reorder"
+                      >
+                        <img src={it.remoteUrl || it.url} alt="" />
+                      </button>
+                    ))}
+                    {uploads.inspiration.length < 4 && (
+                      <button
+                        type="button"
+                        className="studio-plusbox studio-plusbox--inline"
+                        onClick={() => triggerPick("inspiration")}
+                        title="Add image"
+                      >
+                        <span aria-hidden="true">+</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </MinaPanel>
+
+            <MinaPanel open={styleOpen} maxH={1200}>
+              <div className="studio-panel">
+                <div className="studio-panel-title">Pick a style</div>
+                <div className="studio-style-row">
+                  {allStyleCards.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
+                      onMouseEnter={() => setStylePresetKey(s.key)}
+                      onClick={() => setStylePresetKey(s.key)}
+                      title={s.label}
+                    >
+                      <div className="studio-style-thumb">
+                        <img src={s.thumb} alt="" />
+                      </div>
+
+                      <div
+                        className="studio-style-label"
+                        onClick={(e) => {
+                          if (!s.isCustom) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          beginRenameStyle(s.key, s.label);
+                        }}
+                        onDoubleClick={(e) => {
+                          if (!s.isCustom) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteCustomStyle(s.key);
+                        }}
+                      >
+                        {editingStyleKey === s.key ? (
+                          <input
+                            autoFocus
+                            value={editingStyleValue}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setEditingStyleValue(e.target.value)}
+                            onBlur={commitRenameStyle}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") commitRenameStyle();
+                              if (e.key === "Escape") cancelRenameStyle();
+                            }}
+                          />
+                        ) : (
+                          s.label
+                        )}
+                      </div>
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    className={classNames("studio-style-card", "add")}
+                    onClick={handleOpenCustomStylePanel}
+                  >
+                    <div className="studio-style-thumb">
+                      <span aria-hidden="true">+</span>
+                    </div>
+                    <div className="studio-style-label">Create style</div>
+                  </button>
+                </div>
+              </div>
+            </MinaPanel>
+          </div>
+
+          {/* Create area */}
+          <div className={classNames("mina-slide", !showControls && "hidden")}>
+            <div className="studio-controls-divider" />
+
+            <button type="button" className="studio-vision-toggle" onClick={() => setMinaVisionEnabled((prev) => !prev)}>
+              Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
+            </button>
+
+            <div className="studio-create-block">
+              <button
+                type="button"
+                className={classNames("studio-create-link", !canCreateStill && "disabled")}
+                disabled={!canCreateStill}
+                onClick={handleGenerateStill}
+              >
+                {stillGenerating ? "Creating…" : "Create"}
+              </button>
+            </div>
+
+            {stillError && <div className="error-text">{stillError}</div>}
+          </div>
         </div>
 
         {/* Hidden file inputs */}
@@ -2148,8 +2186,7 @@ const renderStudioLeft = () => {
         />
       </div>
 
-      {/* Profile button */}
-      <button type="button" className="studio-profile-float mina-slide" onClick={() => setActiveTab("profile")}>
+      <button type="button" className="studio-profile-float" onClick={() => setActiveTab("profile")}>
         Profile
       </button>
     </div>
@@ -2159,6 +2196,7 @@ const renderStudioLeft = () => {
 // ========================================================================
 // [PART 14 END]
 // ========================================================================
+
 
 
 
