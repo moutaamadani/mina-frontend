@@ -1,190 +1,205 @@
-// =============================================================
-// FILE: src/StudioRight.tsx
-// =============================================================
-import React, { useEffect, useMemo, useState } from "react";
-import "./StudioRight.css";
+/* ============================================================= */
+/* FILE: src/StudioRight.css                                     */
+/* ============================================================= */
 
-type StillItem = { id: string; url: string };
-type MotionItem = { id: string; url: string };
+/* Right side NEVER scrolls */
+.studio-right {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 
-type StudioRightProps = {
-  currentStill: StillItem | null;
-  currentMotion: MotionItem | null;
+  display: flex;
+  flex-direction: column;
 
-  stillItems: StillItem[];
-  stillIndex: number;
-  setStillIndex: (i: number) => void;
+  padding: 0;
+  margin: 0;
+}
 
-  feedbackText: string;
-  setFeedbackText: (v: string) => void;
-  feedbackSending: boolean;
-  feedbackError: string | null;
-  onSubmitFeedback: () => void;
-};
+/* FULL BLEED grey surface (NO radius) */
+.studio-right-surface {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
 
-export default function StudioRight(props: StudioRightProps) {
-  const {
-    currentStill,
-    currentMotion,
-    stillItems,
-    stillIndex,
-    setStillIndex,
-    feedbackText,
-    setFeedbackText,
-    feedbackSending,
-    feedbackError,
-    onSubmitFeedback,
-  } = props;
+  width: 100%;
+  height: 100%;
 
-  const isEmpty = !currentStill && !currentMotion;
+  overflow: hidden;
+  border-radius: 0;
 
-  const media = useMemo(() => {
-    if (currentMotion) return { type: "video" as const, url: currentMotion.url };
-    if (currentStill) return { type: "image" as const, url: currentStill.url };
-    return null;
-  }, [currentMotion, currentStill]);
+  /* ✅ same “black opacity system” */
+  background: rgba(0, 0, 0, 0.06);
+}
 
-  // Center click = zoom toggle (cover <-> contain)
-  const [containMode, setContainMode] = useState(false);
+/* ✅ NEW: top-right actions row */
+.studio-right-top-actions {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
 
-  // Reset zoom when switching media
-  useEffect(() => {
-    setContainMode(false);
-  }, [media?.url]);
+/* ✅ same styling spirit as Send: bold, no underline */
+.studio-right-cta {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 
-  const hasCarousel = stillItems.length > 1;
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
 
-  const goPrev = () => {
-    if (!hasCarousel) return;
-    const n = stillItems.length;
-    setStillIndex((stillIndex - 1 + n) % n);
-  };
+  text-decoration: none !important;
+}
 
-  const goNext = () => {
-    if (!hasCarousel) return;
-    const n = stillItems.length;
-    setStillIndex((stillIndex + 1) % n);
-  };
+.studio-right-cta:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
 
-  // ✅ Click zones:
-  // - left 18% => previous
-  // - right 18% => next
-  // - middle => zoom toggle
-  const handleFrameClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
-    if (!media) return;
+.studio-right-cta:active {
+  opacity: 0.6;
+}
 
-    const target = e.currentTarget;
-    const rect = target.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = rect.width > 0 ? x / rect.width : 0.5;
+/* Stage 0 center text */
+.studio-empty-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 
-    const EDGE = 0.18;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  pointer-events: none;
+}
 
-    if (hasCarousel && pct <= EDGE) {
-      goPrev();
-      return;
-    }
-    if (hasCarousel && pct >= 1 - EDGE) {
-      goNext();
-      return;
-    }
+/* Click surface (zones + zoom) */
+.studio-output-click {
+  width: 100%;
+  height: 100%;
+  display: block;
 
-    setContainMode((v) => !v);
-  };
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
 
-  const canSend = !feedbackSending && feedbackText.trim().length > 0;
+/* Frame is full size, NO radius */
+.studio-output-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
 
-  // ✅ Right-side buttons (Like + Download) styled like "Send"
-  const handleLike = () => {
-    if (!media) return;
-    if (feedbackSending) return;
+  overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+}
 
-    // If user hasn't typed anything, prefill a minimal like phrase and send
-    if (!feedbackText.trim()) {
-      setFeedbackText("more of this");
-      setTimeout(() => onSubmitFeedback(), 0);
-      return;
-    }
+/* Media fills surface (luxury cover) */
+.studio-output-media {
+  width: 100%;
+  height: 100%;
+  display: block;
 
-    onSubmitFeedback();
-  };
+  object-fit: cover;
+  transform: scale(1);
+  transform-origin: center;
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), object-fit 0ms linear 0ms;
+}
 
-  const handleDownload = () => {
-    if (!media) return;
+/* Click toggles to contain (scale down centered) */
+.studio-output-frame.is-contain .studio-output-media {
+  object-fit: contain;
+  transform: scale(0.92);
+}
 
-    const a = document.createElement("a");
-    a.href = media.url;
-    a.download = "mina-output";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
+/* Dots overlay inside the image surface */
+.studio-dots-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
 
-  return (
-    <div className="studio-right">
-      <div className="studio-right-surface">
-        {/* ✅ top-right actions */}
-        {!isEmpty && (
-          <div className="studio-right-top-actions">
-            <button type="button" className="studio-right-cta" onClick={handleLike} disabled={feedbackSending}>
-              ♡ more of this
-            </button>
-            <button type="button" className="studio-right-cta" onClick={handleDownload} disabled={!media}>
-              Download
-            </button>
-          </div>
-        )}
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
 
-        {isEmpty ? (
-          <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
-        ) : (
-          <>
-            <button type="button" className="studio-output-click" onClick={handleFrameClick} aria-label="Toggle zoom / Navigate">
-              <div className={`studio-output-frame ${containMode ? "is-contain" : ""}`}>
-                {media?.type === "video" ? (
-                  <video className="studio-output-media" src={media.url} autoPlay loop muted controls />
-                ) : (
-                  <img className="studio-output-media" src={media?.url || ""} alt="" />
-                )}
-              </div>
-            </button>
+.studio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
 
-            {hasCarousel && (
-              <div className="studio-dots-row">
-                {stillItems.map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`studio-dot ${idx === stillIndex ? "active" : ""}`}
-                    onClick={() => setStillIndex(idx)}
-                    aria-label={`Go to image ${idx + 1}`}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+.studio-dot.active {
+  background: rgba(255, 255, 255, 0.85);
+}
 
-      {!isEmpty && (
-        <div className="studio-feedback-bar">
-          <input
-            className="studio-feedback-input--compact"
-            placeholder="Speak to me tell me, what you like and dislike about my generation"
-            value={feedbackText}
-            onChange={(e) => setFeedbackText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && canSend) onSubmitFeedback();
-            }}
-          />
+/* Feedback bar (beige) — NO radius, full width */
+.studio-feedback-bar {
+  position: relative;
+  flex: 0 0 auto;
 
-          <button type="button" className="studio-feedback-send" onClick={onSubmitFeedback} disabled={!canSend}>
-            Send
-          </button>
+  width: 100%;
+  padding: 18px 18px;
 
-          {feedbackError && <div className="studio-feedback-error">{feedbackError}</div>}
-        </div>
-      )}
-    </div>
-  );
+  background: #cec2aa;
+  border-radius: 0;
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* ✅ “Speak to me” = 16pt bold, black 20% opacity (placeholder) */
+.studio-feedback-input--compact {
+  flex: 1 1 auto;
+  height: 26px;
+
+  border: 0;
+  outline: none;
+  background: transparent;
+
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.studio-feedback-input--compact::placeholder {
+  color: rgba(0, 0, 0, 0.2);
+  font-weight: 700;
+}
+
+/* Send bold, and disabled = lower opacity */
+.studio-feedback-send {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
+}
+
+.studio-feedback-send:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+/* Error (if any) floats above bar without changing layout */
+.studio-feedback-error {
+  position: absolute;
+  left: 18px;
+  top: -18px;
+
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
 }
