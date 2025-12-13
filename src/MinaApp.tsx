@@ -346,62 +346,84 @@ function extractFirstHttpUrl(text: string) {
  * Smooth open/close without "display:none" jumps.
  * (CSS can style inside; TSX handles the height animation.)
  */
+/**
+ * ✅ Stable Collapse (no unmounting, no timers, no “panels disappear”)
+ * - Keeps children mounted (so state doesn’t “fight”)
+ * - Uses maxHeight + opacity + transform for smooth open/close
+ * - Ignores delayMs so panel switches are instant (no 520ms “nothing happens”)
+ */
 const Collapse: React.FC<{
   open: boolean;
-  delayMs?: number;
+  delayMs?: number; // kept for compatibility with your call sites
   children: React.ReactNode;
 }> = ({ open, delayMs = 0, children }) => {
   const innerRef = useRef<HTMLDivElement | null>(null);
-  const [mounted, setMounted] = useState(open);
-  const [height, setHeight] = useState<number | "auto">(open ? "auto" : 0);
-
-  useEffect(() => {
-    if (open) setMounted(true);
-  }, [open]);
+  const [maxH, setMaxH] = useState<number>(open ? 1000 : 0);
 
   useLayoutEffect(() => {
+    // use delayMs so linters don't complain, but we intentionally don't delay panel switches
+    void delayMs;
+
     const el = innerRef.current;
     if (!el) return;
 
-    const D = 650;
+    let raf1 = 0;
+    let raf2 = 0;
+    let ro: ResizeObserver | null = null;
+
+    const measure = () => {
+      // scrollHeight is the real content height
+      const h = el.scrollHeight || 0;
+      setMaxH(h);
+    };
 
     if (open) {
-      const h = el.scrollHeight;
-      setHeight(h);
-      const t = window.setTimeout(() => setHeight("auto"), D + delayMs);
-      return () => window.clearTimeout(t);
+      // Measure now + next frame (handles images/fonts)
+      measure();
+      raf1 = requestAnimationFrame(measure);
+
+      // Track content changes while open
+      if (typeof ResizeObserver !== "undefined") {
+        ro = new ResizeObserver(() => measure());
+        ro.observe(el);
+      }
+
+      return () => {
+        if (raf1) cancelAnimationFrame(raf1);
+        if (raf2) cancelAnimationFrame(raf2);
+        if (ro) ro.disconnect();
+      };
     }
 
-    const current = el.scrollHeight;
-    setHeight(current);
-
-    const raf = requestAnimationFrame(() => setHeight(0));
-    const t = window.setTimeout(() => setMounted(false), D);
+    // Closing: lock current height then animate to 0 next frame
+    setMaxH(el.scrollHeight || 0);
+    raf2 = requestAnimationFrame(() => setMaxH(0));
 
     return () => {
-      cancelAnimationFrame(raf);
-      window.clearTimeout(t);
+      if (raf1) cancelAnimationFrame(raf1);
+      if (raf2) cancelAnimationFrame(raf2);
+      if (ro) ro.disconnect();
     };
   }, [open, delayMs]);
-
-  if (!mounted) return null;
 
   return (
     <div
       style={{
         overflow: "hidden",
-        height,
+        maxHeight: open ? maxH : 0,
         opacity: open ? 1 : 0,
         transform: open ? "translateY(0)" : "translateY(-6px)",
+        pointerEvents: open ? "auto" : "none",
         transition:
-          "height 650ms cubic-bezier(0.16,1,0.3,1), opacity 650ms cubic-bezier(0.16,1,0.3,1), transform 650ms cubic-bezier(0.16,1,0.3,1)",
-        transitionDelay: open ? `${delayMs}ms` : "0ms",
+          "max-height 650ms cubic-bezier(0.16,1,0.3,1), opacity 650ms cubic-bezier(0.16,1,0.3,1), transform 650ms cubic-bezier(0.16,1,0.3,1)",
+        transitionDelay: "0ms",
       }}
     >
       <div ref={innerRef}>{children}</div>
     </div>
   );
 };
+
 
 // ============================================================================
 // [PART 4 START] Component
