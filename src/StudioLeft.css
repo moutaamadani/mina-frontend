@@ -1,6 +1,4 @@
-/* ============================================================= */
-/* FILE: src/StudioLeft.css                                      */
-/* ============================================================= */
+/* src/StudioLeft.css */
 /* ==========================================================================
    Mina Studio — LEFT SIDE ONLY
    - NO rounded corners
@@ -21,38 +19,6 @@
   flex-direction: column;
   justify-content: center;
   min-height: 0;
-}
-
-/* ✅ NEW: topbar toggle row */
-.studio-left-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-bottom: 10px;
-}
-
-.studio-left-cta {
-  border: 0;
-  background: transparent;
-  padding: 0;
-
-  font-weight: 700;
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.9);
-
-  text-decoration: none !important;
-  cursor: pointer;
-}
-
-.studio-left-cta-state {
-  margin-left: 6px;
-  font-weight: 700;
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.35);
-}
-
-.studio-left-cta-state.on {
-  color: #858e47; /* ✅ green accent */
 }
 
 /* Drag subtle darken (no outline) */
@@ -262,13 +228,7 @@
   align-items: center;
 }
 
-.studio-empty-inline {
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.35);
-  padding: 6px 0;
-}
-
-/* plus box — black 5%, NO border, NO round */
+/* plus box */
 .studio-plusbox {
   width: 72px;
   height: 72px;
@@ -298,7 +258,7 @@
   opacity: 0.85;
 }
 
-/* uploaded photo — NO border, NO round */
+/* uploaded photo */
 .studio-thumb {
   width: 72px;
   height: 72px;
@@ -324,11 +284,6 @@
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-/* ✅ NEW: selected thumb in animate mode uses green (not black) */
-.studio-thumb.is-selected {
-  outline: 1px solid #858e47;
 }
 
 /* ------------------------------------------
@@ -376,8 +331,17 @@
   font-size: 18px;
 }
 
+/* ✅ selection accent = green, never black */
 .studio-style-card.active .studio-style-thumb {
-  outline: 1px solid rgba(8, 10, 0, 0.7);
+  outline: 1px solid var(--mina-accent, #858e47);
+}
+
+/* motion thumb (text) */
+.studio-motion-thumb {
+  background: rgba(8, 10, 0, 0.06);
+  font-weight: 700;
+  font-size: 16px;
+  color: rgba(8, 10, 0, 0.75);
 }
 
 .studio-style-label {
@@ -404,19 +368,6 @@
   width: 110px;
 }
 
-/* ✅ NEW: motion style selection uses GREEN, never black */
-.studio-motion-style-card .studio-motion-style-thumb {
-  background: rgba(8, 10, 0, 0.05);
-}
-
-.studio-motion-style-card.active .studio-style-thumb {
-  outline: 1px solid #858e47;
-}
-
-.studio-motion-style-card.active .studio-motion-style-label {
-  color: #858e47;
-}
-
 /* ------------------------------------------
    Controls
 ------------------------------------------ */
@@ -428,6 +379,31 @@
   border-top: 1px solid rgba(8, 10, 0, 0.08);
   margin-top: 14px;
   padding-top: 14px;
+}
+
+/* ✅ Animate toggle (bold, no underline) */
+.studio-animate-toggle {
+  margin-top: 12px;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+
+  text-decoration: none; /* ✅ */
+  cursor: pointer;
+
+  opacity: 0.9;
+}
+
+.studio-animate-toggle .studio-animate-state {
+  color: rgba(8, 10, 0, 0.65);
+}
+
+.studio-animate-toggle.on .studio-animate-state {
+  color: var(--mina-accent, #858e47);
 }
 
 .studio-vision-toggle {
@@ -468,7 +444,7 @@
   cursor: default;
 }
 
-/* “Describe more” state (same palette, no new colors) */
+/* “Describe more” state */
 .studio-create-link.state-describe {
   opacity: 0.6;
 }
