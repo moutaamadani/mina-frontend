@@ -2,7 +2,7 @@
 // ============================================================================
 // [PART 1 START] Imports & environment
 // ============================================================================
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
 
@@ -209,6 +209,11 @@ const REPLICATE_ASPECT_RATIO_MAP: Record<string, string> = {
   "1:1": "1:1",
 };
 
+const ADMIN_EMAILS = (import.meta.env.VITE_MINA_ADMIN_EMAILS || "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
 const STYLE_PRESETS = [
   {
     key: "vintage",
@@ -274,6 +279,32 @@ function formatTime(ts?: string | null) {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return ts;
   return d.toLocaleString();
+}
+
+function formatDateOnly(ts?: string | null) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function padEditorialNumber(value: number | string) {
+  const clean = typeof value === "number" ? value : Number(value);
+  if (Number.isFinite(clean)) {
+    return clean.toString().padStart(2, "0");
+  }
+  return String(value).trim() || "00";
+}
+
+function toPreviewUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has("w")) parsed.searchParams.set("w", "900");
+    if (!parsed.searchParams.has("auto")) parsed.searchParams.set("auto", "format");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 function safeIsHttpUrl(url: string) {
@@ -374,6 +405,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
   const [briefFocused, setBriefFocused] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   // -------------------------
   // 4.2 Health / credits / session
@@ -487,6 +520,27 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyGenerations, setHistoryGenerations] = useState<GenerationRecord[]>([]);
   const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>([]);
+  const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
+  const [numberMap, setNumberMap] = useState<Record<string, string>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem("minaProfileNumberMap") : null;
+      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
+  const [editingNumberValue, setEditingNumberValue] = useState("");
+  const [brandingLeft, setBrandingLeft] = useState({
+    title: "MINA AI",
+    accent: "Taste",
+    handle: "@mina.editorial.ai",
+  });
+  const [brandingRight, setBrandingRight] = useState({
+    handle: "@madani_branding",
+    note: "Trained by Madani",
+  });
+  const [brandingEditing, setBrandingEditing] = useState<"left" | "right" | null>(null);
 
   // -------------------------
   // 4.5 Upload refs / drag state
@@ -517,6 +571,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [customStyleTraining, setCustomStyleTraining] = useState(false);
   const [customStyleError, setCustomStyleError] = useState<string | null>(null);
   const customStyleInputRef = useRef<HTMLInputElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const [customPresets, setCustomPresets] = useState<CustomStylePreset[]>(() => {
     if (typeof window === "undefined") return [];
@@ -555,12 +610,58 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [animateMode]);
 
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("minaProfileNumberMap", JSON.stringify(numberMap));
+      }
+    } catch {
+      // ignore
+    }
+  }, [numberMap]);
+
+  useEffect(() => {
+    setVisibleHistoryCount(20);
+  }, [historyGenerations]);
+
+  useEffect(() => {
+    if (activeTab !== "profile") return undefined;
+    const target = loadMoreRef.current;
+    if (!target) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleHistoryCount((count) =>
+            Math.min(historyGenerations.length, count + Math.max(10, Math.floor(count * 0.2)))
+          );
+        }
+      },
+      { rootMargin: "1200px 0px 1200px 0px" }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeTab, historyGenerations.length]);
+
   // ========================================================================
   // [PART 5 START] Derived values (the “rules” you requested)
   // ========================================================================
   const briefLength = brief.trim().length;
   const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
+  const historyIndexMap = useMemo(
+    () =>
+      historyGenerations.reduce<Record<string, number>>((acc, item, idx) => {
+        acc[item.id] = idx;
+        return acc;
+      }, {}),
+    [historyGenerations]
+  );
+  const visibleHistory = useMemo(
+    () => historyGenerations.slice(0, Math.min(visibleHistoryCount, historyGenerations.length)),
+    [historyGenerations, visibleHistoryCount]
+  );
 
   // UI stages
   const showPills = uiStage >= 1;
@@ -721,6 +822,28 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   }, [customerId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const hydrateUser = async () => {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (cancelled) return;
+        const email = (data.user?.email || customerId || "").toLowerCase();
+        setCurrentUserEmail(email || null);
+        setIsAdmin(email ? ADMIN_EMAILS.includes(email) : false);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      }
+    };
+
+    void hydrateUser();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [customerId]);
+
+  useEffect(() => {
     if (!API_BASE_URL || !customerId) return;
 
     const bootstrap = async () => {
@@ -854,6 +977,52 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       setHistoryLoading(false);
     }
   };
+  
+  const getEditorialNumber = (id: string, index: number) => {
+    const fallback = padEditorialNumber(index + 1);
+    const custom = numberMap[id];
+    return custom ? custom : fallback;
+  };
+
+  const handleBeginEditNumber = (id: string, index: number) => {
+    if (!isAdmin) return;
+    setEditingNumberId(id);
+    setEditingNumberValue(getEditorialNumber(id, index));
+  };
+
+  const handleCommitNumber = () => {
+    if (!editingNumberId) return;
+    const cleaned = editingNumberValue.trim();
+    setNumberMap((prev) => ({ ...prev, [editingNumberId]: cleaned || padEditorialNumber(cleaned) }));
+    setEditingNumberId(null);
+    setEditingNumberValue("");
+  };
+
+  const handleCancelNumberEdit = () => {
+    setEditingNumberId(null);
+    setEditingNumberValue("");
+  };
+
+  const handleDownloadGeneration = (item: GenerationRecord, label: string) => {
+    const link = document.createElement("a");
+    link.href = item.outputUrl;
+    link.download = `mina-v3-prompt-${label || item.id}`;
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleBrandingChange = (side: "left" | "right", field: string, value: string) => {
+    if (side === "left") {
+      setBrandingLeft((prev) => ({ ...prev, [field]: value }));
+    } else {
+      setBrandingRight((prev) => ({ ...prev, [field]: value }));
+    }
+  };
+
+  const stopBrandingEdit = () => setBrandingEditing(null);
   // ========================================================================
   // [PART 7 END]
   // ========================================================================
@@ -1877,67 +2046,227 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
 
   // ========================================================================
-  // [PART 17 START] Profile body (unchanged)
+  // [PART 17 START] Profile body – editorial history
   // ========================================================================
-  const renderProfileBody = () => (
-    <div className="studio-profile-body">
-      <div className="studio-profile-left">
-        <h2>Profile</h2>
+  const renderProfileBody = () => {
+    const expirationCandidate =
+      (credits?.meta as any)?.expiresAt ||
+      (credits?.meta as any)?.expirationDate ||
+      (credits?.meta as any)?.expiry ||
+      (credits?.meta as any)?.expiration;
+    const expirationLabel = formatDateOnly(expirationCandidate);
 
-        <div className="profile-row">
-          <div className="profile-label">Customer ID</div>
-          <form onSubmit={handleChangeCustomer} className="profile-inline-form">
-            <input className="profile-input" value={customerIdInput} onChange={(e) => setCustomerIdInput(e.target.value)} />
-            <button type="submit" className="link-button primary-button">
-              Switch
-            </button>
-          </form>
+    const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
+
+    const renderNumberBadge = (g: GenerationRecord) => {
+      const idx = historyIndexMap[g.id] ?? 0;
+      const value = getEditorialNumber(g.id, idx);
+      const isEditing = editingNumberId === g.id;
+      return (
+        <div
+          className="profile-card-number"
+          onDoubleClick={() => handleBeginEditNumber(g.id, idx)}
+          title={isAdmin ? "Double-click to edit" : undefined}
+        >
+          {isEditing ? (
+            <input
+              autoFocus
+              className="profile-card-number-input"
+              value={editingNumberValue}
+              onChange={(e) => setEditingNumberValue(e.target.value)}
+              onBlur={handleCommitNumber}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCommitNumber();
+                if (e.key === "Escape") handleCancelNumberEdit();
+              }}
+            />
+          ) : (
+            <span>{value}</span>
+          )}
         </div>
+      );
+    };
 
-        <div className="profile-row">
-          <div className="profile-label">Credits</div>
-          <div className="profile-value">{credits ? credits.balance : "—"}</div>
-        </div>
+    const renderCard = (g: GenerationRecord, i: number) => {
+      const idx = historyIndexMap[g.id] ?? i;
+      const variant = editorialVariants[idx % editorialVariants.length];
+      const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
+      const numberLabel = getEditorialNumber(g.id, idx);
+      return (
+        <article key={g.id} className={`profile-card profile-card--${variant}`}>
+          {renderNumberBadge(g)}
+          <div
+            className="profile-card-media"
+            style={{ aspectRatio: aspectStyle }}
+            onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
+          >
+            <img
+              src={toPreviewUrl(g.outputUrl)}
+              loading="lazy"
+              decoding="async"
+              alt={g.prompt}
+              referrerPolicy="no-referrer"
+            />
+            <div className="profile-card-actions">
+              <button
+                type="button"
+                className="link-button subtle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownloadGeneration(g, numberLabel);
+                }}
+              >
+                Download
+              </button>
+              <a
+                className="link-button subtle"
+                href={g.outputUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Open
+              </a>
+            </div>
+          </div>
+          <div className="profile-card-meta">
+            <div className="profile-card-prompt">{g.prompt || "Untitled prompt"}</div>
+            <div className="profile-card-submeta">
+              <span>{formatDateOnly(g.createdAt)}</span>
+              <span>{g.type}</span>
+            </div>
+          </div>
+        </article>
+      );
+    };
 
-        <div className="profile-row">
-          <a href={TOPUP_URL} target="_blank" rel="noreferrer" className="link-button primary-button">
-            Add credits
-          </a>
-        </div>
-
-        <div className="profile-row">
-          <button type="button" className="link-button subtle" onClick={handleSignOut}>
-            Sign out
-          </button>
-        </div>
-
-        <div className="profile-row small">
-          <button type="button" className="link-button subtle" onClick={() => setActiveTab("studio")}>
-            ← Back to studio
-          </button>
-        </div>
-      </div>
-
-      <div className="studio-profile-right">
-        <h3>Recent generations</h3>
-        {historyLoading && <div>Loading history…</div>}
-        {historyError && <div className="error-text">{historyError}</div>}
-        {!historyLoading && !historyGenerations.length && <div>No history yet.</div>}
-
-        <div className="profile-history-grid">
-          {historyGenerations.map((g) => (
-            <a key={g.id} href={g.outputUrl} target="_blank" rel="noreferrer" className="profile-history-card">
-              <div className="profile-history-thumb" />
-              <div className="profile-history-meta">
-                <div className="profile-history-type">{g.type}</div>
-                <div className="profile-history-time">{formatTime(g.createdAt)}</div>
+    return (
+      <div className="profile-editorial-shell">
+        <header className="profile-header">
+          <div className="profile-header-left">
+            <div className="profile-header-label">Profile</div>
+            <div className="profile-meta-row">
+              <button
+                type="button"
+                className="profile-cta"
+                onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
+              >
+                Get more Matchas
+              </button>
+              <div className="profile-meta-block">
+                <span className="profile-meta-title">Matchas remaining</span>
+                <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
               </div>
-            </a>
-          ))}
+              <div className="profile-meta-block">
+                <span className="profile-meta-title">Expiration date</span>
+                <span className="profile-meta-value">{expirationLabel}</span>
+              </div>
+            </div>
+          </div>
+          <div className="profile-header-right">
+            {isAdmin && (
+              <button
+                type="button"
+                className="profile-cta ghost"
+                onClick={() => (window.location.href = "/admin")}
+              >
+                Admin
+              </button>
+            )}
+            <button type="button" className="profile-cta ghost" onClick={handleSignOut}>
+              Sign out
+            </button>
+          </div>
+        </header>
+
+        <section className="profile-editorial">
+          <div
+            className="profile-editorial-block"
+            onClick={() => setBrandingEditing("left")}
+            role="presentation"
+          >
+            {brandingEditing === "left" ? (
+              <div className="profile-editorial-edit">
+                <input
+                  className="profile-editorial-input big"
+                  value={brandingLeft.title}
+                  onChange={(e) => handleBrandingChange("left", "title", e.target.value)}
+                  onBlur={stopBrandingEdit}
+                  autoFocus
+                />
+                <input
+                  className="profile-editorial-input big"
+                  value={brandingLeft.accent}
+                  onChange={(e) => handleBrandingChange("left", "accent", e.target.value)}
+                  onBlur={stopBrandingEdit}
+                />
+                <input
+                  className="profile-editorial-input"
+                  value={brandingLeft.handle}
+                  onChange={(e) => handleBrandingChange("left", "handle", e.target.value)}
+                  onBlur={stopBrandingEdit}
+                />
+              </div>
+            ) : (
+              <div className="profile-editorial-text">
+                <div className="profile-editorial-kicker">{brandingLeft.handle}</div>
+                <div className="profile-editorial-title">{brandingLeft.title}</div>
+                <div className="profile-editorial-accent">{brandingLeft.accent}</div>
+              </div>
+            )}
+          </div>
+
+          <div
+            className="profile-editorial-block profile-editorial-block--right"
+            onClick={() => setBrandingEditing("right")}
+            role="presentation"
+          >
+            {brandingEditing === "right" ? (
+              <div className="profile-editorial-edit">
+                <input
+                  className="profile-editorial-input"
+                  value={brandingRight.handle}
+                  onChange={(e) => handleBrandingChange("right", "handle", e.target.value)}
+                  onBlur={stopBrandingEdit}
+                  autoFocus
+                />
+                <input
+                  className="profile-editorial-input"
+                  value={brandingRight.note}
+                  onChange={(e) => handleBrandingChange("right", "note", e.target.value)}
+                  onBlur={stopBrandingEdit}
+                />
+              </div>
+            ) : (
+              <div className="profile-editorial-text align-right">
+                <div className="profile-editorial-kicker">{brandingRight.handle}</div>
+                <div className="profile-editorial-note">{brandingRight.note}</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="profile-gallery">
+          <div className="profile-gallery-head">
+            <div className="profile-gallery-title">History</div>
+            <div className="profile-gallery-sub">{historyGenerations.length} pieces</div>
+          </div>
+          {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
+          {historyError && <div className="profile-gallery-status error-text">{historyError}</div>}
+          {!historyLoading && !historyGenerations.length && <div className="profile-gallery-status">No history yet.</div>}
+
+          <div className="profile-grid">
+            {visibleHistory.map((g, i) => renderCard(g, i))}
+          </div>
+          <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
+        </section>
+
+        <div className="profile-bottom-nav">
+          <button type="button" className="profile-cta" onClick={() => setActiveTab("studio")}>Studio</button>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
   // ========================================================================
   // [PART 17 END]
   // ========================================================================
