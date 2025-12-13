@@ -1583,3 +1583,26 @@ video {
   max-width: 48px !important;
   box-sizing: border-box;
 }
+
+/* ===== MINA LAYOUT OVERRIDE: 70/30 ===== */
+.studio-header-overlay {
+  z-index: 50; /* keep header buttons above the full-bleed right surface */
+}
+
+.studio-body--two-col {
+  display: flex;
+}
+
+.studio-left {
+  flex: 0 0 70%;
+  max-width: 70%;
+  min-width: 0;
+}
+
+.studio-right {
+  flex: 0 0 30%;
+  max-width: 30%;
+  min-width: 0;
+}
+/* ===== END ===== */
+
