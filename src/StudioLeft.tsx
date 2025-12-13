@@ -75,6 +75,10 @@ type StudioLeftProps = {
   currentAspectIconUrl: string;
   onCycleAspect: () => void;
 
+  animateAspect?: AspectOptionLike;
+  animateAspectIconUrl?: string;
+  animateAspectIconRotated?: boolean;
+
   uploads: Record<UploadPanelKey, UploadItem[]>;
   uploadsPending: boolean;
 
@@ -121,8 +125,12 @@ type StudioLeftProps = {
   animateMode?: boolean;
   onToggleAnimateMode?: (next: boolean) => void;
 
-  motionStyleKey?: MotionStyleKey;
-  setMotionStyleKey?: (k: MotionStyleKey) => void;
+  motionStyleKeys?: MotionStyleKey[];
+  setMotionStyleKeys?: (k: MotionStyleKey[]) => void;
+
+  motionSuggesting?: boolean;
+  canCreateMotion?: boolean;
+  motionHasImage?: boolean;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -251,6 +259,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     currentAspectIconUrl,
     onCycleAspect,
 
+    animateAspect,
+    animateAspectIconUrl,
+    animateAspectIconRotated,
+
     uploads,
     uploadsPending,
 
@@ -286,6 +298,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stillError,
     onCreateStill,
 
+    motionHasImage,
+
     onGoProfile,
   } = props;
 
@@ -295,9 +309,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const [localAnimate, setLocalAnimate] = useState(false);
   const animateMode = props.animateMode ?? localAnimate;
 
-  const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey>("slow_motion");
-  const motionStyleKey = props.motionStyleKey ?? localMotionStyle;
-  const setMotionStyleKey = props.setMotionStyleKey ?? setLocalMotionStyle;
+  const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey[]>(["fix_camera"]);
+  const motionStyleKeys = props.motionStyleKeys ?? localMotionStyle;
+  const setMotionStyleKeys = props.setMotionStyleKeys ?? setLocalMotionStyle;
 
   const stillBriefRef = useRef<string>("");
   const motionBriefRef = useRef<string>("");
@@ -314,11 +328,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     // swap textarea content between still/motion
     if (next) {
       stillBriefRef.current = brief;
-      onBriefChange(motionBriefRef.current || "");
-      openPanel("style");
+      openPanel("product");
     } else {
       motionBriefRef.current = brief;
-      onBriefChange(stillBriefRef.current || "");
       openPanel("product");
     }
 
@@ -338,12 +350,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
 
   // panel behavior
-  const effectivePanel: PanelKey =
-    uiStage === 0 ? null : (activePanel ?? (isMotion ? "style" : "product"));
+  const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
 
   const productCount = uploads.product.length;
   const logoCount = uploads.logo.length;
   const inspirationCount = uploads.inspiration.length;
+  const motionImageCount = motionHasImage ? 1 : productCount;
 
   const allStyleCards = useMemo(() => {
     return [
@@ -372,8 +384,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
     stillGenerating ? "creating" : uploadsPending ? "uploading" : briefLen < 40 ? "describe_more" : "ready";
 
-  const motionCreateState: "creating" | "describe_more" | "ready" =
-    motionGenerating ? "creating" : briefLen < 18 ? "describe_more" : "ready";
+  const motionSuggesting = !!props.motionSuggesting;
+  const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
+
+  const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
+    ? "creating"
+    : motionSuggesting
+      ? "creating"
+      : canCreateMotion
+        ? "ready"
+        : "describe_more";
 
   const createState = isMotion ? motionCreateState : imageCreateState;
 
@@ -393,7 +413,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (isMotion && !hasMotionHandler) ||
+    (isMotion && (!hasMotionHandler || motionSuggesting)) ||
     (!isMotion && !canCreateStill);
 
   const handleCreateClick = () => {
@@ -422,12 +442,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   // motion style click: pick + optionally seed the motion brief if empty
   const pickMotionStyle = (k: MotionStyleKey) => {
-    setMotionStyleKey(k);
+    let added = false;
+    setMotionStyleKeys((prev) => {
+      const exists = prev.includes(k);
+      const next = exists ? prev.filter((x) => x !== k) : [...prev, k];
+      added = !exists;
+      return next.length ? next : ["fix_camera"];
+    });
     openPanel("style");
 
     // only seed if user hasn't typed yet
     const trimmed = brief.trim();
-    if (!trimmed || trimmed.length < 4) {
+    if ((!trimmed || trimmed.length < 4) && added) {
       const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
       if (seed) onBriefChange(seed);
     }
@@ -503,15 +529,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                  {/* Image (go back to still mode) */}
+                  {/* Image */}
                   <button
                     type="button"
-                    className={classNames("studio-pill")}
+                    className={classNames("studio-pill", effectivePanel === "product" && "active")}
                     style={pillBaseStyle(0)}
-                    onClick={() => toggleAnimate()}
+                    onClick={() => openPanel("product")}
                   >
                     <span className="studio-pill-main">Image</span>
-                    <span aria-hidden="true">✓</span>
+                    <span aria-hidden="true">{plusOrTick(motionImageCount)}</span>
                   </button>
 
                   {/* Mouvement style */}
@@ -522,7 +548,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onClick={() => openPanel("style")}
                   >
                     <span className="studio-pill-main">Mouvement style</span>
-                    <span aria-hidden="true">✓</span>
                   </button>
 
                   {/* Ratio */}
@@ -530,13 +555,17 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
                     style={pillBaseStyle(2)}
-                    onClick={onCycleAspect}
+                    disabled
                   >
                     <span className="studio-pill-icon">
-                      <img src={currentAspectIconUrl} alt="" />
+                      <img
+                        src={animateAspectIconUrl || currentAspectIconUrl}
+                        alt=""
+                        style={{ transform: animateAspectIconRotated ? "rotate(90deg)" : undefined }}
+                      />
                     </span>
-                    <span className="studio-pill-main">{currentAspect.label}</span>
-                    <span className="studio-pill-sub">{currentAspect.subtitle}</span>
+                    <span className="studio-pill-main">{(animateAspect ?? currentAspect).label}</span>
+                    <span className="studio-pill-sub">{(animateAspect ?? currentAspect).subtitle}</span>
                   </button>
                 </>
               )}
@@ -748,6 +777,39 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               </>
             ) : (
               <>
+                <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
+                  <div className="studio-panel">
+                    <div className="studio-panel-title">Add your image</div>
+
+                    <div className="studio-panel-row">
+                      <div className="studio-thumbs studio-thumbs--inline">
+                        {uploads.product.map((it) => (
+                          <button
+                            key={it.id}
+                            type="button"
+                            className="studio-thumb"
+                            onClick={() => removeUploadItem("product", it.id)}
+                            title="Click to delete"
+                          >
+                            <img src={it.remoteUrl || it.url} alt="" />
+                          </button>
+                        ))}
+
+                        {uploads.product.length === 0 && (
+                          <button
+                            type="button"
+                            className="studio-plusbox studio-plusbox--inline"
+                            onClick={() => triggerPick("product")}
+                            title="Add image"
+                          >
+                            <span aria-hidden="true">+</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </Collapse>
+
                 <Collapse open={showPanels && (effectivePanel === "style" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
                     <div className="studio-panel-title">Pick a mouvement style</div>
@@ -757,7 +819,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={m.key}
                           type="button"
-                          className={classNames("studio-style-card", "studio-motion-card", motionStyleKey === m.key && "active")}
+                          className={classNames(
+                            "studio-style-card",
+                            "studio-motion-card",
+                            motionStyleKeys.includes(m.key) && "active"
+                          )}
                           onClick={() => pickMotionStyle(m.key)}
                         >
                           <div className={classNames("studio-style-thumb", "studio-motion-thumb")}>
