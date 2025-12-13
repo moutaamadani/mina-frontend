@@ -1655,6 +1655,11 @@ const renderStudioLeft = () => {
   const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
   const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
 
+  const hoverOpenPanel = (p: PanelKey) => {
+    if (uiStage === 0) return; // don’t do anything in stage 0
+    openPanel(p);
+  };
+
   const allStyleCards: Array<{
     key: string;
     label: string;
@@ -1732,7 +1737,6 @@ const renderStudioLeft = () => {
     }, 2000);
 
     // Hide after 2s ONLY if user is still actively typing then
-    // (prevents hiding if they typed 1 char and stopped)
     const alreadyHidden = root.getAttribute("data-lower-hidden") === "1";
     if (!alreadyHidden && st.hideT == null) {
       st.hideT = window.setTimeout(() => {
@@ -1741,12 +1745,12 @@ const renderStudioLeft = () => {
         const now = Date.now();
         const activeEl = document.activeElement as HTMLElement | null;
         const isBriefFocused = !!activeEl?.classList?.contains("studio-brief-input");
-        const stillActivelyTyping = now - st.lastAt < 450; // "still typing" window
+        const stillActivelyTyping = now - st.lastAt < 450; // “still typing” window
 
         if (isBriefFocused && stillActivelyTyping) {
           root.setAttribute("data-lower-hidden", "1");
         }
-      }, 10);
+      }, 2000);
     }
   };
 
@@ -1754,8 +1758,10 @@ const renderStudioLeft = () => {
     <div className={classNames("studio-left", globalDragging && "drag-active")}>
       {/* ==========================================================
           Local CSS overrides (kept here so you don’t need a CSS patch)
-          1) Premium animate hide/show of lower area
-          2) Fix left-cropping for panels/style row + make labels usable
+          - Premium animate hide/show of lower area
+          - Fix left crop
+          - Style labels: centered, single-line, ellipsis, rename input full width
+          - Profile position (40 left, 16 bottom)
          ========================================================== */}
       <style>{`
         /* Premium hide/show wrapper */
@@ -1787,25 +1793,41 @@ const renderStudioLeft = () => {
           box-sizing: border-box !important;
         }
 
-        /* If style row is wider than column, scroll instead of cutting */
+        /* Style cards layout (wrap nicely) */
         .studio-style-row {
-          overflow-x: auto !important;
-          -webkit-overflow-scrolling: touch;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 18px;
+          align-items: flex-start;
+          overflow: visible !important;
         }
-        .studio-style-card {
-          flex: 0 0 auto;
-        }
+        .studio-style-card { flex: 0 0 auto; }
 
-        /* Make style names visible/clickable + rename input fits the card */
+        /* Label under thumbnail: centered, one line, never “chaotic” */
         .studio-style-label {
-          max-width: 110px;
+          width: 100%;
+          margin-top: 8px;
           text-align: center;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          line-height: 16px;
+          height: 16px; /* consistent row */
         }
+
+        /* Rename input uses full card width so you can type long names */
         .studio-style-label input {
-          width: 110px !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+          height: 18px;
+          line-height: 18px;
+          padding: 0 6px;
+        }
+
+        /* Profile button position */
+        .studio-profile-float{
+          left: 40px !important;
+          bottom: 16px !important;
         }
       `}</style>
 
@@ -1820,6 +1842,7 @@ const renderStudioLeft = () => {
                 type="button"
                 className={classNames("studio-pill", effectivePanel === "product" && "active")}
                 style={pillBaseStyle(0)}
+                onMouseEnter={() => hoverOpenPanel("product")}
                 onClick={() => openPanel("product")}
               >
                 <span className="studio-pill-main">Product</span>
@@ -1831,6 +1854,7 @@ const renderStudioLeft = () => {
                 type="button"
                 className={classNames("studio-pill", activePanel === "logo" && "active")}
                 style={pillBaseStyle(1)}
+                onMouseEnter={() => hoverOpenPanel("logo")}
                 onClick={() => openPanel("logo")}
               >
                 <span className="studio-pill-main">Logo</span>
@@ -1842,6 +1866,7 @@ const renderStudioLeft = () => {
                 type="button"
                 className={classNames("studio-pill", activePanel === "inspiration" && "active")}
                 style={pillBaseStyle(2)}
+                onMouseEnter={() => hoverOpenPanel("inspiration")}
                 onClick={() => openPanel("inspiration")}
               >
                 <span className="studio-pill-main">Inspiration</span>
@@ -1853,6 +1878,7 @@ const renderStudioLeft = () => {
                 type="button"
                 className={classNames("studio-pill", activePanel === "style" && "active")}
                 style={pillBaseStyle(3)}
+                onMouseEnter={() => hoverOpenPanel("style")}
                 onClick={() => openPanel("style")}
               >
                 <span className="studio-pill-main">Style</span>
@@ -1886,14 +1912,8 @@ const renderStudioLeft = () => {
                 className="studio-brief-input"
                 placeholder="Describe how you want your still life image to look like"
                 value={brief}
-                onFocus={() => {
-                  // start timing logic when user focuses
-                  pulseTyping();
-                }}
-                onBlur={() => {
-                  // when they stop editing (blur), always show back
-                  forceShowLowerNow();
-                }}
+                onFocus={() => pulseTyping()}
+                onBlur={() => forceShowLowerNow()}
                 onChange={(e) => {
                   handleBriefChange(e.target.value);
                   pulseTyping();
@@ -2032,29 +2052,37 @@ const renderStudioLeft = () => {
                       className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
                       onMouseEnter={() => setStylePresetKey(s.key)}
                       onClick={() => setStylePresetKey(s.key)}
+                      title={s.label} // hover shows full name
                     >
                       <div className="studio-style-thumb">
                         <img src={s.thumb} alt="" />
                       </div>
 
+                      {/* IMPORTANT:
+                          - Presets (built-in): NOT renameable
+                          - Custom styles: click name to rename, double-click name to delete
+                      */}
                       <div
                         className="studio-style-label"
-                        onDoubleClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (s.isCustom) deleteCustomStyle(s.key);
-                        }}
                         onClick={(e) => {
+                          if (!s.isCustom) return; // <- presets can't be renamed
                           e.preventDefault();
                           e.stopPropagation();
                           beginRenameStyle(s.key, s.label);
+                        }}
+                        onDoubleClick={(e) => {
+                          if (!s.isCustom) return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          deleteCustomStyle(s.key);
                         }}
                       >
                         {editingStyleKey === s.key ? (
                           <input
                             autoFocus
                             value={editingStyleValue}
-                            onChange={(e) => setEditingStyleValue(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => setEditingStyleValue(e.target.value)} // no 12-char UI limit here
                             onBlur={commitRenameStyle}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") commitRenameStyle();
@@ -2071,7 +2099,6 @@ const renderStudioLeft = () => {
                   <button
                     type="button"
                     className={classNames("studio-style-card", "add")}
-                    onMouseEnter={() => {}}
                     onClick={handleOpenCustomStylePanel}
                   >
                     <div className="studio-style-thumb">
@@ -2143,6 +2170,7 @@ const renderStudioLeft = () => {
 // ========================================================================
 // [PART 14 END]
 // ========================================================================
+
 
   // ========================================================================
   // [PART 15 START] Render – RIGHT side (unchanged logic)
