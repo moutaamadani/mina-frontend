@@ -509,12 +509,10 @@ const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
   }, [customStyleImages]);
 
   // ========================================================================
-  // [PART 5 START] Derived values (the “rules” you requested)
-  // ========================================================================
-  const briefLength = brief.trim().length;
-  const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
-
-const canCreateStill = briefLength >= 20 && !stillGenerating && !uploadsPending;
+// [PART 5 START] Derived values (the “rules” you requested)
+// ========================================================================
+const briefLength = brief.trim().length;
+const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
 
 type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
 
@@ -535,32 +533,37 @@ const createCtaLabel =
     ? "Describe more"
     : "Create";
 
-const createCtaDisabled = createCtaState === "creating" || createCtaState === "uploading";
+// Disable unless fully ready (prevents “no-op click” confusion)
+const createCtaDisabled = createCtaState !== "ready";
 
-  // UI stages
-  const showPills = uiStage >= 1;
-  const showPanels = uiStage >= 1;
-  const showControls = uiStage >= 3;
+// Keep existing prop for StudioLeft if you still use it there
+const canCreateStill = createCtaState === "ready";
 
-  // counts for +/✓
-  const productCount = uploads.product.length;
-  const logoCount = uploads.logo.length;
-  const inspirationCount = uploads.inspiration.length;
+// UI stages
+const showPills = uiStage >= 1;
+const showPanels = uiStage >= 1;
+const showControls = uiStage >= 3;
 
-  const currentAspect = ASPECT_OPTIONS[aspectIndex];
-  const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
-  const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
+// counts for +/✓
+const productCount = uploads.product.length;
+const logoCount = uploads.logo.length;
+const inspirationCount = uploads.inspiration.length;
 
-  const imageCost = credits?.meta?.imageCost ?? 1;
-  const motionCost = credits?.meta?.motionCost ?? 5;
+const currentAspect = ASPECT_OPTIONS[aspectIndex];
+const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
+const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
 
-  const briefHintVisible = showDescribeMore;
+const imageCost = credits?.meta?.imageCost ?? 1;
+const motionCost = credits?.meta?.motionCost ?? 5;
 
-  // Style key for API (avoid unknown custom keys)
-  const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
-  // ========================================================================
-  // [PART 5 END]
-  // ========================================================================
+const briefHintVisible = showDescribeMore;
+
+// Style key for API (avoid unknown custom keys)
+const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
+// ========================================================================
+// [PART 5 END]
+// ========================================================================
+
 
   // ============================================
   // PART UI STAGING (premium reveal / no jumping)
@@ -603,7 +606,7 @@ const createCtaDisabled = createCtaState === "creating" || createCtaState === "u
     setActivePanel((prev) => prev ?? "product");
 
     stageT2Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 1 ? 1 : s));
+      setUiStage((s) => (s < 2 ? 2 : s));
     }, PANEL_REVEAL_DELAY_MS);
 
     stageT3Ref.current = window.setTimeout(() => {
@@ -611,6 +614,7 @@ const createCtaDisabled = createCtaState === "creating" || createCtaState === "u
     }, CONTROLS_REVEAL_DELAY_MS);
   }
 }, [briefLength, uiStage]);
+
 
 
   // ========================================================================
@@ -1873,6 +1877,9 @@ const renderStudioRight = () => {
                 minaVisionEnabled={minaVisionEnabled}
                 onToggleVision={() => setMinaVisionEnabled((p) => !p)}
                 canCreateStill={canCreateStill}
+                createCtaState={createCtaState}
+                createCtaLabel={createCtaLabel}
+                createCtaDisabled={createCtaDisabled}
                 stillGenerating={stillGenerating}
                 stillError={stillError}
                 onCreateStill={handleGenerateStill}
