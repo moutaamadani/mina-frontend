@@ -343,88 +343,6 @@ function extractFirstHttpUrl(text: string) {
   return m ? m[0] : null;
 }
 
-/**
- * Smooth open/close without "display:none" jumps.
- * (CSS can style inside; TSX handles the height animation.)
- */
-/**
- * ✅ Stable Collapse (no unmounting, no timers, no “panels disappear”)
- * - Keeps children mounted (so state doesn’t “fight”)
- * - Uses maxHeight + opacity + transform for smooth open/close
- * - Ignores delayMs so panel switches are instant (no 520ms “nothing happens”)
- */
-const Collapse: React.FC<{
-  open: boolean;
-  delayMs?: number; // kept for compatibility with your call sites
-  children: React.ReactNode;
-}> = ({ open, delayMs = 0, children }) => {
-  const innerRef = useRef<HTMLDivElement | null>(null);
-  const [maxH, setMaxH] = useState<number>(open ? 1000 : 0);
-
-  useLayoutEffect(() => {
-    // use delayMs so linters don't complain, but we intentionally don't delay panel switches
-    void delayMs;
-
-    const el = innerRef.current;
-    if (!el) return;
-
-    let raf1 = 0;
-    let raf2 = 0;
-    let ro: ResizeObserver | null = null;
-
-    const measure = () => {
-      // scrollHeight is the real content height
-      const h = el.scrollHeight || 0;
-      setMaxH(h);
-    };
-
-    if (open) {
-      // Measure now + next frame (handles images/fonts)
-      measure();
-      raf1 = requestAnimationFrame(measure);
-
-      // Track content changes while open
-      if (typeof ResizeObserver !== "undefined") {
-        ro = new ResizeObserver(() => measure());
-        ro.observe(el);
-      }
-
-      return () => {
-        if (raf1) cancelAnimationFrame(raf1);
-        if (raf2) cancelAnimationFrame(raf2);
-        if (ro) ro.disconnect();
-      };
-    }
-
-    // Closing: lock current height then animate to 0 next frame
-    setMaxH(el.scrollHeight || 0);
-    raf2 = requestAnimationFrame(() => setMaxH(0));
-
-    return () => {
-      if (raf1) cancelAnimationFrame(raf1);
-      if (raf2) cancelAnimationFrame(raf2);
-      if (ro) ro.disconnect();
-    };
-  }, [open, delayMs]);
-
-  return (
-    <div
-      style={{
-        overflow: "hidden",
-        maxHeight: open ? maxH : 0,
-        opacity: open ? 1 : 0,
-        transform: open ? "translateY(0)" : "translateY(-6px)",
-        pointerEvents: open ? "auto" : "none",
-        transition:
-          "max-height 650ms cubic-bezier(0.16,1,0.3,1), opacity 650ms cubic-bezier(0.16,1,0.3,1), transform 650ms cubic-bezier(0.16,1,0.3,1)",
-        transitionDelay: "0ms",
-      }}
-    >
-      <div ref={innerRef}>{children}</div>
-    </div>
-  );
-};
-
 
 // ============================================================================
 // [PART 4 START] Component
@@ -1644,411 +1562,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // [PART 13 END]
   // ========================================================================
 
- // ========================================================================
-// [PART 14 START] Render – LEFT side (Input1 + pills + panels + style + Input3)
-// ========================================================================
-const renderStudioLeft = () => {
-  // pills are text-only (+ / ✓), except ratio pill keeps its icon
-  const pillBaseStyle = (index: number): React.CSSProperties => ({
-    transitionDelay: showPills ? `${PILL_INITIAL_DELAY_MS + index * PILL_STAGGER_MS}ms` : "0ms",
-  });
-
-  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
-  const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
-
-  const allStyleCards: Array<{
-    key: string;
-    label: string;
-    thumb: string;
-    isCustom: boolean;
-  }> = [
-    ...STYLE_PRESETS.map((p) => ({
-      key: p.key,
-      label: getStyleLabel(p.key, p.label),
-      thumb: p.thumb,
-      isCustom: false,
-    })),
-    ...customStyles.map((s) => ({
-      key: s.key,
-      label: getStyleLabel(s.key, s.label),
-      thumb: s.thumbUrl,
-      isCustom: true,
-    })),
-  ];
-
-  return (
-    <div className={classNames("studio-left", globalDragging && "drag-active")}>
-      {/* ==========================================================
-          Local CSS overrides (kept here so you don’t need a CSS patch)
-          1) Hide Panels + Create while typing (textarea focused)
-          2) Fix left-cropping for panels/style row + make labels usable
-         ========================================================== */}
-      <style>{`
-        /* Hide everything below textarea while it is focused */
-        .studio-input1-block:has(.studio-brief-input:focus) ~ .mina-slide,
-        .studio-input1-block:has(.studio-brief-input:focus) ~ .studio-debug-line {
-          display: none !important;
-        }
-
-        /* Prevent left crop in panel rows */
-        .studio-panel,
-        .studio-thumbs,
-        .studio-style-row {
-          margin-left: 0 !important;
-          padding-left: 12px !important;
-          padding-right: 12px !important;
-          box-sizing: border-box !important;
-        }
-
-        /* If style row is wider than column, scroll instead of cutting */
-        .studio-style-row {
-          overflow-x: auto !important;
-          -webkit-overflow-scrolling: touch;
-        }
-        .studio-style-card {
-          flex: 0 0 auto;
-        }
-
-        /* Make style names visible/clickable + rename input fits the card */
-        .studio-style-label {
-          max-width: 110px;
-          text-align: center;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .studio-style-label input {
-          width: 110px !important;
-        }
-      `}</style>
-
-      <div className="studio-left-main">
-        {/* Input 1 */}
-        <div className="studio-input1-block">
-          {/* Pills slot (staggered + smooth) */}
-          <div className="studio-pills-slot">
-            <div className={classNames("studio-row", "studio-row--pills", "mina-slide", !showPills && "hidden")}>
-              {/* Product */}
-              <button
-                type="button"
-                className={classNames("studio-pill", effectivePanel === "product" && "active")}
-                style={pillBaseStyle(0)}
-                onClick={() => openPanel("product")}
-              >
-                <span className="studio-pill-main">Product</span>
-                <span aria-hidden="true">{plusOrTick(productCount)}</span>
-              </button>
-
-              {/* Logo */}
-              <button
-                type="button"
-                className={classNames("studio-pill", activePanel === "logo" && "active")}
-                style={pillBaseStyle(1)}
-                onClick={() => openPanel("logo")}
-              >
-                <span className="studio-pill-main">Logo</span>
-                <span aria-hidden="true">{plusOrTick(logoCount)}</span>
-              </button>
-
-              {/* Inspiration */}
-              <button
-                type="button"
-                className={classNames("studio-pill", activePanel === "inspiration" && "active")}
-                style={pillBaseStyle(2)}
-                onClick={() => openPanel("inspiration")}
-              >
-                <span className="studio-pill-main">Inspiration</span>
-                <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
-              </button>
-
-              {/* Style (same system as others — NOT an extra step) */}
-              <button
-                type="button"
-                className={classNames("studio-pill", activePanel === "style" && "active")}
-                style={pillBaseStyle(3)}
-                onClick={() => openPanel("style")}
-              >
-                <span className="studio-pill-main">Style</span>
-                <span aria-hidden="true">✓</span>
-              </button>
-
-              {/* Ratio (keeps icon) */}
-              <button
-                type="button"
-                className={classNames("studio-pill", "studio-pill--aspect")}
-                style={pillBaseStyle(4)}
-                onClick={handleCycleAspect}
-              >
-                <span className="studio-pill-icon">
-                  <img src={ASPECT_ICON_URLS[currentAspect.key]} alt="" />
-                </span>
-                <span className="studio-pill-main">{currentAspect.label}</span>
-                <span className="studio-pill-sub">{currentAspect.subtitle}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Textarea (state zero shows only this) */}
-          <div className="studio-brief-block">
-            <div
-              className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
-              ref={briefShellRef}
-              onScroll={handleBriefScroll}
-            >
-              <textarea
-                className="studio-brief-input"
-                placeholder="Describe how you want your still life image to look like"
-                value={brief}
-                onChange={(e) => handleBriefChange(e.target.value)}
-                rows={4}
-              />
-              {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
-            </div>
-          </div>
-        </div>
-        {/* Panels (smooth open/close, no jumps) */}
-        <div className="mina-slide">
-          <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add your product</div>
-
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.product.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      onClick={() => removeUploadItem("product", it.id)}
-                      title="Click to delete"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-
-                  {/* Product: 1 image → once uploaded, + disappears */}
-                  {uploads.product.length === 0 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("product")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Collapse>
-
-          <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add your logo</div>
-
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.logo.map((it) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      onClick={() => removeUploadItem("logo", it.id)}
-                      title="Click to delete"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-
-                  {/* Logo: 1 image → once uploaded, + disappears */}
-                  {uploads.logo.length === 0 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("logo")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Collapse>
-
-          <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Add inspiration</div>
-
-              <div className="studio-panel-row">
-                <div className="studio-thumbs studio-thumbs--inline">
-                  {uploads.inspiration.map((it, idx) => (
-                    <button
-                      key={it.id}
-                      type="button"
-                      className="studio-thumb"
-                      draggable
-                      onDragStart={() => {
-                        (window as any).__minaDragIndex = idx;
-                      }}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const from = Number((window as any).__minaDragIndex);
-                        const to = idx;
-                        if (Number.isFinite(from) && from !== to) {
-                          moveUploadItem("inspiration", from, to);
-                        }
-                        (window as any).__minaDragIndex = null;
-                      }}
-                      onClick={() => removeUploadItem("inspiration", it.id)}
-                      title="Click to delete • Drag to reorder"
-                    >
-                      <img src={it.remoteUrl || it.url} alt="" />
-                    </button>
-                  ))}
-
-                  {/* Inspiration: + stays and gets pushed right until limit */}
-                  {uploads.inspiration.length < 4 && (
-                    <button
-                      type="button"
-                      className="studio-plusbox studio-plusbox--inline"
-                      onClick={() => triggerPick("inspiration")}
-                      title="Add image"
-                    >
-                      <span aria-hidden="true">+</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </Collapse>
-
-          <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
-            <div className="studio-panel">
-              <div className="studio-panel-title">Pick a style</div>
-
-              <div className="studio-style-row">
-                {allStyleCards.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
-                    onMouseEnter={() => setStylePresetKey(s.key)}
-                    onClick={() => setStylePresetKey(s.key)}
-                  >
-                    <div className="studio-style-thumb">
-                      <img src={s.thumb} alt="" />
-                    </div>
-
-                    {/* Inline rename (no new panel) */}
-                    <div
-                      className="studio-style-label"
-                      onDoubleClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (s.isCustom) deleteCustomStyle(s.key);
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        beginRenameStyle(s.key, s.label);
-                      }}
-                    >
-                      {editingStyleKey === s.key ? (
-                        <input
-                          autoFocus
-                          value={editingStyleValue}
-                          onChange={(e) => setEditingStyleValue(e.target.value)}
-                          onBlur={commitRenameStyle}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") commitRenameStyle();
-                            if (e.key === "Escape") cancelRenameStyle();
-                          }}
-                        />
-                      ) : (
-                        s.label
-                      )}
-                    </div>
-                  </button>
-                ))}
-
-                {/* Create style (opens modal) */}
-                <button
-                  type="button"
-                  className={classNames("studio-style-card", "add")}
-                  onMouseEnter={() => {}}
-                  onClick={handleOpenCustomStylePanel}
-                >
-                  <div className="studio-style-thumb">
-                    <span aria-hidden="true">+</span>
-                  </div>
-                  <div className="studio-style-label">Create style</div>
-                </button>
-              </div>
-            </div>
-          </Collapse>
-        </div>
-
-        {/* Input 3 (always after typing starts; smooth) */}
-        <div className={classNames("mina-slide", !showControls && "hidden")}>
-          <div className="studio-controls-divider" />
-
-          <button type="button" className="studio-vision-toggle" onClick={() => setMinaVisionEnabled((prev) => !prev)}>
-            Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
-          </button>
-
-          <div className="studio-create-block">
-            <button
-              type="button"
-              className={classNames("studio-create-link", !canCreateStill && "disabled")}
-              disabled={!canCreateStill}
-              onClick={handleGenerateStill}
-            >
-              {stillGenerating ? "Creating…" : "Create"}
-            </button>
-          </div>
-
-          {stillError && <div className="error-text">{stillError}</div>}
-        </div>
-
-        {/* Hidden file inputs */}
-        <input
-          ref={productInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={(e) => handleFileInput("product", e)}
-        />
-        <input
-          ref={logoInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
-          onChange={(e) => handleFileInput("logo", e)}
-        />
-        <input
-          ref={inspirationInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => handleFileInput("inspiration", e)}
-        />
-      </div>
-
-      {/* Profile button: bottom-left, no underline (CSS will handle) */}
-      <button type="button" className="studio-profile-float" onClick={() => setActiveTab("profile")}>
-        Profile
-      </button>
-    </div>
-  );
-};
-
-// ========================================================================
-// [PART 14 END]
-// ========================================================================
-
+ 
 
     // ========================================================================
 // [PART 15 START] Render – RIGHT side (separate component)
@@ -2290,7 +1804,58 @@ const renderStudioRight = () => {
 
         {activeTab === "studio" ? (
           <div className={classNames("studio-body", "studio-body--two-col")}>
-            {renderStudioLeft()}
+            <StudioLeft
+              globalDragging={globalDragging}
+              showPills={showPills}
+              showPanels={showPanels}
+              showControls={showControls}
+              uiStage={uiStage}
+              brief={brief}
+              briefHintVisible={briefHintVisible}
+              briefShellRef={briefShellRef}
+              onBriefScroll={handleBriefScroll}
+              onBriefChange={handleBriefChange}
+              briefFocused={briefFocused}
+              setBriefFocused={setBriefFocused}
+              activePanel={activePanel}
+              openPanel={openPanel}
+              pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
+              pillStaggerMs={PILL_STAGGER_MS}
+              panelRevealDelayMs={PANEL_REVEAL_DELAY_MS}
+              currentAspect={currentAspect}
+              currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
+              onCycleAspect={handleCycleAspect}
+              uploads={uploads}
+              removeUploadItem={removeUploadItem}
+              moveUploadItem={moveUploadItem}
+              triggerPick={triggerPick}
+              onFilesPicked={addFilesToPanel}
+              productInputRef={productInputRef}
+              logoInputRef={logoInputRef}
+              inspirationInputRef={inspirationInputRef}
+              stylePresetKey={stylePresetKey}
+              setStylePresetKey={setStylePresetKey}
+              stylePresets={STYLE_PRESETS}
+              customStyles={customStyles}
+              getStyleLabel={getStyleLabel}
+              editingStyleKey={editingStyleKey}
+              editingStyleValue={editingStyleValue}
+              setEditingStyleValue={setEditingStyleValue}
+              beginRenameStyle={beginRenameStyle}
+              commitRenameStyle={commitRenameStyle}
+              cancelRenameStyle={cancelRenameStyle}
+              deleteCustomStyle={deleteCustomStyle}
+              onOpenCustomStylePanel={handleOpenCustomStylePanel}
+              minaVisionEnabled={minaVisionEnabled}
+              onToggleVision={() => setMinaVisionEnabled((p) => !p)}
+              canCreateStill={canCreateStill}
+              stillGenerating={stillGenerating}
+              stillError={stillError}
+              onCreateStill={handleGenerateStill}
+              onGoProfile={() => setActiveTab("profile")}
+            />
+            {renderStudioRight()}
+
             {renderStudioRight()}
           </div>
         ) : (
