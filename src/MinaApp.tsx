@@ -344,6 +344,22 @@ function extractFirstHttpUrl(text: string) {
   return m ? m[0] : null;
 }
 
+function aspectRatioToNumber(ratio: string) {
+  const [w, h] = ratio.split(":").map((n) => Number(n) || 0);
+  if (!h || !w) return 1;
+  return w / h;
+}
+
+function pickNearestAspectOption(ratio: number, options: AspectOption[]): AspectOption {
+  if (!Number.isFinite(ratio) || ratio <= 0) return options[0];
+  return options.reduce((closest, option) => {
+    const candidate = aspectRatioToNumber(option.ratio);
+    return Math.abs(candidate - ratio) < Math.abs(aspectRatioToNumber(closest.ratio) - ratio)
+      ? option
+      : closest;
+  }, options[0]);
+}
+
 
 // ============================================================================
 // [PART 4 START] Component
@@ -373,9 +389,11 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // 4.3 Studio – brief + steps
   // -------------------------
   const [brief, setBrief] = useState("");
+  const [stillBrief, setStillBrief] = useState("");
   const [tone] = useState("Poetic");
   const [, setPlatform] = useState("tiktok");
   const [aspectIndex, setAspectIndex] = useState(2);
+  const [animateAspectKey, setAnimateAspectKey] = useState<AspectKey>(ASPECT_OPTIONS[aspectIndex].key);
   const [animateMode, setAnimateMode] = useState(false);
 
   // Stills
@@ -389,8 +407,11 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
   const [motionDescription, setMotionDescription] = useState("");
+  const [motionStyleKeys, setMotionStyleKeys] = useState<MotionStyleKey[]>(["fix_camera"]);
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(null);
+  const [motionSuggestTyping, setMotionSuggestTyping] = useState(false);
+  const [animateAspectRotated, setAnimateAspectRotated] = useState(false);
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
   const [isRightMediaDark, setIsRightMediaDark] = useState(false);
@@ -512,10 +533,24 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     customStyleImagesRef.current = customStyleImages;
   }, [customStyleImages]);
 
+  useEffect(() => {
+    if (animateMode) {
+      const currentBrief = brief;
+      setStillBrief(currentBrief);
+      setBrief(motionDescription || currentBrief);
+    } else {
+      const currentBrief = brief;
+      setMotionDescription(currentBrief);
+      setBrief(stillBrief || currentBrief);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animateMode]);
+
   // ========================================================================
   // [PART 5 START] Derived values (the “rules” you requested)
   // ========================================================================
   const briefLength = brief.trim().length;
+  const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
 
   type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
@@ -524,7 +559,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     ? "creating"
     : uploadsPending
       ? "uploading"
-      : briefLength < 40
+      : stillBriefLength < 40
         ? "describe_more"
         : "ready";
 
@@ -554,8 +589,19 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const inspirationCount = uploads.inspiration.length;
 
   const currentAspect = ASPECT_OPTIONS[aspectIndex];
+  const latestStill: StillItem | null = stillItems[0] || null;
   const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
   const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
+
+  const animateImage = uploads.product[0] || null;
+  const animateAspectOption = ASPECT_OPTIONS.find((opt) => opt.key === animateAspectKey) || currentAspect;
+  const animateAspectIconUrl = ASPECT_ICON_URLS[animateAspectOption.key];
+  const animateImageHttp = animateImage?.remoteUrl && isHttpUrl(animateImage.remoteUrl)
+    ? animateImage.remoteUrl
+    : animateImage?.url && isHttpUrl(animateImage.url)
+      ? animateImage.url
+      : "";
+  const motionReferenceImageUrl = animateImageHttp || latestStill?.url || "";
 
   const imageCost = credits?.meta?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? 5;
@@ -566,50 +612,60 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
 
   useEffect(() => {
-    const mediaUrl = currentMotion ? currentMotion.url : currentStill?.url;
-    const mediaType = currentMotion ? "video" : currentStill ? "image" : null;
     let cancelled = false;
 
-    if (!mediaUrl || mediaType !== "image") {
-      setIsRightMediaDark(false);
-      return;
+    const setFromRatio = (ratio: number) => {
+      if (cancelled) return;
+      const nearest = pickNearestAspectOption(ratio, ASPECT_OPTIONS);
+      setAnimateAspectKey(nearest.key);
+      setAnimateAspectRotated(ratio > 1);
+    };
+
+    const inferFromUrl = (url: string, fallbackRatio?: number) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        if (cancelled) return;
+        const ratio = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 1;
+        setFromRatio(ratio || 1);
+      };
+      img.onerror = () => {
+        if (!cancelled && fallbackRatio) setFromRatio(fallbackRatio);
+      };
+      img.src = url;
+    };
+
+    const primaryUrl = animateImage?.remoteUrl || animateImage?.url;
+    if (primaryUrl) {
+      inferFromUrl(primaryUrl, aspectRatioToNumber(currentAspect.ratio));
+      return () => {
+        cancelled = true;
+      };
     }
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = mediaUrl;
+    if (latestStill?.aspectRatio) {
+      setFromRatio(aspectRatioToNumber(latestStill.aspectRatio));
+      return () => {
+        cancelled = true;
+      };
+    }
 
-    img.onload = () => {
-      if (cancelled) return;
+    if (latestStill?.url) {
+      inferFromUrl(latestStill.url, aspectRatioToNumber(currentAspect.ratio));
+      return () => {
+        cancelled = true;
+      };
+    }
 
-      const canvas = document.createElement("canvas");
-      canvas.width = 1;
-      canvas.height = 1;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        setIsRightMediaDark(false);
-        return;
-      }
-
-      ctx.drawImage(img, 0, 0, 1, 1);
-
-      try {
-        const data = ctx.getImageData(0, 0, 1, 1).data;
-        const brightness = (data[0] * 299 + data[1] * 587 + data[2] * 114) / 1000;
-        setIsRightMediaDark(brightness < 80);
-      } catch {
-        setIsRightMediaDark(false);
-      }
-    };
-
-    img.onerror = () => {
-      if (!cancelled) setIsRightMediaDark(false);
-    };
+    setFromRatio(aspectRatioToNumber(currentAspect.ratio));
 
     return () => {
       cancelled = true;
     };
-  }, [currentMotion, currentStill]);
+  }, [animateImage?.remoteUrl, animateImage?.url, latestStill?.aspectRatio, latestStill?.url, currentAspect.ratio]);
+
+  const motionTextTrimmed = motionDescription.trim();
+  const canCreateMotion = !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping;
   // ========================================================================
   // [PART 5 END]
   // ========================================================================
@@ -900,7 +956,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // [PART 9 START] Stills (editorial)
   // ========================================================================
   const handleGenerateStill = async () => {
-    const trimmed = brief.trim();
+    const trimmed = stillBrief.trim();
     if (trimmed.length < 40) return;
 
     if (!API_BASE_URL) {
@@ -1012,8 +1068,31 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
   // [PART 10 START] Motion (suggest + generate)
   // ========================================================================
+  const applyMotionSuggestionText = async (text: string) => {
+    if (!text) return;
+    if (describeMoreTimeoutRef.current !== null) {
+      window.clearTimeout(describeMoreTimeoutRef.current);
+      describeMoreTimeoutRef.current = null;
+    }
+    setShowDescribeMore(false);
+    setMotionSuggestTyping(true);
+
+    for (let i = 0; i < text.length; i++) {
+      const next = text.slice(0, i + 1);
+      setMotionDescription(next);
+      setBrief(next);
+      // small delay for typewriter feel
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((resolve) => setTimeout(resolve, 12));
+    }
+
+    setMotionSuggestTyping(false);
+  };
+
   const handleSuggestMotion = async () => {
-    if (!API_BASE_URL || !currentStill) return;
+    if (!API_BASE_URL || !motionReferenceImageUrl || motionSuggestLoading || motionSuggestTyping) return;
+
+    setAnimateMode(true);
 
     try {
       setMotionSuggestLoading(true);
@@ -1023,11 +1102,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerId,
-          referenceImageUrl: currentStill.url,
+          referenceImageUrl: motionReferenceImageUrl,
           tone,
-          platform: currentAspect.platformKey,
+          platform: animateAspectOption.platformKey,
           minaVisionEnabled,
           stylePresetKey: stylePresetKeyForApi,
+          motionStyles: motionStyleKeys,
+          aspectRatio: animateAspectOption.ratio,
         }),
       });
 
@@ -1038,16 +1119,17 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       }
 
       const data = (await res.json()) as MotionSuggestResponse;
-      if (data.suggestion) setMotionDescription(data.suggestion);
+      if (data.suggestion) await applyMotionSuggestionText(data.suggestion);
     } catch (err: any) {
       setMotionSuggestError(err?.message || "Unexpected error suggesting motion.");
     } finally {
       setMotionSuggestLoading(false);
+      setMotionSuggestTyping(false);
     }
   };
 
   const handleGenerateMotion = async () => {
-    if (!API_BASE_URL || !currentStill || !motionDescription.trim()) return;
+    if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
     const sid = await ensureSession();
     if (!sid) {
@@ -1065,12 +1147,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         body: JSON.stringify({
           customerId,
           sessionId: sid,
-          lastImageUrl: currentStill.url,
-          motionDescription: motionDescription.trim(),
+          lastImageUrl: motionReferenceImageUrl,
+          motionDescription: motionTextTrimmed,
           tone,
-          platform: currentAspect.platformKey,
+          platform: animateAspectOption.platformKey,
           minaVisionEnabled,
           stylePresetKey: stylePresetKeyForApi,
+          motionStyles: motionStyleKeys,
+          aspectRatio: animateAspectOption.ratio,
         }),
       });
 
@@ -1090,7 +1174,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         id: data.generationId || `motion_${Date.now()}`,
         url: storedUrl,
         createdAt: new Date().toISOString(),
-        prompt: data.prompt || motionDescription.trim(),
+        prompt: data.prompt || motionTextTrimmed,
       };
 
       setMotionItems((prev) => {
@@ -1140,7 +1224,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
           customerId,
           resultType,
           platform: currentAspect.platformKey,
-          prompt: currentMotion?.prompt || currentStill?.prompt || lastStillPrompt || brief,
+          prompt: currentStill.prompt || lastStillPrompt || stillBrief || brief,
           comment: "",
           imageUrl: currentMotion ? "" : targetMedia.url,
           videoUrl: currentMotion ? targetMedia.url : "",
@@ -1176,7 +1260,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
           customerId,
           resultType: targetVideo ? "motion" : "image",
           platform: currentAspect.platformKey,
-          prompt: lastStillPrompt || brief,
+          prompt: lastStillPrompt || stillBrief || brief,
           comment,
           imageUrl: targetImage,
           videoUrl: targetVideo,
@@ -1216,9 +1300,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
     const a = document.createElement("a");
     a.href = target;
-    a.download = filename;
-    a.target = "_blank";
-    a.rel = "noreferrer";
+    const safePrompt =
+      (lastStillPrompt || stillBrief || brief || "Mina-image")
+        .replace(/[^a-z0-9]+/gi, "-")
+        .toLowerCase()
+        .slice(0, 80) || "mina-image";
+    a.download = `Mina-v3-${safePrompt}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1515,12 +1602,24 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     }
   };
 
+  const handleAnimateHeaderClick = async () => {
+    if (motionSuggestLoading || motionSuggestTyping) return;
+    setAnimateMode(true);
+    if (!motionTextTrimmed) {
+      await handleSuggestMotion();
+      return;
+    }
+    await handleGenerateMotion();
+  };
+
   const handleBriefScroll = () => {
     // fade is handled by CSS mask on .studio-brief-shell
   };
 
   const handleBriefChange = (value: string) => {
     setBrief(value);
+    if (animateMode) setMotionDescription(value);
+    else setStillBrief(value);
 
     if (describeMoreTimeoutRef.current !== null) {
       window.clearTimeout(describeMoreTimeoutRef.current);
@@ -1879,8 +1978,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
                 <button
                   type="button"
                   className="studio-header-cta"
-                  onClick={handleLikeCurrentStill}
-                  disabled={(!currentStill && !currentMotion) || likeSubmitting || isCurrentLiked}
+                  onClick={handleAnimateHeaderClick}
+                  disabled={!motionReferenceImageUrl || motionGenerating || motionSuggestLoading || motionSuggestTyping}
                 >
                   {isCurrentLiked ? "ok" : "♡ more of this"}
                 </button>
@@ -1919,6 +2018,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               onBriefChange={handleBriefChange}
               briefFocused={briefFocused}
               setBriefFocused={setBriefFocused}
+              animateMode={animateMode}
+              onToggleAnimateMode={setAnimateMode}
               activePanel={activePanel}
               openPanel={openPanel}
               pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
@@ -1927,6 +2028,9 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               currentAspect={currentAspect}
               currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
               onCycleAspect={handleCycleAspect}
+              animateAspect={animateAspectOption}
+              animateAspectIconUrl={animateAspectIconUrl}
+              animateAspectIconRotated={animateAspectRotated}
               uploads={uploads}
               uploadsPending={uploadsPending}
               removeUploadItem={removeUploadItem}
@@ -1958,8 +2062,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               stillGenerating={stillGenerating}
               stillError={stillError}
               onCreateStill={handleGenerateStill}
-              animateMode={animateMode}
-              onToggleAnimateMode={setAnimateMode}
+              motionStyleKeys={motionStyleKeys}
+              setMotionStyleKeys={setMotionStyleKeys}
+              motionSuggesting={motionSuggestLoading || motionSuggestTyping}
+              canCreateMotion={canCreateMotion}
+              motionHasImage={!!motionReferenceImageUrl}
+              motionGenerating={motionGenerating}
+              motionError={motionError}
+              onCreateMotion={handleGenerateMotion}
               onGoProfile={() => setActiveTab("profile")}
             />
             {renderStudioRight()}
