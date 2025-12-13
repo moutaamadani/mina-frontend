@@ -435,6 +435,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
   const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
+  const [briefFocused, setBriefFocused] = useState(false);
 
   // -------------------------
   // 4.2 Health / credits / session
@@ -1656,6 +1657,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
     const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
     const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
+    const effectiveShowPanels = showPanels && !briefFocused;
+    const effectiveShowControls = showControls && !briefFocused;
 
     const allStyleCards: Array<{
       key: string;
@@ -1752,11 +1755,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
                 ref={briefShellRef}
                 onScroll={handleBriefScroll}
               >
-                <textarea
+               <textarea
                   className="studio-brief-input"
                   placeholder="Describe how you want your still life image to look like"
                   value={brief}
                   onChange={(e) => handleBriefChange(e.target.value)}
+                  onFocus={() => setBriefFocused(true)}
+                  onBlur={() => setBriefFocused(false)}
                   rows={4}
                 />
                 {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
@@ -1769,7 +1774,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
           {/* Panels (smooth open/close, no jumps) */}
           <div className="mina-slide">
-            <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <Collapse open={effectiveShowPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your product</div>
 
@@ -1803,7 +1808,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-           <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
+           <Collapse open={effectiveShowPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your logo</div>
 
@@ -1837,7 +1842,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-            <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <Collapse open={effectiveShowPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add inspiration</div>
 
@@ -1885,7 +1890,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-            <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <Collapse open={effectiveShowPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Pick a style</div>
 
