@@ -1534,3 +1534,52 @@ video {
   padding-bottom: 6px;
   box-sizing: border-box;
 }
+/* === PATCH: Style selector not clipped + labels visible/clickable === */
+
+/* prevent Collapse/slide wrappers from clipping the label area */
+.mina-slide,
+.studio-panel{
+  overflow: visible !important;
+}
+
+/* nudge the whole panel content a bit so nothing is cut on the left */
+.studio-panel{
+  padding-left: 10px;
+  box-sizing: border-box;
+}
+
+/* style cards row: allow wrapping + no clipping */
+.studio-style-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  overflow: visible !important;
+  padding-bottom: 12px;
+}
+
+/* card must be allowed to grow to fit the label */
+.studio-style-card{
+  overflow: visible !important;
+  height: auto !important;
+}
+
+/* label must take space + be clickable */
+.studio-style-label{
+  display: block;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 92px;          /* keep label aligned with thumb width */
+  white-space: normal;
+  word-break: break-word;
+  cursor: text;
+  pointer-events: auto;
+  position: relative;
+  z-index: 5;
+}
+
+/* rename input should match thumbnail width */
+.studio-style-label input{
+  width: 100% !important;
+  max-width: 92px !important;
+  box-sizing: border-box;
+}
