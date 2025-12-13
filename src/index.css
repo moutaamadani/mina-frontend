@@ -1065,3 +1065,12 @@ video {
   cursor: default;
   opacity: 0.35;
 }
+
+.studio-header-overlay.is-dark .studio-header-cta {
+  color: #fff;
+}
+
+.studio-header-overlay.is-dark .studio-header-cta:disabled {
+  color: #fff;
+  opacity: 0.6;
+}

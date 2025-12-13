@@ -18,11 +18,6 @@ type StudioRightProps = {
   feedbackSending: boolean;
   feedbackError: string | null;
   onSubmitFeedback: () => void;
-
-  // ✅ new (optional)
-  liked?: boolean;
-  onToggleLike?: () => void;
-  onDownload?: () => void;
 };
 
 export default function StudioRight(props: StudioRightProps) {
@@ -37,9 +32,6 @@ export default function StudioRight(props: StudioRightProps) {
     feedbackSending,
     feedbackError,
     onSubmitFeedback,
-    liked = false,
-    onToggleLike,
-    onDownload,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -100,23 +92,6 @@ export default function StudioRight(props: StudioRightProps) {
 
   const canSend = !feedbackSending && feedbackText.trim().length > 0;
 
-  const defaultDownload = () => {
-    if (!media) return;
-    const a = document.createElement("a");
-    a.href = media.url;
-    a.target = "_blank";
-    a.rel = "noreferrer";
-    a.download = media.type === "video" ? "mina-motion.mp4" : "mina-still.png";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  };
-
-  const handleDownload = () => {
-    if (onDownload) onDownload();
-    else defaultDownload();
-  };
-
   return (
     <div className="studio-right">
       <div className="studio-right-surface">
@@ -164,20 +139,6 @@ export default function StudioRight(props: StudioRightProps) {
           />
 
           <div className="studio-feedback-actions">
-            <button
-              type="button"
-              className={`studio-action-btn ${liked ? "is-on" : ""}`}
-              onClick={() => onToggleLike?.()}
-              disabled={!onToggleLike}
-              title={!onToggleLike ? "Wire onToggleLike in MinaApp" : undefined}
-            >
-              {liked ? "Liked" : "Like"}
-            </button>
-
-            <button type="button" className="studio-action-btn" onClick={handleDownload} disabled={!media}>
-              Download
-            </button>
-
             <button type="button" className="studio-action-btn" onClick={onSubmitFeedback} disabled={!canSend}>
               Send
             </button>

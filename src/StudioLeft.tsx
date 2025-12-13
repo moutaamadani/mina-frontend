@@ -294,6 +294,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // ✅ motion mode (with local fallback)
   const [localAnimate, setLocalAnimate] = useState(false);
   const animateMode = props.animateMode ?? localAnimate;
+  const prevAnimateModeRef = useRef(animateMode);
 
   const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey>("slow_motion");
   const motionStyleKey = props.motionStyleKey ?? localMotionStyle;
@@ -308,11 +309,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     else stillBriefRef.current = brief;
   }, [brief, animateMode]);
 
-  const toggleAnimate = () => {
-    const next = !animateMode;
+  useEffect(() => {
+    const prev = prevAnimateModeRef.current;
+    if (animateMode === prev) return;
 
-    // swap textarea content between still/motion
-    if (next) {
+    if (animateMode) {
       stillBriefRef.current = brief;
       onBriefChange(motionBriefRef.current || "");
       openPanel("style");
@@ -322,9 +323,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       openPanel("product");
     }
 
-    if (props.onToggleAnimateMode) props.onToggleAnimateMode(next);
-    else setLocalAnimate(next);
-  };
+    prevAnimateModeRef.current = animateMode;
+  }, [animateMode, brief, onBriefChange, openPanel]);
 
   const isMotion = animateMode;
 
@@ -503,22 +503,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                  {/* Image (go back to still mode) */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill")}
-                    style={pillBaseStyle(0)}
-                    onClick={() => toggleAnimate()}
-                  >
-                    <span className="studio-pill-main">Image</span>
-                    <span aria-hidden="true">✓</span>
-                  </button>
-
                   {/* Mouvement style */}
                   <button
                     type="button"
                     className={classNames("studio-pill", effectivePanel === "style" && "active")}
-                    style={pillBaseStyle(1)}
+                    style={pillBaseStyle(0)}
                     onClick={() => openPanel("style")}
                   >
                     <span className="studio-pill-main">Mouvement style</span>
@@ -529,7 +518,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(2)}
+                    style={pillBaseStyle(1)}
                     onClick={onCycleAspect}
                   >
                     <span className="studio-pill-icon">
@@ -776,11 +765,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             {showControls && (
               <div className="studio-controls">
                 <div className="studio-controls-divider" />
-
-                {/* ✅ Animate toggle (left only) */}
-                <button type="button" className={classNames("studio-animate-toggle", isMotion && "on")} onClick={toggleAnimate}>
-                  Animate this: <span className="studio-animate-state">{isMotion ? "ON" : "OFF"}</span>
-                </button>
 
                 <button type="button" className="studio-vision-toggle" onClick={onToggleVision}>
                   Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
