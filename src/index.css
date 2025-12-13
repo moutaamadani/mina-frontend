@@ -1033,3 +1033,35 @@ video {
   min-width: 0;
 }
 
+/* ===========================================================
+   HEADER CTAs — bold, no underline (match StudioRight "Send")
+   (ONLY affects buttons we tag with .studio-header-cta)
+   =========================================================== */
+.studio-header-cta {
+  border: 0;
+  background: transparent;
+  padding: 0;
+
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
+
+  text-decoration: none !important;
+  text-underline-offset: 0;
+  text-decoration-thickness: 0;
+
+  cursor: pointer;
+}
+
+.studio-header-cta:hover {
+  opacity: 0.9;
+}
+
+.studio-header-cta:active {
+  opacity: 0.6;
+}
+
+.studio-header-cta:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
