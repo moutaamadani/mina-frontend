@@ -2,7 +2,7 @@
 // ============================================================================
 // [PART 1 START] Imports & environment
 // ============================================================================
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef  from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
 
@@ -352,16 +352,17 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // -------------------------
   // 4.1 Global tab + customer
   // -------------------------
-  // === STUDIO MODE (explicit, derived from existing logic) ===
-type StudioMode = "create" | "animate";
-
-const [studioMode, setStudioMode] = useState<StudioMode>("create");
-// === END STUDIO MODE ===
-
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
-  const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
+  const [customerId, setCustomerId] = useState<string>(() =>
+    getInitialCustomerId(initialCustomerId)
+  );
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
   const [briefFocused, setBriefFocused] = useState(false);
+
+  // === STUDIO MODE (single source of truth) ===
+  type StudioMode = "create" | "animate";
+  const [studioMode, setStudioMode] = useState<StudioMode>("create");
+  // === END STUDIO MODE ===
 
   // -------------------------
   // 4.2 Health / credits / session
@@ -395,7 +396,9 @@ const [studioMode, setStudioMode] = useState<StudioMode>("create");
   const [motionIndex, setMotionIndex] = useState(0);
   const [motionDescription, setMotionDescription] = useState("");
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
-  const [motionSuggestError, setMotionSuggestError] = useState<string | null>(null);
+  const [motionSuggestError, setMotionSuggestError] = useState<string | null>(
+    null
+  );
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
 
@@ -407,168 +410,64 @@ const [studioMode, setStudioMode] = useState<StudioMode>("create");
   // Panels (only one open at a time)
   const [activePanel, setActivePanel] = useState<PanelKey>(null);
 
-  // Stage 0 = only textarea
-  // Stage 1 = pills fade in (stagger)
-  // Stage 2 = panels area available
-  // Stage 3 = vision + create available
+  // UI stages
   const [uiStage, setUiStage] = useState<0 | 1 | 2 | 3>(0);
   const stageT2Ref = useRef<number | null>(null);
   const stageT3Ref = useRef<number | null>(null);
 
-  // Global drag overlay (whole page)
-  const [globalDragging, setGlobalDragging] = useState(false);
-  const dragDepthRef = useRef(0);
+  // =========================
+  // [PART 5 START] Derived values (rules)
+  // =========================
+  const briefLength = brief.trim().length;
+  const uploadsPending = Object.values(uploads).some((arr) =>
+    arr.some((it) => it.uploading)
+  );
 
-  // Upload buckets
-  const [uploads, setUploads] = useState<Record<UploadPanelKey, UploadItem[]>>({
-    product: [],
-    logo: [],
-    inspiration: [],
-  });
+  type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
 
-  // Style selection (hover selects too)
-  const [stylePresetKey, setStylePresetKey] = useState<string>("vintage");
-  const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
+  const createCtaState: CreateCtaState = stillGenerating
+    ? "creating"
+    : uploadsPending
+    ? "uploading"
+    : briefLength < 40
+    ? "describe_more"
+    : "ready";
 
-  // Inline rename for styles (no new panel)
-  const [styleLabelOverrides, setStyleLabelOverrides] = useState<Record<string, string>>(() => {
-    try {
-      const raw = window.localStorage.getItem("minaStyleLabelOverrides");
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
-      return {};
+  const createCtaLabel =
+    createCtaState === "creating"
+      ? "Creating…"
+      : createCtaState === "uploading"
+      ? "Uploading…"
+      : createCtaState === "describe_more"
+      ? "Describe more"
+      : "Create";
+
+  const createCtaDisabled = createCtaState !== "ready";
+  const canCreateStill = createCtaState === "ready";
+
+  // === DERIVE MODE FROM EXISTING DATA ===
+  useEffect(() => {
+    if (motionItems.length > 0) {
+      setStudioMode("animate");
+    } else {
+      setStudioMode("create");
     }
-  });
+  }, [motionItems.length]);
 
-  const [customStyles, setCustomStyles] = useState<CustomStyle[]>(() => {
-    try {
-      const raw = window.localStorage.getItem("minaCustomStyles");
-      return raw ? (JSON.parse(raw) as CustomStyle[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const showPills = uiStage >= 1;
+  const showPanels = uiStage >= 1;
+  const showControls = uiStage >= 3;
 
-  const [editingStyleKey, setEditingStyleKey] = useState<string | null>(null);
-  const [editingStyleValue, setEditingStyleValue] = useState<string>("");
+  const currentAspect = ASPECT_OPTIONS[aspectIndex];
+  const currentStill: StillItem | null =
+    stillItems[stillIndex] || stillItems[0] || null;
+  const currentMotion: MotionItem | null =
+    motionItems[motionIndex] || motionItems[0] || null;
 
-  // -------------------------
-  // 4.4 History (profile)
-  // -------------------------
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [historyGenerations, setHistoryGenerations] = useState<GenerationRecord[]>([]);
-  const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>([]);
+  // =========================
+  // [PART 5 END]
+  // =========================
 
-  // -------------------------
-  // 4.5 Upload refs / drag state
-  // -------------------------
-  const productInputRef = useRef<HTMLInputElement | null>(null);
-  const logoInputRef = useRef<HTMLInputElement | null>(null);
-  const inspirationInputRef = useRef<HTMLInputElement | null>(null);
-
-  // -------------------------
-  // 4.6 Brief helper hint ("Describe more")
-  // -------------------------
-  const [showDescribeMore, setShowDescribeMore] = useState(false);
-  const describeMoreTimeoutRef = useRef<number | null>(null);
-
-  // -------------------------
-  // 4.7 Brief scroll ref
-  // -------------------------
-  const briefShellRef = useRef<HTMLDivElement | null>(null);
-const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
-
-  // -------------------------
-  // 4.8 Custom style modal + custom saved styles
-  // -------------------------
-  const [customStylePanelOpen, setCustomStylePanelOpen] = useState(false);
-  const [customStyleImages, setCustomStyleImages] = useState<CustomStyleImage[]>([]);
-  const [customStyleHeroId, setCustomStyleHeroId] = useState<string | null>(null);
-  const [customStyleHeroThumb, setCustomStyleHeroThumb] = useState<string | null>(null);
-  const [customStyleTraining, setCustomStyleTraining] = useState(false);
-  const [customStyleError, setCustomStyleError] = useState<string | null>(null);
-  const customStyleInputRef = useRef<HTMLInputElement | null>(null);
-
-  const [customPresets, setCustomPresets] = useState<CustomStylePreset[]>(() => {
-    if (typeof window === "undefined") return [];
-    return loadCustomStyles();
-  });
-
-  // -------------------------
-  // 4.9 Stable refs for unmount cleanup (avoid undefined productItems/etc)
-  // -------------------------
-  const uploadsRef = useRef(uploads);
-  const customStyleHeroThumbRef = useRef<string | null>(customStyleHeroThumb);
-  const customStyleImagesRef = useRef<CustomStyleImage[]>(customStyleImages);
-
-  useEffect(() => {
-    uploadsRef.current = uploads;
-  }, [uploads]);
-
-  useEffect(() => {
-    customStyleHeroThumbRef.current = customStyleHeroThumb;
-  }, [customStyleHeroThumb]);
-
-  useEffect(() => {
-    customStyleImagesRef.current = customStyleImages;
-  }, [customStyleImages]);
-
-  // ========================================================================
-// [PART 5 START] Derived values (the “rules” you requested)
-// ========================================================================
-const briefLength = brief.trim().length;
-const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
-
-type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
-
-const createCtaState: CreateCtaState = stillGenerating
-  ? "creating"
-  : uploadsPending
-  ? "uploading"
-  : briefLength < 40
-  ? "describe_more"
-  : "ready";
-
-const createCtaLabel =
-  createCtaState === "creating"
-    ? "Creating…"
-    : createCtaState === "uploading"
-    ? "Uploading…"
-    : createCtaState === "describe_more"
-    ? "Describe more"
-    : "Create";
-
-// Disable unless fully ready (prevents “no-op click” confusion)
-const createCtaDisabled = createCtaState !== "ready";
-
-// Keep existing prop for StudioLeft if you still use it there
-const canCreateStill = createCtaState === "ready";
-
-// UI stages
-const showPills = uiStage >= 1;
-const showPanels = uiStage >= 1;
-const showControls = uiStage >= 3;
-
-// counts for +/✓
-const productCount = uploads.product.length;
-const logoCount = uploads.logo.length;
-const inspirationCount = uploads.inspiration.length;
-
-const currentAspect = ASPECT_OPTIONS[aspectIndex];
-const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
-const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
-
-const imageCost = credits?.meta?.imageCost ?? 1;
-const motionCost = credits?.meta?.motionCost ?? 5;
-
-const briefHintVisible = showDescribeMore;
-
-// Style key for API (avoid unknown custom keys)
-const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
-// ========================================================================
-// [PART 5 END]
-// ========================================================================
 
 
   // ============================================
