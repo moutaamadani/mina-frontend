@@ -2,11 +2,9 @@
 // ============================================================================
 // [PART 1 START] Imports & environment
 // ============================================================================
-import React, { useEffect, useLayoutEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
-import StudioLeft from "./StudioRight";
-
 
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
@@ -18,6 +16,7 @@ const TOPUP_URL =
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
+
 
 // ============================================================================
 // [PART 2 START] Types
