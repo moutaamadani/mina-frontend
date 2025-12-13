@@ -1,7 +1,9 @@
-// =============================================================
-// FILE: src/StudioLeft.tsx
-// =============================================================
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+// src/StudioLeft.tsx
+// ============================================================================
+// Mina Studio — LEFT SIDE (Input + pills + panels + style + create + motion)
+// ============================================================================
+
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./StudioLeft.css";
 
 // ------------------------------------
@@ -43,7 +45,7 @@ export type AspectOptionLike = {
   platformKey?: string;
 };
 
-type StillThumb = { id: string; url: string };
+export type MotionStyleKey = "melt" | "drop" | "expand" | "satisfying" | "slow_motion" | "fix_camera";
 
 type StudioLeftProps = {
   globalDragging: boolean;
@@ -109,34 +111,24 @@ type StudioLeftProps = {
   minaVisionEnabled: boolean;
   onToggleVision: () => void;
 
+  // IMAGE create
   canCreateStill: boolean;
   stillGenerating: boolean;
   stillError: string | null;
   onCreateStill: () => void;
 
-  onGoProfile: () => void;
-
-  // ============================================================
-  // ✅ NEW: Animate mode wiring (optional = backward compatible)
-  // ============================================================
+  // ✅ MOTION mode (optional for backward compatibility)
   animateMode?: boolean;
   onToggleAnimateMode?: (next: boolean) => void;
 
-  // Motion side inputs (optional)
-  motionText?: string;
-  onMotionTextChange?: (v: string) => void;
+  motionStyleKey?: MotionStyleKey;
+  setMotionStyleKey?: (k: MotionStyleKey) => void;
+
   motionGenerating?: boolean;
   motionError?: string | null;
   onCreateMotion?: () => void;
 
-  // Motion style selection (optional)
-  motionStyleKey?: string;
-  setMotionStyleKey?: (k: string) => void;
-
-  // Base image picker for motion (optional)
-  stillThumbs?: StillThumb[];
-  stillThumbIndex?: number;
-  setStillThumbIndex?: (i: number) => void;
+  onGoProfile: () => void;
 };
 
 // ------------------------------------
@@ -216,17 +208,17 @@ const Collapse: React.FC<{
   );
 };
 
-// ============================================================
-// Motion styles (fixed list)
-// ============================================================
-const MOTION_STYLES = [
-  { key: "melt", label: "Melt" },
-  { key: "drop", label: "Drop" },
-  { key: "expand", label: "Expand" },
-  { key: "satisfying", label: "Satisfying" },
-  { key: "slow-motion", label: "Slow motion" },
-  { key: "fix-camera", label: "Fix camera" },
-] as const;
+// ------------------------------------
+// Motion styles (exactly 6)
+// ------------------------------------
+const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string }> = [
+  { key: "melt", label: "Melt", seed: "Slow, elegant melting motion—soft drips, glossy tension, luxury macro feel." },
+  { key: "drop", label: "Drop", seed: "Gentle droplets falling in slow rhythm—minimal, ASMR, clean editorial motion." },
+  { key: "expand", label: "Expand", seed: "Subtle expansion / blooming—fabric or liquid spreading softly, calm luxury vibe." },
+  { key: "satisfying", label: "Satisfying", seed: "Perfectly smooth, satisfying motion loop—micro movements, clean, premium." },
+  { key: "slow_motion", label: "Slow motion", seed: "Ultra slow camera drift + tiny prop movement—soft light shifts, premium calm." },
+  { key: "fix_camera", label: "Fix camera", seed: "Fixed camera, only scene moves—minimal loop, tiny motion in light/props." },
+];
 
 // ============================================================================
 // Component
@@ -289,76 +281,65 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     minaVisionEnabled,
     onToggleVision,
 
+    canCreateStill,
     stillGenerating,
     stillError,
     onCreateStill,
 
     onGoProfile,
-
-    // NEW optional
-    animateMode: animateModeControlled,
-    onToggleAnimateMode,
-
-    motionText,
-    onMotionTextChange,
-    motionGenerating,
-    motionError,
-    onCreateMotion,
-
-    motionStyleKey,
-    setMotionStyleKey,
-
-    stillThumbs,
-    stillThumbIndex,
-    setStillThumbIndex,
   } = props;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const motionInputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Local animate mode fallback (if parent didn’t wire it yet)
-  const [animateModeLocal, setAnimateModeLocal] = useState(false);
-  const animateMode = animateModeControlled ?? animateModeLocal;
+  // ✅ motion mode (with local fallback)
+  const [localAnimate, setLocalAnimate] = useState(false);
+  const animateMode = props.animateMode ?? localAnimate;
+
+  const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey>("slow_motion");
+  const motionStyleKey = props.motionStyleKey ?? localMotionStyle;
+  const setMotionStyleKey = props.setMotionStyleKey ?? setLocalMotionStyle;
+
+  const stillBriefRef = useRef<string>("");
+  const motionBriefRef = useRef<string>("");
+
+  // keep separate briefs per mode (so switching doesn't destroy text)
+  useEffect(() => {
+    if (animateMode) motionBriefRef.current = brief;
+    else stillBriefRef.current = brief;
+  }, [brief, animateMode]);
 
   const toggleAnimate = () => {
     const next = !animateMode;
-    if (onToggleAnimateMode) onToggleAnimateMode(next);
-    else setAnimateModeLocal(next);
 
-    // When entering animate mode: open "Image" panel
-    if (next) openPanel("product");
+    // swap textarea content between still/motion
+    if (next) {
+      stillBriefRef.current = brief;
+      onBriefChange(motionBriefRef.current || "");
+      openPanel("style");
+    } else {
+      motionBriefRef.current = brief;
+      onBriefChange(stillBriefRef.current || "");
+      openPanel("product");
+    }
+
+    if (props.onToggleAnimateMode) props.onToggleAnimateMode(next);
+    else setLocalAnimate(next);
   };
 
-  // Local motion state fallback (if parent didn’t wire it yet)
-  const [motionTextLocal, setMotionTextLocal] = useState("");
-  const effectiveMotionText = motionText ?? motionTextLocal;
-  const setEffectiveMotionText = (v: string) => {
-    if (onMotionTextChange) onMotionTextChange(v);
-    else setMotionTextLocal(v);
-  };
-
-  const [motionStyleLocal, setMotionStyleLocal] = useState<string>("melt");
-  const effectiveMotionStyleKey = motionStyleKey ?? motionStyleLocal;
-  const setEffectiveMotionStyleKey = (k: string) => {
-    if (setMotionStyleKey) setMotionStyleKey(k);
-    else setMotionStyleLocal(k);
-  };
-
-  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
+  const isMotion = animateMode;
 
   const briefLen = brief.trim().length;
 
-  // pills are staggered
+  // pills delay style
   const pillBaseStyle = (index: number): React.CSSProperties => ({
     transitionDelay: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
   });
 
-  // Use original panel type; in animate mode we map:
-  // - "product" => Image picker
-  // - "style"   => Movement style
-  const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
-  const effectivePanelMotion: PanelKey =
-    activePanel === "product" || activePanel === "style" ? activePanel : "product";
+  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
+
+  // panel behavior
+  const effectivePanel: PanelKey =
+    uiStage === 0 ? null : (activePanel ?? (isMotion ? "style" : "product"));
 
   const productCount = uploads.product.length;
   const logoCount = uploads.logo.length;
@@ -384,51 +365,44 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // -------------------------
   // Create CTA state machine
   // -------------------------
-  const createState: "creating" | "uploading" | "describe_more" | "ready" | "select_image" =
-    animateMode
-      ? (motionGenerating ? "creating" : (stillThumbs && stillThumbs.length > 0 ? "ready" : "select_image"))
-      : stillGenerating
-        ? "creating"
-        : uploadsPending
-          ? "uploading"
-          : briefLen < 40
-            ? "describe_more"
-            : "ready";
+  const motionGenerating = !!props.motionGenerating;
+  const motionError = props.motionError ?? null;
+  const hasMotionHandler = typeof props.onCreateMotion === "function";
+
+  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
+    stillGenerating ? "creating" : uploadsPending ? "uploading" : briefLen < 40 ? "describe_more" : "ready";
+
+  const motionCreateState: "creating" | "describe_more" | "ready" =
+    motionGenerating ? "creating" : briefLen < 18 ? "describe_more" : "ready";
+
+  const createState = isMotion ? motionCreateState : imageCreateState;
 
   const createLabel =
     createState === "creating"
-      ? "Creating…"
+      ? isMotion
+        ? "Animating…"
+        : "Creating…"
       : createState === "uploading"
         ? "Uploading…"
         : createState === "describe_more"
           ? "Describe more"
-          : createState === "select_image"
-            ? "Select image"
-            : animateMode
-              ? "Animate"
-              : "Create";
+          : isMotion
+            ? "Animate"
+            : "Create";
 
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (animateMode && !onCreateMotion && createState === "ready"); // if not wired yet
+    (isMotion && !hasMotionHandler) ||
+    (!isMotion && !canCreateStill);
 
   const handleCreateClick = () => {
-    if (animateMode) {
-      if (createState === "select_image") {
-        openPanel("product");
-        return;
-      }
-      if (createState === "ready") {
-        // If parent wired it, this will generate motion.
-        onCreateMotion?.();
-        return;
-      }
-      return;
-    }
-
     if (createState === "ready") {
-      onCreateStill();
+      if (isMotion) {
+        props.onCreateMotion?.();
+      } else {
+        onCreateStill();
+      }
       return;
     }
     if (createState === "describe_more") {
@@ -446,25 +420,28 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     e.target.value = "";
   };
 
+  // motion style click: pick + optionally seed the motion brief if empty
+  const pickMotionStyle = (k: MotionStyleKey) => {
+    setMotionStyleKey(k);
+    openPanel("style");
+
+    // only seed if user hasn't typed yet
+    const trimmed = brief.trim();
+    if (!trimmed || trimmed.length < 4) {
+      const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
+      if (seed) onBriefChange(seed);
+    }
+  };
+
   return (
     <div className={classNames("studio-left", globalDragging && "drag-active")}>
       <div className="studio-left-main">
-        {/* Top mini toggle (LEFT ONLY) */}
-        <div className="studio-left-topbar">
-          <button type="button" className="studio-left-cta" onClick={toggleAnimate}>
-            Animate this{" "}
-            <span className={classNames("studio-left-cta-state", animateMode && "on")}>
-              {animateMode ? "ON" : "OFF"}
-            </span>
-          </button>
-        </div>
-
         {/* Input 1 */}
         <div className="studio-input1-block">
-          {/* Pills slot (staggered + smooth) */}
+          {/* Pills slot */}
           <div className="studio-pills-slot">
             <div className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}>
-              {!animateMode ? (
+              {!isMotion ? (
                 <>
                   {/* Product */}
                   <button
@@ -510,7 +487,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span aria-hidden="true">✓</span>
                   </button>
 
-                  {/* Ratio (keeps icon) */}
+                  {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
@@ -526,25 +503,25 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                  {/* Image */}
+                  {/* Image (go back to still mode) */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", effectivePanelMotion === "product" && "active")}
+                    className={classNames("studio-pill")}
                     style={pillBaseStyle(0)}
-                    onClick={() => openPanel("product")}
+                    onClick={() => toggleAnimate()}
                   >
                     <span className="studio-pill-main">Image</span>
-                    <span aria-hidden="true">{stillThumbs && stillThumbs.length > 0 ? "✓" : "+"}</span>
+                    <span aria-hidden="true">✓</span>
                   </button>
 
-                  {/* Movement style (mapped to "style" panel) */}
+                  {/* Mouvement style */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", effectivePanelMotion === "style" && "active")}
+                    className={classNames("studio-pill", effectivePanel === "style" && "active")}
                     style={pillBaseStyle(1)}
                     onClick={() => openPanel("style")}
                   >
-                    <span className="studio-pill-main">Movement style</span>
+                    <span className="studio-pill-main">Mouvement style</span>
                     <span aria-hidden="true">✓</span>
                   </button>
 
@@ -573,46 +550,29 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               ref={briefShellRef}
               onScroll={onBriefScroll}
             >
-              {!animateMode ? (
-                <>
-                  <textarea
-                    ref={briefInputRef}
-                    className="studio-brief-input"
-                    placeholder="Describe how you want your still life image to look like"
-                    value={brief}
-                    onChange={(e) => onBriefChange(e.target.value)}
-                    rows={4}
-                    onFocus={() => setBriefFocused(true)}
-                    onBlur={() => setBriefFocused(false)}
-                  />
-                  {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
-                </>
-              ) : (
-                <>
-                  <textarea
-                    ref={motionInputRef}
-                    className="studio-brief-input"
-                    placeholder="Describe the motion you want (optional)"
-                    value={effectiveMotionText}
-                    onChange={(e) => setEffectiveMotionText(e.target.value)}
-                    rows={4}
-                    onFocus={() => setBriefFocused(true)}
-                    onBlur={() => setBriefFocused(false)}
-                  />
-                  <div className="studio-brief-hint">Pick movement style below</div>
-                </>
-              )}
+              <textarea
+                ref={briefInputRef}
+                className="studio-brief-input"
+                placeholder={
+                  isMotion
+                    ? "Describe the motion you want (loop, camera, drips, melt, etc.)"
+                    : "Describe how you want your still life image to look like"
+                }
+                value={brief}
+                onChange={(e) => onBriefChange(e.target.value)}
+                rows={4}
+                onFocus={() => setBriefFocused(true)}
+                onBlur={() => setBriefFocused(false)}
+              />
+              {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
             </div>
           </div>
         </div>
 
-        {/* Panels (hidden while typing/focused) */}
+        {/* Panels */}
         {!briefFocused && (
           <div className="mina-left-block">
-            {/* ===========================
-                STILL MODE PANELS (original)
-                =========================== */}
-            {!animateMode && (
+            {!isMotion ? (
               <>
                 <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
@@ -786,61 +746,24 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   </div>
                 </Collapse>
               </>
-            )}
-
-            {/* ===========================
-                ANIMATE MODE PANELS
-                product panel => Image picker (from stillThumbs)
-                style panel   => Movement styles (fixed 6, green select)
-                =========================== */}
-            {animateMode && (
+            ) : (
               <>
-                <Collapse open={showPanels && (effectivePanelMotion === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
+                <Collapse open={showPanels && (effectivePanel === "style" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
-                    <div className="studio-panel-title">Pick an image</div>
-
-                    <div className="studio-panel-row">
-                      <div className="studio-thumbs studio-thumbs--inline">
-                        {(stillThumbs || []).map((it, idx) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className={classNames("studio-thumb", stillThumbIndex === idx && "is-selected")}
-                            onClick={() => setStillThumbIndex?.(idx)}
-                            title="Use this image"
-                          >
-                            <img src={it.url} alt="" />
-                          </button>
-                        ))}
-
-                        {(!stillThumbs || stillThumbs.length === 0) && (
-                          <div className="studio-empty-inline">Create an image first, then animate it.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Collapse>
-
-                <Collapse open={showPanels && effectivePanelMotion === "style"} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Movement style</div>
+                    <div className="studio-panel-title">Pick a mouvement style</div>
 
                     <div className="studio-style-row">
                       {MOTION_STYLES.map((m) => (
                         <button
                           key={m.key}
                           type="button"
-                          className={classNames(
-                            "studio-style-card",
-                            "studio-motion-style-card",
-                            effectiveMotionStyleKey === m.key && "active"
-                          )}
-                          onClick={() => setEffectiveMotionStyleKey(m.key)}
+                          className={classNames("studio-style-card", "studio-motion-card", motionStyleKey === m.key && "active")}
+                          onClick={() => pickMotionStyle(m.key)}
                         >
-                          <div className="studio-style-thumb studio-motion-style-thumb">
+                          <div className={classNames("studio-style-thumb", "studio-motion-thumb")}>
                             <span aria-hidden="true">{m.label.slice(0, 1)}</span>
                           </div>
-                          <div className="studio-style-label studio-motion-style-label">{m.label}</div>
+                          <div className="studio-style-label">{m.label}</div>
                         </button>
                       ))}
                     </div>
@@ -854,7 +777,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <div className="studio-controls">
                 <div className="studio-controls-divider" />
 
-                {/* Keep vision toggle in both modes */}
+                {/* ✅ Animate toggle (left only) */}
+                <button type="button" className={classNames("studio-animate-toggle", isMotion && "on")} onClick={toggleAnimate}>
+                  Animate this: <span className="studio-animate-state">{isMotion ? "ON" : "OFF"}</span>
+                </button>
+
                 <button type="button" className="studio-vision-toggle" onClick={onToggleVision}>
                   Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
                 </button>
@@ -870,19 +797,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     disabled={createDisabled}
                     onClick={handleCreateClick}
+                    title={isMotion && !hasMotionHandler ? "Wire onCreateMotion in MinaApp" : undefined}
                   >
                     {createLabel}
                   </button>
                 </div>
 
-                {/* Errors */}
-                {!animateMode && stillError && <div className="error-text">{stillError}</div>}
-                {animateMode && motionError && <div className="error-text">{motionError}</div>}
-
-                {/* If not wired yet, gentle hint */}
-                {animateMode && !onCreateMotion && (
-                  <div className="error-text">Motion not wired yet: pass onCreateMotion + motionGenerating + motionError.</div>
-                )}
+                {!isMotion && stillError && <div className="error-text">{stillError}</div>}
+                {isMotion && motionError && <div className="error-text">{motionError}</div>}
               </div>
             )}
           </div>
