@@ -471,7 +471,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // 4.7 Brief scroll ref
   // -------------------------
   const briefShellRef = useRef<HTMLDivElement | null>(null);
-const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // -------------------------
   // 4.8 Custom style modal + custom saved styles
@@ -509,61 +509,60 @@ const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
   }, [customStyleImages]);
 
   // ========================================================================
-// [PART 5 START] Derived values (the “rules” you requested)
-// ========================================================================
-const briefLength = brief.trim().length;
-const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
+  // [PART 5 START] Derived values (the “rules” you requested)
+  // ========================================================================
+  const briefLength = brief.trim().length;
+  const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
 
-type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
+  type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
 
-const createCtaState: CreateCtaState = stillGenerating
-  ? "creating"
-  : uploadsPending
-  ? "uploading"
-  : briefLength < 40
-  ? "describe_more"
-  : "ready";
+  const createCtaState: CreateCtaState = stillGenerating
+    ? "creating"
+    : uploadsPending
+      ? "uploading"
+      : briefLength < 40
+        ? "describe_more"
+        : "ready";
 
-const createCtaLabel =
-  createCtaState === "creating"
-    ? "Creating…"
-    : createCtaState === "uploading"
-    ? "Uploading…"
-    : createCtaState === "describe_more"
-    ? "Describe more"
-    : "Create";
+  const createCtaLabel =
+    createCtaState === "creating"
+      ? "Creating…"
+      : createCtaState === "uploading"
+        ? "Uploading…"
+        : createCtaState === "describe_more"
+          ? "Describe more"
+          : "Create";
 
-// Disable unless fully ready (prevents “no-op click” confusion)
-const createCtaDisabled = createCtaState !== "ready";
+  // Disable unless fully ready (prevents “no-op click” confusion)
+  const createCtaDisabled = createCtaState !== "ready";
 
-// Keep existing prop for StudioLeft if you still use it there
-const canCreateStill = createCtaState === "ready";
+  // Keep existing prop for StudioLeft if you still use it there
+  const canCreateStill = createCtaState === "ready";
 
-// UI stages
-const showPills = uiStage >= 1;
-const showPanels = uiStage >= 1;
-const showControls = uiStage >= 3;
+  // UI stages
+  const showPills = uiStage >= 1;
+  const showPanels = uiStage >= 1;
+  const showControls = uiStage >= 3;
 
-// counts for +/✓
-const productCount = uploads.product.length;
-const logoCount = uploads.logo.length;
-const inspirationCount = uploads.inspiration.length;
+  // counts for +/✓
+  const productCount = uploads.product.length;
+  const logoCount = uploads.logo.length;
+  const inspirationCount = uploads.inspiration.length;
 
-const currentAspect = ASPECT_OPTIONS[aspectIndex];
-const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
-const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
+  const currentAspect = ASPECT_OPTIONS[aspectIndex];
+  const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
+  const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
 
-const imageCost = credits?.meta?.imageCost ?? 1;
-const motionCost = credits?.meta?.motionCost ?? 5;
+  const imageCost = credits?.meta?.imageCost ?? 1;
+  const motionCost = credits?.meta?.motionCost ?? 5;
 
-const briefHintVisible = showDescribeMore;
+  const briefHintVisible = showDescribeMore;
 
-// Style key for API (avoid unknown custom keys)
-const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
-// ========================================================================
-// [PART 5 END]
-// ========================================================================
-
+  // Style key for API (avoid unknown custom keys)
+  const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
+  // ========================================================================
+  // [PART 5 END]
+  // ========================================================================
 
   // ============================================
   // PART UI STAGING (premium reveal / no jumping)
@@ -586,36 +585,34 @@ const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-styl
   }, [customStyles]);
 
   useEffect(() => {
-  // Stage 0: only textarea (no pills, no panels)
-  if (briefLength <= 0) {
-    if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
-    if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
-    stageT2Ref.current = null;
-    stageT3Ref.current = null;
+    // Stage 0: only textarea (no pills, no panels)
+    if (briefLength <= 0) {
+      if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
+      if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
+      stageT2Ref.current = null;
+      stageT3Ref.current = null;
 
-    setUiStage(0);
-    setActivePanel(null);
-    setGlobalDragging(false);
-    dragDepthRef.current = 0;
-    return;
-  }
+      setUiStage(0);
+      setActivePanel(null);
+      setGlobalDragging(false);
+      dragDepthRef.current = 0;
+      return;
+    }
 
-  // Start the reveal ONLY once (when transitioning 0 -> typing)
-  if (uiStage === 0) {
-    setUiStage(1);
-    setActivePanel((prev) => prev ?? "product");
+    // Start the reveal ONLY once (when transitioning 0 -> typing)
+    if (uiStage === 0) {
+      setUiStage(1);
+      setActivePanel((prev) => prev ?? "product");
 
-    stageT2Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 2 ? 2 : s));
-    }, PANEL_REVEAL_DELAY_MS);
+      stageT2Ref.current = window.setTimeout(() => {
+        setUiStage((s) => (s < 2 ? 2 : s));
+      }, PANEL_REVEAL_DELAY_MS);
 
-    stageT3Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 3 ? 3 : s));
-    }, CONTROLS_REVEAL_DELAY_MS);
-  }
-}, [briefLength, uiStage]);
-
-
+      stageT3Ref.current = window.setTimeout(() => {
+        setUiStage((s) => (s < 3 ? 3 : s));
+      }, CONTROLS_REVEAL_DELAY_MS);
+    }
+  }, [briefLength, uiStage]);
 
   // ========================================================================
   // [PART 6 START] Effects – persist customer + bootstrap
@@ -1589,54 +1586,51 @@ const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-styl
   // [PART 13 END]
   // ========================================================================
 
- 
+  // ========================================================================
+  // [PART 15 START] Render – RIGHT side (separate component)
+  // ========================================================================
 
-    // ========================================================================
-// [PART 15 START] Render – RIGHT side (separate component)
-// ========================================================================
+  // Keep lazy component stable across renders (no remounting)
+  const StudioRightLazyRef = useRef<
+    React.LazyExoticComponent<React.ComponentType<any>> | null
+  >(null);
 
-// Keep lazy component stable across renders (no remounting)
-const StudioRightLazyRef = useRef<
-  React.LazyExoticComponent<React.ComponentType<any>> | null
->(null);
+  if (!StudioRightLazyRef.current) {
+    StudioRightLazyRef.current = React.lazy(() => import("./StudioRight"));
+  }
 
-if (!StudioRightLazyRef.current) {
-  StudioRightLazyRef.current = React.lazy(() => import("./StudioRight"));
-}
+  const renderStudioRight = () => {
+    const StudioRight = StudioRightLazyRef.current!;
 
-const renderStudioRight = () => {
-  const StudioRight = StudioRightLazyRef.current!;
-
-  return (
-    <React.Suspense
-      fallback={
-        <div className="studio-right">
-          <div className="studio-right-surface">
-            <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
+    return (
+      <React.Suspense
+        fallback={
+          <div className="studio-right">
+            <div className="studio-right-surface">
+              <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
+            </div>
           </div>
-        </div>
-      }
-    >
-      <StudioRight
-        currentStill={currentStill}
-        currentMotion={currentMotion}
-        stillItems={stillItems}
-        stillIndex={stillIndex}
-        setStillIndex={setStillIndex}
-        feedbackText={feedbackText}
-        setFeedbackText={setFeedbackText}
-        feedbackSending={feedbackSending}
-        feedbackError={feedbackError}
-        onSubmitFeedback={handleSubmitFeedback}
-      />
-    </React.Suspense>
-  );
-};
+        }
+      >
+        <StudioRight
+          currentStill={currentStill}
+          currentMotion={currentMotion}
+          stillItems={stillItems}
+          stillIndex={stillIndex}
+          setStillIndex={setStillIndex}
+          feedbackText={feedbackText}
+          setFeedbackText={setFeedbackText}
+          feedbackSending={feedbackSending}
+          feedbackError={feedbackError}
+          onSubmitFeedback={handleSubmitFeedback}
+        />
+      </React.Suspense>
+    );
+  };
 
-// ========================================================================
-// [PART 15 END]
-// ========================================================================
-
+  // ========================================================================
+  // [PART 15 END]
+  // ========================================================================
 
   // ========================================================================
   // [PART 16 START] Render – Custom style modal (blur handled in CSS)
@@ -1796,23 +1790,27 @@ const renderStudioRight = () => {
           </div>
 
           <div className="studio-header-right">
-          {activeTab === "studio" && (currentStill || currentMotion) && (
-
+            {activeTab === "studio" && (currentStill || currentMotion) && (
               <>
+                {/* ✅ ONLY CHANGE: className -> studio-header-cta */}
                 <button
                   type="button"
-                  className="link-button"
+                  className="studio-header-cta"
                   onClick={handleAnimateHeaderClick}
                   disabled={!currentStill || motionGenerating || (!motionDescription && motionSuggestLoading)}
                 >
                   Animate this
                 </button>
-                <button type="button" className="link-button" onClick={handleLikeCurrentStill} disabled={!currentStill}>
+
+                {/* ✅ ONLY CHANGE: className -> studio-header-cta */}
+                <button type="button" className="studio-header-cta" onClick={handleLikeCurrentStill} disabled={!currentStill}>
                   ♡ more of this
                 </button>
+
+                {/* ✅ ONLY CHANGE: className -> studio-header-cta */}
                 <button
                   type="button"
-                  className="link-button"
+                  className="studio-header-cta"
                   onClick={handleDownloadCurrentStill}
                   disabled={!currentStill && !currentMotion}
                 >
@@ -1832,59 +1830,59 @@ const renderStudioRight = () => {
         {activeTab === "studio" ? (
           <div className={classNames("studio-body", "studio-body--two-col")}>
             <StudioLeft
-                globalDragging={globalDragging}
-                showPills={showPills}
-                showPanels={showPanels}
-                showControls={showControls}
-                uiStage={uiStage}
-                brief={brief}
-                briefHintVisible={briefHintVisible}
-                briefShellRef={briefShellRef}
-                onBriefScroll={handleBriefScroll}
-                onBriefChange={handleBriefChange}
-                briefFocused={briefFocused}
-                setBriefFocused={setBriefFocused}
-                activePanel={activePanel}
-                openPanel={openPanel}
-                pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
-                pillStaggerMs={PILL_STAGGER_MS}
-                panelRevealDelayMs={PANEL_REVEAL_DELAY_MS}
-                currentAspect={currentAspect}
-                currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
-                onCycleAspect={handleCycleAspect}
-                uploads={uploads}
-                uploadsPending={uploadsPending}
-                removeUploadItem={removeUploadItem}
-                moveUploadItem={moveUploadItem}
-                triggerPick={triggerPick}
-                onFilesPicked={addFilesToPanel}
-                productInputRef={productInputRef}
-                logoInputRef={logoInputRef}
-                inspirationInputRef={inspirationInputRef}
-                stylePresetKey={stylePresetKey}
-                setStylePresetKey={setStylePresetKey}
-                stylePresets={STYLE_PRESETS}
-                customStyles={customStyles}
-                getStyleLabel={getStyleLabel}
-                editingStyleKey={editingStyleKey}
-                editingStyleValue={editingStyleValue}
-                setEditingStyleValue={setEditingStyleValue}
-                beginRenameStyle={beginRenameStyle}
-                commitRenameStyle={commitRenameStyle}
-                cancelRenameStyle={cancelRenameStyle}
-                deleteCustomStyle={deleteCustomStyle}
-                onOpenCustomStylePanel={handleOpenCustomStylePanel}
-                minaVisionEnabled={minaVisionEnabled}
-                onToggleVision={() => setMinaVisionEnabled((p) => !p)}
-                canCreateStill={canCreateStill}
-                createCtaState={createCtaState}
-                createCtaLabel={createCtaLabel}
-                createCtaDisabled={createCtaDisabled}
-                stillGenerating={stillGenerating}
-                stillError={stillError}
-                onCreateStill={handleGenerateStill}
-                onGoProfile={() => setActiveTab("profile")}
-              />
+              globalDragging={globalDragging}
+              showPills={showPills}
+              showPanels={showPanels}
+              showControls={showControls}
+              uiStage={uiStage}
+              brief={brief}
+              briefHintVisible={briefHintVisible}
+              briefShellRef={briefShellRef}
+              onBriefScroll={handleBriefScroll}
+              onBriefChange={handleBriefChange}
+              briefFocused={briefFocused}
+              setBriefFocused={setBriefFocused}
+              activePanel={activePanel}
+              openPanel={openPanel}
+              pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
+              pillStaggerMs={PILL_STAGGER_MS}
+              panelRevealDelayMs={PANEL_REVEAL_DELAY_MS}
+              currentAspect={currentAspect}
+              currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
+              onCycleAspect={handleCycleAspect}
+              uploads={uploads}
+              uploadsPending={uploadsPending}
+              removeUploadItem={removeUploadItem}
+              moveUploadItem={moveUploadItem}
+              triggerPick={triggerPick}
+              onFilesPicked={addFilesToPanel}
+              productInputRef={productInputRef}
+              logoInputRef={logoInputRef}
+              inspirationInputRef={inspirationInputRef}
+              stylePresetKey={stylePresetKey}
+              setStylePresetKey={setStylePresetKey}
+              stylePresets={STYLE_PRESETS}
+              customStyles={customStyles}
+              getStyleLabel={getStyleLabel}
+              editingStyleKey={editingStyleKey}
+              editingStyleValue={editingStyleValue}
+              setEditingStyleValue={setEditingStyleValue}
+              beginRenameStyle={beginRenameStyle}
+              commitRenameStyle={commitRenameStyle}
+              cancelRenameStyle={cancelRenameStyle}
+              deleteCustomStyle={deleteCustomStyle}
+              onOpenCustomStylePanel={handleOpenCustomStylePanel}
+              minaVisionEnabled={minaVisionEnabled}
+              onToggleVision={() => setMinaVisionEnabled((p) => !p)}
+              canCreateStill={canCreateStill}
+              createCtaState={createCtaState}
+              createCtaLabel={createCtaLabel}
+              createCtaDisabled={createCtaDisabled}
+              stillGenerating={stillGenerating}
+              stillError={stillError}
+              onCreateStill={handleGenerateStill}
+              onGoProfile={() => setActiveTab("profile")}
+            />
             {renderStudioRight()}
           </div>
         ) : (
