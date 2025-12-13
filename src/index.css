@@ -1,4 +1,4 @@
-/* src/index.css */
+// src/index.css
 /* ===========================================================
    0. Root + resets
    =========================================================== */
@@ -845,13 +845,13 @@ video {
     min-height: 100vh;
   }
 
-  .studio-left,
-  .studio-right {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
+ .studio-left,
+.studio-right {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
   .studio-profile-body {
     grid-template-columns: minmax(0, 1fr);
@@ -1031,124 +1031,4 @@ video {
   flex: 0 0 40%;
   max-width: 40%;
   min-width: 0;
-}
-
-/* ===========================================================
-   ✅ ADD THIS: Header buttons (Animate / Like / Download)
-   Bold + NOT underlined, like "Send"
-   =========================================================== */
-.studio-header-cta {
-  border: 0;
-  background: transparent;
-  padding: 0;
-
-  font-weight: 700;
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.9);
-
-  text-decoration: none !important;
-  text-underline-offset: 0;
-  text-decoration-thickness: 0;
-
-  cursor: pointer;
-}
-
-.studio-header-cta:hover {
-  opacity: 0.9;
-}
-
-.studio-header-cta:active {
-  opacity: 0.6;
-}
-
-.studio-header-cta:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-/* =====================================================================================
-   MINA — Header buttons (global)
-   Paste this at the END of src/index.css
-===================================================================================== */
-
-/* Make sure header content sits above imagery */
-.studio-header-overlay {
-  position: relative;
-  z-index: 50;
-}
-
-/* Layout polish (optional but helps spacing) */
-.studio-header-left,
-.studio-header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* ✅ Header CTA buttons: readable on dark backgrounds (always white text + glass bg) */
-.studio-header-cta {
-  -webkit-tap-highlight-color: transparent;
-  appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(0, 0, 0, 0.38);
-  color: #ffffff;
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1;
-
-  cursor: pointer;
-  user-select: none;
-
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-
-  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, opacity 120ms ease;
-}
-
-.studio-header-cta:hover:enabled {
-  transform: translateY(-1px);
-  background: rgba(0, 0, 0, 0.48);
-  border-color: rgba(255, 255, 255, 0.32);
-}
-
-.studio-header-cta:active:enabled {
-  transform: translateY(0px);
-}
-
-.studio-header-cta:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  transform: none;
-}
-
-/* ✅ Optional: “Download” slightly stronger */
-.studio-header-cta--download {
-  border-color: rgba(255, 255, 255, 0.32);
-  background: rgba(0, 0, 0, 0.46);
-}
-
-/* ✅ Optional: if you ever want a light-theme override */
-@media (prefers-color-scheme: light) {
-  .studio-header-cta {
-    border-color: rgba(0, 0, 0, 0.12);
-    background: rgba(255, 255, 255, 0.7);
-    color: #111;
-  }
-
-  .studio-header-cta:hover:enabled {
-    background: rgba(255, 255, 255, 0.85);
-    border-color: rgba(0, 0, 0, 0.18);
-  }
-
-  .studio-header-cta--download {
-    background: rgba(255, 255, 255, 0.82);
-  }
 }
