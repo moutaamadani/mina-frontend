@@ -1579,7 +1579,7 @@ video {
 
 /* rename input should match thumbnail width */
 .studio-style-label input{
-  width: 100% !important;
-  max-width: 92px !important;
+  width: 80% !important;
+  max-width: 48px !important;
   box-sizing: border-box;
 }
