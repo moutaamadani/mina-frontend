@@ -1829,57 +1829,57 @@ const renderStudioRight = () => {
         {activeTab === "studio" ? (
           <div className={classNames("studio-body", "studio-body--two-col")}>
             <StudioLeft
-              globalDragging={globalDragging}
-              showPills={showPills}
-              showPanels={showPanels}
-              showControls={showControls}
-              uiStage={uiStage}
-              brief={brief}
-              briefHintVisible={briefHintVisible}
-              briefShellRef={briefShellRef}
-              onBriefScroll={handleBriefScroll}
-              onBriefChange={handleBriefChange}
-              briefFocused={briefFocused}
-              setBriefFocused={setBriefFocused}
-              activePanel={activePanel}
-              openPanel={openPanel}
-              pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
-              pillStaggerMs={PILL_STAGGER_MS}
-              panelRevealDelayMs={PANEL_REVEAL_DELAY_MS}
-              currentAspect={currentAspect}
-              currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
-              onCycleAspect={handleCycleAspect}
-              uploads={uploads}
-              removeUploadItem={removeUploadItem}
-              moveUploadItem={moveUploadItem}
-              triggerPick={triggerPick}
-              onFilesPicked={addFilesToPanel}
-              productInputRef={productInputRef}
-              logoInputRef={logoInputRef}
-              inspirationInputRef={inspirationInputRef}
-              stylePresetKey={stylePresetKey}
-              setStylePresetKey={setStylePresetKey}
-              stylePresets={STYLE_PRESETS}
-              customStyles={customStyles}
-              getStyleLabel={getStyleLabel}
-              editingStyleKey={editingStyleKey}
-              editingStyleValue={editingStyleValue}
-              setEditingStyleValue={setEditingStyleValue}
-              beginRenameStyle={beginRenameStyle}
-              commitRenameStyle={commitRenameStyle}
-              cancelRenameStyle={cancelRenameStyle}
-              deleteCustomStyle={deleteCustomStyle}
-              onOpenCustomStylePanel={handleOpenCustomStylePanel}
-              minaVisionEnabled={minaVisionEnabled}
-              onToggleVision={() => setMinaVisionEnabled((p) => !p)}
-              canCreateStill={canCreateStill}
-              stillGenerating={stillGenerating}
-              stillError={stillError}
-              onCreateStill={handleGenerateStill}
-              onGoProfile={() => setActiveTab("profile")}
-              uploadsPending={uploadsPending}
+                globalDragging={globalDragging}
+                showPills={showPills}
+                showPanels={showPanels}
+                showControls={showControls}
+                uiStage={uiStage}
+                brief={brief}
+                briefHintVisible={briefHintVisible}
+                briefShellRef={briefShellRef}
+                onBriefScroll={handleBriefScroll}
+                onBriefChange={handleBriefChange}
+                briefFocused={briefFocused}
+                setBriefFocused={setBriefFocused}
+                activePanel={activePanel}
+                openPanel={openPanel}
+                pillInitialDelayMs={PILL_INITIAL_DELAY_MS}
+                pillStaggerMs={PILL_STAGGER_MS}
+                panelRevealDelayMs={PANEL_REVEAL_DELAY_MS}
+                currentAspect={currentAspect}
+                currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
+                onCycleAspect={handleCycleAspect}
+                uploads={uploads}
+                uploadsPending={uploadsPending}
+                removeUploadItem={removeUploadItem}
+                moveUploadItem={moveUploadItem}
+                triggerPick={triggerPick}
+                onFilesPicked={addFilesToPanel}
+                productInputRef={productInputRef}
+                logoInputRef={logoInputRef}
+                inspirationInputRef={inspirationInputRef}
+                stylePresetKey={stylePresetKey}
+                setStylePresetKey={setStylePresetKey}
+                stylePresets={STYLE_PRESETS}
+                customStyles={customStyles}
+                getStyleLabel={getStyleLabel}
+                editingStyleKey={editingStyleKey}
+                editingStyleValue={editingStyleValue}
+                setEditingStyleValue={setEditingStyleValue}
+                beginRenameStyle={beginRenameStyle}
+                commitRenameStyle={commitRenameStyle}
+                cancelRenameStyle={cancelRenameStyle}
+                deleteCustomStyle={deleteCustomStyle}
+                onOpenCustomStylePanel={handleOpenCustomStylePanel}
+                minaVisionEnabled={minaVisionEnabled}
+                onToggleVision={() => setMinaVisionEnabled((p) => !p)}
+                canCreateStill={canCreateStill}
+                stillGenerating={stillGenerating}
+                stillError={stillError}
+                onCreateStill={handleGenerateStill}
+                onGoProfile={() => setActiveTab("profile")}
+              />
 
-            />
             {renderStudioRight()}
 
             {renderStudioRight()}
