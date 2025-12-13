@@ -472,6 +472,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // 4.7 Brief scroll ref
   // -------------------------
   const briefShellRef = useRef<HTMLDivElement | null>(null);
+const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // -------------------------
   // 4.8 Custom style modal + custom saved styles
@@ -514,7 +515,28 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const briefLength = brief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
 
-  const canCreateStill = briefLength >= 40 && !stillGenerating && !uploadsPending;
+const canCreateStill = briefLength >= 20 && !stillGenerating && !uploadsPending;
+
+type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
+
+const createCtaState: CreateCtaState = stillGenerating
+  ? "creating"
+  : uploadsPending
+  ? "uploading"
+  : briefLength < 40
+  ? "describe_more"
+  : "ready";
+
+const createCtaLabel =
+  createCtaState === "creating"
+    ? "Creating…"
+    : createCtaState === "uploading"
+    ? "Uploading…"
+    : createCtaState === "describe_more"
+    ? "Describe more"
+    : "Create";
+
+const createCtaDisabled = createCtaState === "creating" || createCtaState === "uploading";
 
   // UI stages
   const showPills = uiStage >= 1;
