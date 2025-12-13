@@ -352,6 +352,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // -------------------------
   // 4.1 Global tab + customer
   // -------------------------
+  // === STUDIO MODE (explicit, derived from existing logic) ===
+type StudioMode = "create" | "animate";
+
+const [studioMode, setStudioMode] = useState<StudioMode>("create");
+// === END STUDIO MODE ===
+
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
   const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
