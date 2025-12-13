@@ -42,12 +42,53 @@ export default function StudioRight(props: StudioRightProps) {
     return null;
   }, [currentMotion, currentStill]);
 
-  // Click-to-toggle: cover <-> contain (scale down centered)
+  // Center click = zoom toggle (cover <-> contain)
   const [containMode, setContainMode] = useState(false);
+
+  // Reset zoom when switching media
   useEffect(() => {
-    // reset when switching to another generation
     setContainMode(false);
   }, [media?.url]);
+
+  const hasCarousel = stillItems.length > 1;
+
+  const goPrev = () => {
+    if (!hasCarousel) return;
+    const n = stillItems.length;
+    setStillIndex((stillIndex - 1 + n) % n);
+  };
+
+  const goNext = () => {
+    if (!hasCarousel) return;
+    const n = stillItems.length;
+    setStillIndex((stillIndex + 1) % n);
+  };
+
+  // ✅ Click zones:
+  // - left 18% => previous
+  // - right 18% => next
+  // - middle => zoom toggle
+  const handleFrameClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+    if (!media) return;
+
+    const target = e.currentTarget;
+    const rect = target.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = rect.width > 0 ? x / rect.width : 0.5;
+
+    const EDGE = 0.18;
+
+    if (hasCarousel && pct <= EDGE) {
+      goPrev();
+      return;
+    }
+    if (hasCarousel && pct >= 1 - EDGE) {
+      goNext();
+      return;
+    }
+
+    setContainMode((v) => !v);
+  };
 
   const canSend = !feedbackSending && feedbackText.trim().length > 0;
 
@@ -58,12 +99,7 @@ export default function StudioRight(props: StudioRightProps) {
           <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
         ) : (
           <>
-            <button
-              type="button"
-              className="studio-output-click"
-              onClick={() => setContainMode((v) => !v)}
-              aria-label="Toggle fit"
-            >
+            <button type="button" className="studio-output-click" onClick={handleFrameClick} aria-label="Toggle zoom / Navigate">
               <div className={`studio-output-frame ${containMode ? "is-contain" : ""}`}>
                 {media?.type === "video" ? (
                   <video className="studio-output-media" src={media.url} autoPlay loop muted controls />
@@ -73,7 +109,7 @@ export default function StudioRight(props: StudioRightProps) {
               </div>
             </button>
 
-            {stillItems.length > 1 && (
+            {hasCarousel && (
               <div className="studio-dots-row">
                 {stillItems.map((item, idx) => (
                   <button
@@ -102,12 +138,7 @@ export default function StudioRight(props: StudioRightProps) {
             }}
           />
 
-          <button
-            type="button"
-            className="studio-feedback-send"
-            onClick={onSubmitFeedback}
-            disabled={!canSend}
-          >
+          <button type="button" className="studio-feedback-send" onClick={onSubmitFeedback} disabled={!canSend}>
             Send
           </button>
 
