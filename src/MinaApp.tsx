@@ -1885,9 +1885,6 @@ const renderStudioRight = () => {
                 onCreateStill={handleGenerateStill}
                 onGoProfile={() => setActiveTab("profile")}
               />
-
-            {renderStudioRight()}
-
             {renderStudioRight()}
           </div>
         ) : (
