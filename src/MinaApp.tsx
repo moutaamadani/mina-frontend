@@ -1877,6 +1877,8 @@ const renderStudioRight = () => {
               stillError={stillError}
               onCreateStill={handleGenerateStill}
               onGoProfile={() => setActiveTab("profile")}
+              uploadsPending={uploadsPending}
+
             />
             {renderStudioRight()}
 
