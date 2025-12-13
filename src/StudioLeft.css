@@ -1,7 +1,8 @@
 /* src/StudioLeft.css */
-
 /* ==========================================================================
-   LEFT COLUMN (moved out of index.css)
+   Mina Studio — LEFT SIDE ONLY
+   - NO rounded corners
+   - minimal color: black opacity + bg paper from :root
    ========================================================================== */
 
 .studio-left {
@@ -12,7 +13,15 @@
   min-height: 0;
 }
 
-/* drag highlight */
+.studio-left-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+/* Drag subtle darken (no outline) */
 .studio-left.drag-active {
   background: rgba(8, 10, 0, 0.02);
 }
@@ -20,32 +29,9 @@
   background: rgba(8, 10, 0, 0.1);
 }
 
-/* hide below textarea while focused (state-driven, no :has) */
-.studio-left.is-brief-focused .studio-left-main > .mina-slide {
-  display: none !important;
-}
-.studio-left.is-brief-focused .studio-left-main > .studio-debug-line {
-  display: none !important;
-}
-
-/* main stack */
-.studio-left-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
-
-  /* safety: if content grows, scroll instead of clipping */
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-
-.studio-input1-block {
-  margin-bottom: 10px;
-}
-
-/* Pills slot – keeps constant height */
+/* ------------------------------------------
+   Pills
+------------------------------------------ */
 .studio-pills-slot {
   min-height: 30px;
   margin-bottom: 16px;
@@ -56,14 +42,12 @@
 .studio-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 8px;
 }
 
-.studio-row--pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.studio-row--pills.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .studio-pill {
@@ -72,10 +56,6 @@
   gap: 6px;
   padding: 6px 10px;
 
-  height: 34px;
-  min-height: 34px;
-  white-space: nowrap;
-
   background: rgba(8, 10, 0, 0.02);
   cursor: pointer;
 
@@ -83,6 +63,14 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
+
+  height: 34px;
+  min-height: 34px;
+  white-space: nowrap;
+
+  border-radius: 0;
+  border: none;
+  outline: none;
 
   transition: background 220ms cubic-bezier(0.16, 1, 0.3, 1),
     opacity 360ms cubic-bezier(0.16, 1, 0.3, 1),
@@ -96,31 +84,22 @@
 
 .studio-pill:active {
   transform: scale(0.985);
+  opacity: 0.85;
 }
 
 .studio-pill-icon {
-  width: 16px;
-  height: 16px;
+  min-width: 24px;
+  min-height: 24px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.studio-pill--aspect {
-  height: 34px;
-  min-height: 34px;
-}
-
-.studio-pill--aspect .studio-pill-icon {
-  min-width: 28px;
-  min-height: 28px;
-  width: 28px;
-  height: 28px;
-}
-
-.studio-pill--aspect .studio-pill-icon img {
-  width: 16px;
-  height: 16px;
+.studio-pill-icon img {
+  width: 14px;
+  height: 14px;
   display: block;
   object-fit: contain;
 }
@@ -129,16 +108,23 @@
 .studio-pill-sub {
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0;
 }
 
 .studio-pill-sub {
   opacity: 0.6;
-  font-size: 11px;
-  line-height: 1;
+}
+
+/* keep aspect pill same height */
+.studio-pill--aspect {
+  height: 34px;
+  min-height: 34px;
   white-space: nowrap;
 }
 
-/* brief */
+/* ------------------------------------------
+   Brief
+------------------------------------------ */
 .studio-brief-block {
   margin-top: 8px;
 }
@@ -151,14 +137,18 @@
   padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
 
-  -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 60px), transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 0, #000 calc(100% - 60px), transparent 100%);
-}
-
-.studio-brief-shell::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none !important;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 60px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 60px),
+    transparent 100%
+  );
 }
 
 .studio-brief-input {
@@ -168,6 +158,7 @@
   resize: none;
   padding: 0;
   margin: 0;
+  font-family: inherit;
 
   font-size: 32px;
   line-height: 1.08;
@@ -175,7 +166,9 @@
   letter-spacing: -0.02em;
 
   background: transparent;
-  color: var(--mina-text);
+  color: var(--mina-text, #080a00);
+
+  border-radius: 0;
 }
 
 .studio-brief-input::placeholder {
@@ -187,17 +180,24 @@
   right: 0;
   bottom: 6px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: -0.02em;
   color: rgba(8, 10, 0, 0.45);
   pointer-events: none;
 }
 
-/* panels */
+/* ------------------------------------------
+   Panels
+------------------------------------------ */
+.mina-left-block {
+  overflow: visible;
+}
+
 .studio-panel {
   margin-top: 10px;
   padding-top: 12px;
   border-top: 1px solid rgba(8, 10, 0, 0.08);
+  overflow: visible;
 }
 
 .studio-panel-title {
@@ -228,55 +228,73 @@
   align-items: center;
 }
 
+/* plus box — black 5%, NO border, NO round */
 .studio-plusbox {
   width: 72px;
   height: 72px;
   background: rgba(8, 10, 0, 0.05);
   border: none;
   outline: none;
+  border-radius: 0;
+
   display: inline-flex;
   align-items: center;
   justify-content: center;
+
   font-size: 18px;
   font-weight: 600;
   cursor: pointer;
+
   transition: background 220ms ease, transform 220ms ease, opacity 220ms ease;
 }
-.studio-plusbox:active {
-  transform: scale(0.98);
-}
+
 .studio-plusbox--inline {
   width: 72px;
   height: 72px;
 }
 
+.studio-plusbox:active {
+  transform: scale(0.98);
+  opacity: 0.85;
+}
+
+/* uploaded photo — NO border, NO round */
 .studio-thumb {
   width: 72px;
   height: 72px;
   border: none;
   outline: none;
+  border-radius: 0;
+
   background: rgba(8, 10, 0, 0.05);
   padding: 0;
   overflow: hidden;
   cursor: pointer;
+
   transition: transform 220ms ease, opacity 220ms ease;
 }
+
 .studio-thumb:active {
   transform: scale(0.98);
+  opacity: 0.85;
 }
+
 .studio-thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 
-/* style cards */
+/* ------------------------------------------
+   Style cards
+------------------------------------------ */
 .studio-style-row {
   display: flex;
   gap: 12px;
-  margin-bottom: 8px;
   flex-wrap: wrap;
-  overflow: visible !important;
+  overflow: visible;
+  padding-bottom: 12px;
 }
 
 .studio-style-card {
@@ -284,9 +302,11 @@
   background: none;
   padding: 0;
   cursor: pointer;
+  font-family: inherit;
   font-size: 12px;
   text-align: left;
-  overflow: visible !important;
+
+  border-radius: 0;
 }
 
 .studio-style-thumb {
@@ -297,6 +317,8 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+
+  border-radius: 0;
 }
 
 .studio-style-thumb img {
@@ -323,7 +345,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-
   cursor: text;
 }
 
@@ -335,10 +356,16 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   padding: 0;
-  width: 110px !important;
+  width: 110px;
 }
 
-/* controls */
+/* ------------------------------------------
+   Controls
+------------------------------------------ */
+.studio-controls {
+  margin-top: 0;
+}
+
 .studio-controls-divider {
   border-top: 1px solid rgba(8, 10, 0, 0.08);
   margin-top: 14px;
@@ -349,11 +376,16 @@
   margin-top: 12px;
   border: none;
   padding: 0;
+  font-family: inherit;
+
   font-size: 10px;
   font-weight: 600;
   letter-spacing: -0.02em;
+
   text-decoration: none;
   cursor: pointer;
+
+  opacity: 0.9;
 }
 
 .studio-create-block {
@@ -363,32 +395,35 @@
 .studio-create-link {
   border: none;
   padding: 0;
+  font-family: inherit;
+
   font-size: 32px;
   font-weight: 600;
   text-decoration: underline;
+
   cursor: pointer;
+  border-radius: 0;
 }
 
 .studio-create-link.disabled {
   opacity: 0.4;
   cursor: default;
 }
-/* Create CTA states */
+
+/* “Describe more” state (same palette, no new colors) */
 .studio-create-link.state-describe {
   opacity: 0.6;
 }
-
 .studio-create-link.state-describe:hover {
   opacity: 0.8;
 }
-
 .studio-create-link.state-describe:active {
   opacity: 0.5;
 }
 
-/* uploading/creating already get .disabled -> opacity 0.4 */
-
-/* profile button */
+/* ------------------------------------------
+   Profile button bottom-left
+------------------------------------------ */
 .studio-profile-float {
   position: absolute;
   left: 64px;
@@ -402,15 +437,19 @@
 .studio-profile-float:hover {
   opacity: 0.9;
 }
+
 .studio-profile-float:active {
   opacity: 0.6;
 }
 
-/* responsive */
+/* ------------------------------------------
+   Responsive
+------------------------------------------ */
 @media (max-width: 960px) {
   .studio-left {
     padding: 80px 20px 32px;
   }
+
   .studio-profile-float {
     left: 20px;
     bottom: 18px;
@@ -435,4 +474,3 @@
     line-height: 1.08;
   }
 }
-
