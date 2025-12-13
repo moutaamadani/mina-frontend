@@ -574,7 +574,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
   // UI stages
   const showPills = uiStage >= 1;
-  const showPanels = uiStage >= 2;
+  const showPanels = uiStage >= 1;
   const showControls = uiStage >= 3;
 
   // counts for +/✓
