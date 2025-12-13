@@ -638,7 +638,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     setActivePanel((prev) => prev ?? "product");
 
     stageT2Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 2 ? 2 : s));
+      setUiStage((s) => (s < 1 ? 1 : s));
     }, PANEL_REVEAL_DELAY_MS);
 
     stageT3Ref.current = window.setTimeout(() => {
@@ -1741,10 +1741,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </div>
           </div>
+<div style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
+  stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
+</div>
 
           {/* Panels (smooth open/close, no jumps) */}
           <div className="mina-slide">
-            <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={80}>
+            <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your product</div>
 
@@ -1778,7 +1781,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-           <Collapse open={showPanels && activePanel === "logo"} delayMs={110}>
+           <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your logo</div>
 
@@ -1812,7 +1815,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-            <Collapse open={showPanels && activePanel === "inspiration"} delayMs={140}>
+            <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add inspiration</div>
 
@@ -1860,7 +1863,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               </div>
             </Collapse>
 
-            <Collapse open={showPanels && activePanel === "style"} delayMs={170}>
+            <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Pick a style</div>
 
