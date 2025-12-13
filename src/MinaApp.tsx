@@ -1647,17 +1647,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 // [PART 14 START] Render – LEFT side (Input1 + pills + panels + style + Input3)
 // ========================================================================
 const renderStudioLeft = () => {
+  // pills are text-only (+ / ✓), except ratio pill keeps its icon
   const pillBaseStyle = (index: number): React.CSSProperties => ({
     transitionDelay: showPills ? `${PILL_INITIAL_DELAY_MS + index * PILL_STAGGER_MS}ms` : "0ms",
   });
 
   const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
   const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
-
-  const hoverOpenPanel = (p: PanelKey) => {
-    if (uiStage === 0) return;
-    openPanel(p);
-  };
 
   const allStyleCards: Array<{
     key: string;
@@ -1683,6 +1679,7 @@ const renderStudioLeft = () => {
   // Auto-hide LOWER area with timing:
   // - When typing continuously: after 2s it hides
   // - When idle (no typing): after 2s it shows back
+  // - Uses CSS “premium” transitions
   // ------------------------------------------------------------
   type MinaLowerAutoState = {
     lastAt: number;
@@ -1725,6 +1722,7 @@ const renderStudioLeft = () => {
     const st = getAutoState();
     st.lastAt = Date.now();
 
+    // Show back after 2s of inactivity
     clearTimer(st.idleT);
     st.idleT = window.setTimeout(() => {
       st.idleT = null;
@@ -1733,6 +1731,8 @@ const renderStudioLeft = () => {
       st.hideT = null;
     }, 2000);
 
+    // Hide after 2s ONLY if user is still actively typing then
+    // (prevents hiding if they typed 1 char and stopped)
     const alreadyHidden = root.getAttribute("data-lower-hidden") === "1";
     if (!alreadyHidden && st.hideT == null) {
       st.hideT = window.setTimeout(() => {
@@ -1741,7 +1741,7 @@ const renderStudioLeft = () => {
         const now = Date.now();
         const activeEl = document.activeElement as HTMLElement | null;
         const isBriefFocused = !!activeEl?.classList?.contains("studio-brief-input");
-        const stillActivelyTyping = now - st.lastAt < 450;
+        const stillActivelyTyping = now - st.lastAt < 450; // "still typing" window
 
         if (isBriefFocused && stillActivelyTyping) {
           root.setAttribute("data-lower-hidden", "1");
@@ -1750,37 +1750,13 @@ const renderStudioLeft = () => {
     }
   };
 
-  // ------------------------------------------------------------
-  // Smooth Panels (NO JUMP):
-  // max-height + opacity + translate (same vibe as Create)
-  // ------------------------------------------------------------
-  const productOpen = showPanels && (effectivePanel === "product" || activePanel === null);
-  const logoOpen = showPanels && activePanel === "logo";
-  const inspirationOpen = showPanels && activePanel === "inspiration";
-  const styleOpen = showPanels && activePanel === "style";
-
-  const MinaPanel = ({
-    open,
-    maxH,
-    children,
-  }: {
-    open: boolean;
-    maxH: number;
-    children: React.ReactNode;
-  }) => (
-    <div
-      className={classNames("mina-panel-wrap", open && "show")}
-      style={{
-        transitionDelay: open ? `${PANEL_REVEAL_DELAY_MS}ms` : "0ms",
-        ["--minaPanelMax" as any]: `${maxH}px`,
-      }}
-    >
-      <div className="mina-panel-inner">{children}</div>
-    </div>
-  );
-
   return (
     <div className={classNames("studio-left", globalDragging && "drag-active")}>
+      {/* ==========================================================
+          Local CSS overrides (kept here so you don’t need a CSS patch)
+          1) Premium animate hide/show of lower area
+          2) Fix left-cropping for panels/style row + make labels usable
+         ========================================================== */}
       <style>{`
         /* Premium hide/show wrapper */
         .mina-lower-wrap {
@@ -1801,29 +1777,6 @@ const renderStudioLeft = () => {
           pointer-events: none;
         }
 
-        /* Smooth panels (NO JUMP) */
-        .mina-panel-wrap{
-          overflow: hidden;
-          max-height: 0px;
-          transition: max-height 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-          will-change: max-height;
-        }
-        .mina-panel-inner{
-          opacity: 0;
-          transform: translateY(-10px);
-          transition:
-            opacity 260ms ease,
-            transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-          will-change: opacity, transform;
-        }
-        .mina-panel-wrap.show{
-          max-height: var(--minaPanelMax, 2000px);
-        }
-        .mina-panel-wrap.show .mina-panel-inner{
-          opacity: 1;
-          transform: translateY(0);
-        }
-
         /* Prevent left crop in panel rows */
         .studio-panel,
         .studio-thumbs,
@@ -1834,91 +1787,79 @@ const renderStudioLeft = () => {
           box-sizing: border-box !important;
         }
 
-        /* Style cards layout (wrap nicely) */
+        /* If style row is wider than column, scroll instead of cutting */
         .studio-style-row {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 18px;
-          align-items: flex-start;
-          overflow: visible !important;
+          overflow-x: auto !important;
+          -webkit-overflow-scrolling: touch;
         }
-        .studio-style-card { flex: 0 0 auto; }
+        .studio-style-card {
+          flex: 0 0 auto;
+        }
 
-        /* Label under thumbnail: centered, one line, ellipsis */
+        /* Make style names visible/clickable + rename input fits the card */
         .studio-style-label {
-          width: 100%;
-          margin-top: 8px;
+          max-width: 110px;
           text-align: center;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          line-height: 16px;
-          height: 16px;
         }
         .studio-style-label input {
-          width: 100% !important;
-          box-sizing: border-box !important;
-          height: 18px;
-          line-height: 18px;
-          padding: 0 6px;
-        }
-
-        /* Profile button position */
-        .studio-profile-float{
-          left: 40px !important;
-          bottom: 16px !important;
+          width: 110px !important;
         }
       `}</style>
 
       <div className="studio-left-main">
         {/* Input 1 */}
         <div className="studio-input1-block">
+          {/* Pills slot (staggered + smooth) */}
           <div className="studio-pills-slot">
             <div className={classNames("studio-row", "studio-row--pills", "mina-slide", !showPills && "hidden")}>
+              {/* Product */}
               <button
                 type="button"
                 className={classNames("studio-pill", effectivePanel === "product" && "active")}
                 style={pillBaseStyle(0)}
-                onMouseEnter={() => hoverOpenPanel("product")}
                 onClick={() => openPanel("product")}
               >
                 <span className="studio-pill-main">Product</span>
                 <span aria-hidden="true">{plusOrTick(productCount)}</span>
               </button>
 
+              {/* Logo */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "logo" && "active")}
                 style={pillBaseStyle(1)}
-                onMouseEnter={() => hoverOpenPanel("logo")}
                 onClick={() => openPanel("logo")}
               >
                 <span className="studio-pill-main">Logo</span>
                 <span aria-hidden="true">{plusOrTick(logoCount)}</span>
               </button>
 
+              {/* Inspiration */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "inspiration" && "active")}
                 style={pillBaseStyle(2)}
-                onMouseEnter={() => hoverOpenPanel("inspiration")}
                 onClick={() => openPanel("inspiration")}
               >
                 <span className="studio-pill-main">Inspiration</span>
                 <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
               </button>
 
+              {/* Style */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "style" && "active")}
                 style={pillBaseStyle(3)}
-                onMouseEnter={() => hoverOpenPanel("style")}
                 onClick={() => openPanel("style")}
               >
                 <span className="studio-pill-main">Style</span>
                 <span aria-hidden="true">✓</span>
               </button>
 
+              {/* Ratio */}
               <button
                 type="button"
                 className={classNames("studio-pill", "studio-pill--aspect")}
@@ -1934,6 +1875,7 @@ const renderStudioLeft = () => {
             </div>
           </div>
 
+          {/* Textarea */}
           <div className="studio-brief-block">
             <div
               className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
@@ -1944,8 +1886,14 @@ const renderStudioLeft = () => {
                 className="studio-brief-input"
                 placeholder="Describe how you want your still life image to look like"
                 value={brief}
-                onFocus={() => pulseTyping()}
-                onBlur={() => forceShowLowerNow()}
+                onFocus={() => {
+                  // start timing logic when user focuses
+                  pulseTyping();
+                }}
+                onBlur={() => {
+                  // when they stop editing (blur), always show back
+                  forceShowLowerNow();
+                }}
                 onChange={(e) => {
                   handleBriefChange(e.target.value);
                   pulseTyping();
@@ -1957,15 +1905,15 @@ const renderStudioLeft = () => {
           </div>
         </div>
 
-        {/* BELOW auto-hides + smooth */}
+        {/* EVERYTHING BELOW will auto-hide/show with animation */}
         <div className="mina-lower-wrap">
-          <div style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
+          <div className="studio-debug-line" style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
             stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
           </div>
 
-          {/* Panels (smooth) */}
+          {/* Panels */}
           <div className="mina-slide">
-            <MinaPanel open={productOpen} maxH={420}>
+            <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your product</div>
                 <div className="studio-panel-row">
@@ -1994,9 +1942,9 @@ const renderStudioLeft = () => {
                   </div>
                 </div>
               </div>
-            </MinaPanel>
+            </Collapse>
 
-            <MinaPanel open={logoOpen} maxH={420}>
+            <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add your logo</div>
                 <div className="studio-panel-row">
@@ -2025,9 +1973,9 @@ const renderStudioLeft = () => {
                   </div>
                 </div>
               </div>
-            </MinaPanel>
+            </Collapse>
 
-            <MinaPanel open={inspirationOpen} maxH={520}>
+            <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Add inspiration</div>
                 <div className="studio-panel-row">
@@ -2070,11 +2018,12 @@ const renderStudioLeft = () => {
                   </div>
                 </div>
               </div>
-            </MinaPanel>
+            </Collapse>
 
-            <MinaPanel open={styleOpen} maxH={1200}>
+            <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
               <div className="studio-panel">
                 <div className="studio-panel-title">Pick a style</div>
+
                 <div className="studio-style-row">
                   {allStyleCards.map((s) => (
                     <button
@@ -2083,7 +2032,6 @@ const renderStudioLeft = () => {
                       className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
                       onMouseEnter={() => setStylePresetKey(s.key)}
                       onClick={() => setStylePresetKey(s.key)}
-                      title={s.label}
                     >
                       <div className="studio-style-thumb">
                         <img src={s.thumb} alt="" />
@@ -2091,24 +2039,21 @@ const renderStudioLeft = () => {
 
                       <div
                         className="studio-style-label"
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (s.isCustom) deleteCustomStyle(s.key);
+                        }}
                         onClick={(e) => {
-                          if (!s.isCustom) return;
                           e.preventDefault();
                           e.stopPropagation();
                           beginRenameStyle(s.key, s.label);
-                        }}
-                        onDoubleClick={(e) => {
-                          if (!s.isCustom) return;
-                          e.preventDefault();
-                          e.stopPropagation();
-                          deleteCustomStyle(s.key);
                         }}
                       >
                         {editingStyleKey === s.key ? (
                           <input
                             autoFocus
                             value={editingStyleValue}
-                            onClick={(e) => e.stopPropagation()}
                             onChange={(e) => setEditingStyleValue(e.target.value)}
                             onBlur={commitRenameStyle}
                             onKeyDown={(e) => {
@@ -2126,6 +2071,7 @@ const renderStudioLeft = () => {
                   <button
                     type="button"
                     className={classNames("studio-style-card", "add")}
+                    onMouseEnter={() => {}}
                     onClick={handleOpenCustomStylePanel}
                   >
                     <div className="studio-style-thumb">
@@ -2135,7 +2081,7 @@ const renderStudioLeft = () => {
                   </button>
                 </div>
               </div>
-            </MinaPanel>
+            </Collapse>
           </div>
 
           {/* Create area */}
@@ -2186,6 +2132,7 @@ const renderStudioLeft = () => {
         />
       </div>
 
+      {/* Profile */}
       <button type="button" className="studio-profile-float" onClick={() => setActiveTab("profile")}>
         Profile
       </button>
@@ -2196,9 +2143,6 @@ const renderStudioLeft = () => {
 // ========================================================================
 // [PART 14 END]
 // ========================================================================
-
-
-
 
 
   // ========================================================================
