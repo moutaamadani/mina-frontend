@@ -432,7 +432,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [brief, setBrief] = useState("");
   const [tone] = useState("Poetic");
   const [, setPlatform] = useState("tiktok");
-  const [aspectIndex, setAspectIndex] = useState(0);
+  const [aspectIndex, setAspectIndex] = useState(1);
 
   // Stills
   const [stillItems, setStillItems] = useState<StillItem[]>([]);
