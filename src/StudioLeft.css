@@ -1,4 +1,6 @@
-/* src/StudioLeft.css */
+/* ============================================================= */
+/* FILE: src/StudioLeft.css                                      */
+/* ============================================================= */
 /* ==========================================================================
    Mina Studio — LEFT SIDE ONLY
    - NO rounded corners
@@ -19,6 +21,38 @@
   flex-direction: column;
   justify-content: center;
   min-height: 0;
+}
+
+/* ✅ NEW: topbar toggle row */
+.studio-left-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+
+.studio-left-cta {
+  border: 0;
+  background: transparent;
+  padding: 0;
+
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
+
+  text-decoration: none !important;
+  cursor: pointer;
+}
+
+.studio-left-cta-state {
+  margin-left: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.35);
+}
+
+.studio-left-cta-state.on {
+  color: #858e47; /* ✅ green accent */
 }
 
 /* Drag subtle darken (no outline) */
@@ -228,6 +262,12 @@
   align-items: center;
 }
 
+.studio-empty-inline {
+  font-size: 11px;
+  color: rgba(8, 10, 0, 0.35);
+  padding: 6px 0;
+}
+
 /* plus box — black 5%, NO border, NO round */
 .studio-plusbox {
   width: 72px;
@@ -284,6 +324,11 @@
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* ✅ NEW: selected thumb in animate mode uses green (not black) */
+.studio-thumb.is-selected {
+  outline: 1px solid #858e47;
 }
 
 /* ------------------------------------------
@@ -357,6 +402,19 @@
   letter-spacing: -0.02em;
   padding: 0;
   width: 110px;
+}
+
+/* ✅ NEW: motion style selection uses GREEN, never black */
+.studio-motion-style-card .studio-motion-style-thumb {
+  background: rgba(8, 10, 0, 0.05);
+}
+
+.studio-motion-style-card.active .studio-style-thumb {
+  outline: 1px solid #858e47;
+}
+
+.studio-motion-style-card.active .studio-motion-style-label {
+  color: #858e47;
 }
 
 /* ------------------------------------------
