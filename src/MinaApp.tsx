@@ -1675,106 +1675,18 @@ const renderStudioLeft = () => {
     })),
   ];
 
-  // ------------------------------------------------------------
-  // Auto-hide LOWER area with timing:
-  // - When typing continuously: after 2s it hides
-  // - When idle (no typing): after 2s it shows back
-  // - Uses CSS “premium” transitions
-  // ------------------------------------------------------------
-  type MinaLowerAutoState = {
-    lastAt: number;
-    hideT: number | null;
-    idleT: number | null;
-  };
-
-  const getLeftRoot = (): HTMLElement | null => {
-    const node = briefShellRef.current as HTMLElement | null;
-    return (node?.closest?.(".studio-left") as HTMLElement | null) ?? null;
-  };
-
-  const getAutoState = (): MinaLowerAutoState => {
-    const w = window as any;
-    if (!w.__minaLowerAutoState) {
-      w.__minaLowerAutoState = { lastAt: 0, hideT: null, idleT: null } as MinaLowerAutoState;
-    }
-    return w.__minaLowerAutoState as MinaLowerAutoState;
-  };
-
-  const clearTimer = (t: number | null) => {
-    if (t != null) window.clearTimeout(t);
-  };
-
-  const forceShowLowerNow = () => {
-    const root = getLeftRoot();
-    if (root) root.removeAttribute("data-lower-hidden");
-
-    const st = getAutoState();
-    clearTimer(st.hideT);
-    clearTimer(st.idleT);
-    st.hideT = null;
-    st.idleT = null;
-  };
-
-  const pulseTyping = () => {
-    const root = getLeftRoot();
-    if (!root) return;
-
-    const st = getAutoState();
-    st.lastAt = Date.now();
-
-    // Show back after 2s of inactivity
-    clearTimer(st.idleT);
-    st.idleT = window.setTimeout(() => {
-      st.idleT = null;
-      root.removeAttribute("data-lower-hidden");
-      clearTimer(st.hideT);
-      st.hideT = null;
-    }, 2000);
-
-    // Hide after 2s ONLY if user is still actively typing then
-    // (prevents hiding if they typed 1 char and stopped)
-    const alreadyHidden = root.getAttribute("data-lower-hidden") === "1";
-    if (!alreadyHidden && st.hideT == null) {
-      st.hideT = window.setTimeout(() => {
-        st.hideT = null;
-
-        const now = Date.now();
-        const activeEl = document.activeElement as HTMLElement | null;
-        const isBriefFocused = !!activeEl?.classList?.contains("studio-brief-input");
-        const stillActivelyTyping = now - st.lastAt < 450; // "still typing" window
-
-        if (isBriefFocused && stillActivelyTyping) {
-          root.setAttribute("data-lower-hidden", "1");
-        }
-      }, 2000);
-    }
-  };
-
   return (
     <div className={classNames("studio-left", globalDragging && "drag-active")}>
       {/* ==========================================================
           Local CSS overrides (kept here so you don’t need a CSS patch)
-          1) Premium animate hide/show of lower area
+          1) Hide Panels + Create while typing (textarea focused)
           2) Fix left-cropping for panels/style row + make labels usable
          ========================================================== */}
       <style>{`
-        /* Premium hide/show wrapper */
-        .mina-lower-wrap {
-          overflow: hidden;
-          max-height: 1400px;
-          opacity: 1;
-          transform: translateY(0);
-          transition:
-            max-height 520ms cubic-bezier(0.2, 0.8, 0.2, 1),
-            opacity 260ms ease,
-            transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
-          will-change: max-height, opacity, transform;
-        }
-        .studio-left[data-lower-hidden="1"] .mina-lower-wrap {
-          max-height: 0px;
-          opacity: 0;
-          transform: translateY(-10px);
-          pointer-events: none;
+        /* Hide everything below textarea while it is focused */
+        .studio-input1-block:has(.studio-brief-input:focus) ~ .mina-slide,
+        .studio-input1-block:has(.studio-brief-input:focus) ~ .studio-debug-line {
+          display: none !important;
         }
 
         /* Prevent left crop in panel rows */
@@ -1848,7 +1760,7 @@ const renderStudioLeft = () => {
                 <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
               </button>
 
-              {/* Style */}
+              {/* Style (same system as others — NOT an extra step) */}
               <button
                 type="button"
                 className={classNames("studio-pill", activePanel === "style" && "active")}
@@ -1859,7 +1771,7 @@ const renderStudioLeft = () => {
                 <span aria-hidden="true">✓</span>
               </button>
 
-              {/* Ratio */}
+              {/* Ratio (keeps icon) */}
               <button
                 type="button"
                 className={classNames("studio-pill", "studio-pill--aspect")}
@@ -1875,7 +1787,7 @@ const renderStudioLeft = () => {
             </div>
           </div>
 
-          {/* Textarea */}
+          {/* Textarea (state zero shows only this) */}
           <div className="studio-brief-block">
             <div
               className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
@@ -1886,18 +1798,7 @@ const renderStudioLeft = () => {
                 className="studio-brief-input"
                 placeholder="Describe how you want your still life image to look like"
                 value={brief}
-                onFocus={() => {
-                  // start timing logic when user focuses
-                  pulseTyping();
-                }}
-                onBlur={() => {
-                  // when they stop editing (blur), always show back
-                  forceShowLowerNow();
-                }}
-                onChange={(e) => {
-                  handleBriefChange(e.target.value);
-                  pulseTyping();
-                }}
+                onChange={(e) => handleBriefChange(e.target.value)}
                 rows={4}
               />
               {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
@@ -1905,206 +1806,214 @@ const renderStudioLeft = () => {
           </div>
         </div>
 
-        {/* EVERYTHING BELOW will auto-hide/show with animation */}
-        <div className="mina-lower-wrap">
-          <div className="studio-debug-line" style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
-            stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
-          </div>
+        <div className="studio-debug-line" style={{ fontSize: 11, opacity: 0.6, marginTop: 8 }}>
+          stage={uiStage} briefLength={briefLength} showPanels={String(showPanels)} activePanel={String(activePanel)}
+        </div>
 
-          {/* Panels */}
-          <div className="mina-slide">
-            <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
-              <div className="studio-panel">
-                <div className="studio-panel-title">Add your product</div>
-                <div className="studio-panel-row">
-                  <div className="studio-thumbs studio-thumbs--inline">
-                    {uploads.product.map((it) => (
-                      <button
-                        key={it.id}
-                        type="button"
-                        className="studio-thumb"
-                        onClick={() => removeUploadItem("product", it.id)}
-                        title="Click to delete"
-                      >
-                        <img src={it.remoteUrl || it.url} alt="" />
-                      </button>
-                    ))}
-                    {uploads.product.length === 0 && (
-                      <button
-                        type="button"
-                        className="studio-plusbox studio-plusbox--inline"
-                        onClick={() => triggerPick("product")}
-                        title="Add image"
-                      >
-                        <span aria-hidden="true">+</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Collapse>
+        {/* Panels (smooth open/close, no jumps) */}
+        <div className="mina-slide">
+          <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add your product</div>
 
-            <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
-              <div className="studio-panel">
-                <div className="studio-panel-title">Add your logo</div>
-                <div className="studio-panel-row">
-                  <div className="studio-thumbs studio-thumbs--inline">
-                    {uploads.logo.map((it) => (
-                      <button
-                        key={it.id}
-                        type="button"
-                        className="studio-thumb"
-                        onClick={() => removeUploadItem("logo", it.id)}
-                        title="Click to delete"
-                      >
-                        <img src={it.remoteUrl || it.url} alt="" />
-                      </button>
-                    ))}
-                    {uploads.logo.length === 0 && (
-                      <button
-                        type="button"
-                        className="studio-plusbox studio-plusbox--inline"
-                        onClick={() => triggerPick("logo")}
-                        title="Add image"
-                      >
-                        <span aria-hidden="true">+</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Collapse>
-
-            <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
-              <div className="studio-panel">
-                <div className="studio-panel-title">Add inspiration</div>
-                <div className="studio-panel-row">
-                  <div className="studio-thumbs studio-thumbs--inline">
-                    {uploads.inspiration.map((it, idx) => (
-                      <button
-                        key={it.id}
-                        type="button"
-                        className="studio-thumb"
-                        draggable
-                        onDragStart={() => {
-                          (window as any).__minaDragIndex = idx;
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const from = Number((window as any).__minaDragIndex);
-                          const to = idx;
-                          if (Number.isFinite(from) && from !== to) {
-                            moveUploadItem("inspiration", from, to);
-                          }
-                          (window as any).__minaDragIndex = null;
-                        }}
-                        onClick={() => removeUploadItem("inspiration", it.id)}
-                        title="Click to delete • Drag to reorder"
-                      >
-                        <img src={it.remoteUrl || it.url} alt="" />
-                      </button>
-                    ))}
-                    {uploads.inspiration.length < 4 && (
-                      <button
-                        type="button"
-                        className="studio-plusbox studio-plusbox--inline"
-                        onClick={() => triggerPick("inspiration")}
-                        title="Add image"
-                      >
-                        <span aria-hidden="true">+</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </Collapse>
-
-            <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
-              <div className="studio-panel">
-                <div className="studio-panel-title">Pick a style</div>
-
-                <div className="studio-style-row">
-                  {allStyleCards.map((s) => (
+              <div className="studio-panel-row">
+                <div className="studio-thumbs studio-thumbs--inline">
+                  {uploads.product.map((it) => (
                     <button
-                      key={s.key}
+                      key={it.id}
                       type="button"
-                      className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
-                      onMouseEnter={() => setStylePresetKey(s.key)}
-                      onClick={() => setStylePresetKey(s.key)}
+                      className="studio-thumb"
+                      onClick={() => removeUploadItem("product", it.id)}
+                      title="Click to delete"
                     >
-                      <div className="studio-style-thumb">
-                        <img src={s.thumb} alt="" />
-                      </div>
-
-                      <div
-                        className="studio-style-label"
-                        onDoubleClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          if (s.isCustom) deleteCustomStyle(s.key);
-                        }}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          beginRenameStyle(s.key, s.label);
-                        }}
-                      >
-                        {editingStyleKey === s.key ? (
-                          <input
-                            autoFocus
-                            value={editingStyleValue}
-                            onChange={(e) => setEditingStyleValue(e.target.value)}
-                            onBlur={commitRenameStyle}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitRenameStyle();
-                              if (e.key === "Escape") cancelRenameStyle();
-                            }}
-                          />
-                        ) : (
-                          s.label
-                        )}
-                      </div>
+                      <img src={it.remoteUrl || it.url} alt="" />
                     </button>
                   ))}
 
-                  <button
-                    type="button"
-                    className={classNames("studio-style-card", "add")}
-                    onMouseEnter={() => {}}
-                    onClick={handleOpenCustomStylePanel}
-                  >
-                    <div className="studio-style-thumb">
+                  {/* Product: 1 image → once uploaded, + disappears */}
+                  {uploads.product.length === 0 && (
+                    <button
+                      type="button"
+                      className="studio-plusbox studio-plusbox--inline"
+                      onClick={() => triggerPick("product")}
+                      title="Add image"
+                    >
                       <span aria-hidden="true">+</span>
-                    </div>
-                    <div className="studio-style-label">Create style</div>
-                  </button>
+                    </button>
+                  )}
                 </div>
               </div>
-            </Collapse>
-          </div>
-
-          {/* Create area */}
-          <div className={classNames("mina-slide", !showControls && "hidden")}>
-            <div className="studio-controls-divider" />
-
-            <button type="button" className="studio-vision-toggle" onClick={() => setMinaVisionEnabled((prev) => !prev)}>
-              Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
-            </button>
-
-            <div className="studio-create-block">
-              <button
-                type="button"
-                className={classNames("studio-create-link", !canCreateStill && "disabled")}
-                disabled={!canCreateStill}
-                onClick={handleGenerateStill}
-              >
-                {stillGenerating ? "Creating…" : "Create"}
-              </button>
             </div>
+          </Collapse>
 
-            {stillError && <div className="error-text">{stillError}</div>}
+          <Collapse open={showPanels && activePanel === "logo"} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add your logo</div>
+
+              <div className="studio-panel-row">
+                <div className="studio-thumbs studio-thumbs--inline">
+                  {uploads.logo.map((it) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      className="studio-thumb"
+                      onClick={() => removeUploadItem("logo", it.id)}
+                      title="Click to delete"
+                    >
+                      <img src={it.remoteUrl || it.url} alt="" />
+                    </button>
+                  ))}
+
+                  {/* Logo: 1 image → once uploaded, + disappears */}
+                  {uploads.logo.length === 0 && (
+                    <button
+                      type="button"
+                      className="studio-plusbox studio-plusbox--inline"
+                      onClick={() => triggerPick("logo")}
+                      title="Add image"
+                    >
+                      <span aria-hidden="true">+</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Collapse>
+
+          <Collapse open={showPanels && activePanel === "inspiration"} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Add inspiration</div>
+
+              <div className="studio-panel-row">
+                <div className="studio-thumbs studio-thumbs--inline">
+                  {uploads.inspiration.map((it, idx) => (
+                    <button
+                      key={it.id}
+                      type="button"
+                      className="studio-thumb"
+                      draggable
+                      onDragStart={() => {
+                        (window as any).__minaDragIndex = idx;
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = Number((window as any).__minaDragIndex);
+                        const to = idx;
+                        if (Number.isFinite(from) && from !== to) {
+                          moveUploadItem("inspiration", from, to);
+                        }
+                        (window as any).__minaDragIndex = null;
+                      }}
+                      onClick={() => removeUploadItem("inspiration", it.id)}
+                      title="Click to delete • Drag to reorder"
+                    >
+                      <img src={it.remoteUrl || it.url} alt="" />
+                    </button>
+                  ))}
+
+                  {/* Inspiration: + stays and gets pushed right until limit */}
+                  {uploads.inspiration.length < 4 && (
+                    <button
+                      type="button"
+                      className="studio-plusbox studio-plusbox--inline"
+                      onClick={() => triggerPick("inspiration")}
+                      title="Add image"
+                    >
+                      <span aria-hidden="true">+</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Collapse>
+
+          <Collapse open={showPanels && activePanel === "style"} delayMs={PANEL_REVEAL_DELAY_MS}>
+            <div className="studio-panel">
+              <div className="studio-panel-title">Pick a style</div>
+
+              <div className="studio-style-row">
+                {allStyleCards.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
+                    onMouseEnter={() => setStylePresetKey(s.key)}
+                    onClick={() => setStylePresetKey(s.key)}
+                  >
+                    <div className="studio-style-thumb">
+                      <img src={s.thumb} alt="" />
+                    </div>
+
+                    {/* Inline rename (no new panel) */}
+                    <div
+                      className="studio-style-label"
+                      onDoubleClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (s.isCustom) deleteCustomStyle(s.key);
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        beginRenameStyle(s.key, s.label);
+                      }}
+                    >
+                      {editingStyleKey === s.key ? (
+                        <input
+                          autoFocus
+                          value={editingStyleValue}
+                          onChange={(e) => setEditingStyleValue(e.target.value)}
+                          onBlur={commitRenameStyle}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRenameStyle();
+                            if (e.key === "Escape") cancelRenameStyle();
+                          }}
+                        />
+                      ) : (
+                        s.label
+                      )}
+                    </div>
+                  </button>
+                ))}
+
+                {/* Create style (opens modal) */}
+                <button
+                  type="button"
+                  className={classNames("studio-style-card", "add")}
+                  onMouseEnter={() => {}}
+                  onClick={handleOpenCustomStylePanel}
+                >
+                  <div className="studio-style-thumb">
+                    <span aria-hidden="true">+</span>
+                  </div>
+                  <div className="studio-style-label">Create style</div>
+                </button>
+              </div>
+            </div>
+          </Collapse>
+        </div>
+
+        {/* Input 3 (always after typing starts; smooth) */}
+        <div className={classNames("mina-slide", !showControls && "hidden")}>
+          <div className="studio-controls-divider" />
+
+          <button type="button" className="studio-vision-toggle" onClick={() => setMinaVisionEnabled((prev) => !prev)}>
+            Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
+          </button>
+
+          <div className="studio-create-block">
+            <button
+              type="button"
+              className={classNames("studio-create-link", !canCreateStill && "disabled")}
+              disabled={!canCreateStill}
+              onClick={handleGenerateStill}
+            >
+              {stillGenerating ? "Creating…" : "Create"}
+            </button>
           </div>
+
+          {stillError && <div className="error-text">{stillError}</div>}
         </div>
 
         {/* Hidden file inputs */}
@@ -2132,7 +2041,7 @@ const renderStudioLeft = () => {
         />
       </div>
 
-      {/* Profile */}
+      {/* Profile button: bottom-left, no underline (CSS will handle) */}
       <button type="button" className="studio-profile-float" onClick={() => setActiveTab("profile")}>
         Profile
       </button>
