@@ -13,6 +13,8 @@ const API_BASE_URL =
 const TOPUP_URL =
   import.meta.env.VITE_MINA_TOPUP_URL ||
   "https://www.faltastudio.com/checkouts/cn/hWN6EhbqQW5KrdIuBO3j5HKV/en-ae?_r=AQAB9NY_ccOV_da3y7VmTxJU-dDoLEOCdhP9sg2YlvDwLQQ";
+
+const LIKE_STORAGE_KEY = "minaLikedMap";
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
@@ -420,7 +422,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSending, setFeedbackSending] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
-  const [likedMap, setLikedMap] = useState<Record<string, boolean>>({});
+  const [likedMap, setLikedMap] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage.getItem(LIKE_STORAGE_KEY) : null;
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [likeSubmitting, setLikeSubmitting] = useState(false);
 
   // Panels (only one open at a time)
@@ -553,31 +562,6 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
 
-  type CreateCtaState = "creating" | "uploading" | "describe_more" | "ready";
-
-  const createCtaState: CreateCtaState = stillGenerating
-    ? "creating"
-    : uploadsPending
-      ? "uploading"
-      : stillBriefLength < 40
-        ? "describe_more"
-        : "ready";
-
-  const createCtaLabel =
-    createCtaState === "creating"
-      ? "Creating…"
-      : createCtaState === "uploading"
-        ? "Uploading…"
-        : createCtaState === "describe_more"
-          ? "Describe more"
-          : "Create";
-
-  // Disable unless fully ready (prevents “no-op click” confusion)
-  const createCtaDisabled = createCtaState !== "ready";
-
-  // Keep existing prop for StudioLeft if you still use it there
-  const canCreateStill = createCtaState === "ready";
-
   // UI stages
   const showPills = uiStage >= 1;
   const showPanels = uiStage >= 1;
@@ -689,6 +673,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       // ignore
     }
   }, [customStyles]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(likedMap));
+    } catch {
+      // ignore
+    }
+  }, [likedMap]);
 
   useEffect(() => {
     // Stage 0: only textarea (no pills, no panels)
@@ -1202,18 +1194,27 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
   // [PART 11 START] Feedback / like / download
   // ========================================================================
-  const getCurrentMediaKey = () =>
-    currentMotion?.id || currentStill?.id || currentMotion?.url || currentStill?.url || null;
+  const getCurrentMediaKey = () => {
+    const mediaType = currentMotion ? "motion" : currentStill ? "still" : null;
+    if (!mediaType) return null;
+
+    const rawKey = currentMotion?.id || currentStill?.id || currentMotion?.url || currentStill?.url;
+    return rawKey ? `${mediaType}:${rawKey}` : null;
+  };
 
   const handleLikeCurrentStill = async () => {
-    if (!API_BASE_URL) return;
-
     const targetMedia = currentMotion || currentStill;
     if (!targetMedia) return;
 
     const resultType = currentMotion ? "motion" : "image";
     const likeKey = getCurrentMediaKey();
-    if (likeKey && likedMap[likeKey]) return;
+    const nextLiked = likeKey ? !likedMap[likeKey] : false;
+
+    if (likeKey) {
+      setLikedMap((prev) => ({ ...prev, [likeKey]: nextLiked }));
+    }
+
+    if (!API_BASE_URL || !nextLiked) return;
 
     try {
       setLikeSubmitting(true);
@@ -1224,17 +1225,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
           customerId,
           resultType,
           platform: currentAspect.platformKey,
-          prompt: currentStill.prompt || lastStillPrompt || stillBrief || brief,
+          prompt: currentMotion?.prompt || currentStill?.prompt || lastStillPrompt || stillBrief || brief,
           comment: "",
           imageUrl: currentMotion ? "" : targetMedia.url,
           videoUrl: currentMotion ? targetMedia.url : "",
           sessionId,
+          liked: true,
         }),
       });
-
-      if (likeKey) {
-        setLikedMap((prev) => ({ ...prev, [likeKey]: true }));
-      }
     } catch {
       // non-blocking
     } finally {
@@ -1600,16 +1598,6 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     } finally {
       if (typeof window !== "undefined") window.location.reload();
     }
-  };
-
-  const handleAnimateHeaderClick = async () => {
-    if (motionSuggestLoading || motionSuggestTyping) return;
-    setAnimateMode(true);
-    if (!motionTextTrimmed) {
-      await handleSuggestMotion();
-      return;
-    }
-    await handleGenerateMotion();
   };
 
   const handleBriefScroll = () => {
@@ -1978,8 +1966,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
                 <button
                   type="button"
                   className="studio-header-cta"
-                  onClick={handleAnimateHeaderClick}
-                  disabled={!motionReferenceImageUrl || motionGenerating || motionSuggestLoading || motionSuggestTyping}
+                  onClick={handleLikeCurrentStill}
+                  disabled={!currentStill && !currentMotion}
                 >
                   {isCurrentLiked ? "ok" : "♡ more of this"}
                 </button>
@@ -2055,10 +2043,6 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               onOpenCustomStylePanel={handleOpenCustomStylePanel}
               minaVisionEnabled={minaVisionEnabled}
               onToggleVision={() => setMinaVisionEnabled((p) => !p)}
-              canCreateStill={canCreateStill}
-              createCtaState={createCtaState}
-              createCtaLabel={createCtaLabel}
-              createCtaDisabled={createCtaDisabled}
               stillGenerating={stillGenerating}
               stillError={stillError}
               onCreateStill={handleGenerateStill}

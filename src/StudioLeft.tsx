@@ -116,7 +116,6 @@ type StudioLeftProps = {
   onToggleVision: () => void;
 
   // IMAGE create
-  canCreateStill: boolean;
   stillGenerating: boolean;
   stillError: string | null;
   onCreateStill: () => void;
@@ -293,7 +292,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     minaVisionEnabled,
     onToggleVision,
 
-    canCreateStill,
     stillGenerating,
     stillError,
     onCreateStill,
@@ -396,6 +394,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         : "describe_more";
 
   const createState = isMotion ? motionCreateState : imageCreateState;
+  const canCreateStill = imageCreateState === "ready";
 
   const createLabel =
     createState === "creating"
