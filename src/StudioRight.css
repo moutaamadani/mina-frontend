@@ -25,7 +25,8 @@
   overflow: hidden;
   border-radius: 0;
 
-  background: rgba(8, 10, 0, 0.06);
+  /* ✅ same “black opacity system” */
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* Stage 0 center text */
@@ -41,7 +42,7 @@
   pointer-events: none;
 }
 
-/* Click surface (toggles contain mode) */
+/* Click surface (zones + zoom) */
 .studio-output-click {
   width: 100%;
   height: 100%;
@@ -123,21 +124,23 @@
   gap: 14px;
 }
 
-/* Input: looks like your “Describe…” but single line, luxury clean */
+/* ✅ “Speak to me” = 16pt bold, black 20% opacity (placeholder) */
 .studio-feedback-input--compact {
   flex: 1 1 auto;
-  height: 22px;
+  height: 26px;
 
   border: 0;
   outline: none;
   background: transparent;
 
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.8);
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.85);
 }
 
 .studio-feedback-input--compact::placeholder {
   color: rgba(0, 0, 0, 0.2);
+  font-weight: 700;
 }
 
 /* Send bold, and disabled = lower opacity */
