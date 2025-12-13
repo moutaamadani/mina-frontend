@@ -376,7 +376,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               onScroll={onBriefScroll}
             >
               <textarea
-                className="studio-brief-input"
+  ref={briefInputRef}
+  className="studio-brief-input"
+
                 placeholder="Describe how you want your still life image to look like"
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
@@ -569,14 +571,32 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           </button>
 
           <div className="studio-create-block">
-            <button
-              type="button"
-              className={classNames("studio-create-link", !canCreateStill && "disabled")}
-              disabled={!canCreateStill}
-              onClick={onCreateStill}
-            >
-              {stillGenerating ? "Creating…" : "Create"}
-            </button>
+         <button
+            type="button"
+            className={classNames(
+              "studio-create-link",
+              createCtaState === "describe_more" && "state-describe",
+              createCtaState === "uploading" && "state-uploading disabled",
+              createCtaState === "creating" && "state-creating disabled"
+            )}
+            disabled={createCtaDisabled}
+            onClick={() => {
+              if (createCtaState === "ready") {
+                void handleGenerateStill();
+                return;
+              }
+          
+              if (createCtaState === "describe_more") {
+                setShowDescribeMore(true);
+                requestAnimationFrame(() => {
+                  briefInputRef.current?.focus();
+                });
+              }
+            }}
+          >
+            {createCtaLabel}
+          </button>
+
           </div>
 
           {stillError && <div className="error-text">{stillError}</div>}
