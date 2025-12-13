@@ -1,114 +1,167 @@
-/* Right side must NEVER scroll */
+/* src/StudioRight.css */
+
+/* Right side NEVER scrolls */
 .studio-right {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+
   display: flex;
   flex-direction: column;
+
+  padding: 0;
+  margin: 0;
 }
 
-/* Grey panel fills the whole right area */
+/* FULL BLEED grey surface (NO radius) */
 .studio-right-surface {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+
+  width: 100%;
+  height: 100%;
+
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 0;
+
   background: rgba(8, 10, 0, 0.06);
 }
 
-/* Click area */
+/* Stage 0 center text */
+.studio-empty-text {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Click surface (toggles contain mode) */
 .studio-output-click {
   width: 100%;
   height: 100%;
+  display: block;
+
   border: 0;
   padding: 0;
   margin: 0;
   background: transparent;
 }
 
-/* Frame always full size */
+/* Frame is full size, NO radius */
 .studio-output-frame {
   position: relative;
   width: 100%;
   height: 100%;
+
   overflow: hidden;
-  background: rgba(8, 10, 0, 0.06);
+  border-radius: 0;
+  background: transparent;
 }
 
-/* Media fills frame by default */
+/* Media fills surface (luxury cover) */
 .studio-output-media {
   width: 100%;
   height: 100%;
   display: block;
+
   object-fit: cover;
   transform: scale(1);
   transform-origin: center;
-  transition: transform 520ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), object-fit 0ms linear 0ms;
 }
 
-/* “See whole image/video” */
+/* Click toggles to contain (scale down centered) */
 .studio-output-frame.is-contain .studio-output-media {
   object-fit: contain;
   transform: scale(0.92);
 }
 
-/* Stage 0 placeholder (bottom-left) */
-.output-placeholder {
-  position: absolute;
-  left: 40px;
-  bottom: 16px;
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.4);
-  pointer-events: none;
-}
-
-/* Dots overlay INSIDE the grey panel (no layout push) */
-.studio-right-surface .studio-dots-row {
+/* Dots overlay inside the image surface */
+.studio-dots-row {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 12px;
+  bottom: 22px;
+
   display: flex;
   justify-content: center;
   gap: 8px;
-  pointer-events: auto;
 }
 
-/* Feedback bar: beige, always fits, one-line input */
+.studio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+.studio-dot.active {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* Feedback bar (beige) — NO radius, full width */
 .studio-feedback-bar {
+  position: relative;
   flex: 0 0 auto;
-  margin-top: 12px;
-  background: rgba(238, 230, 211, 0.92);
-  border-radius: 12px;
-  padding: 10px 12px;
+
+  width: 100%;
+  padding: 18px 18px;
+
+  background: #cec2aa;
+  border-radius: 0;
+
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
 }
 
+/* Input: looks like your “Describe…” but single line, luxury clean */
 .studio-feedback-input--compact {
   flex: 1 1 auto;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid rgba(8, 10, 0, 0.12);
-  padding: 0 10px;
-  background: rgba(255, 255, 255, 0.45);
+  height: 22px;
+
+  border: 0;
   outline: none;
+  background: transparent;
+
   font-size: 13px;
+  color: rgba(0, 0, 0, 0.8);
 }
 
+.studio-feedback-input--compact::placeholder {
+  color: rgba(0, 0, 0, 0.2);
+}
+
+/* Send bold, and disabled = lower opacity */
 .studio-feedback-send {
-  height: 34px;
-  padding: 0 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(8, 10, 0, 0.14);
-  background: rgba(255, 255, 255, 0.55);
+  border: 0;
+  background: transparent;
   cursor: pointer;
-  white-space: nowrap;
+
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
 }
 
 .studio-feedback-send:disabled {
-  opacity: 0.45;
   cursor: default;
+  opacity: 0.35;
+}
+
+/* Error (if any) floats above bar without changing layout */
+.studio-feedback-error {
+  position: absolute;
+  left: 18px;
+  top: -18px;
+
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.35);
 }
