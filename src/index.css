@@ -1026,7 +1026,7 @@ video {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  text-decoration: underline;
+  text-decoration: none;
   cursor: pointer;
 }
 
