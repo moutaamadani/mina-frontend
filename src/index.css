@@ -1519,7 +1519,7 @@ video {
 /* === PATCH: push left column content inward + stop bottom/left cropping === */
 .studio-left-main{
   /* nudge content away from the viewport edges */
- 
+   padding-left: 56px;
   padding-bottom: 72px;
 
   /* safety: if content grows, scroll instead of clipping */
