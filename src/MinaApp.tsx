@@ -1154,24 +1154,42 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     return null;
   };
 
-  const fetchHistory = async () => {
-    if (!API_BASE_URL || !customerId) return;
-    try {
-      setHistoryLoading(true);
-      const res = await fetch(`${API_BASE_URL}/history/customer/${encodeURIComponent(customerId)}`);
-      if (!res.ok) throw new Error(`Status ${res.status}`);
-      const json = (await res.json()) as HistoryResponse;
-      if (!json.ok) throw new Error("History error");
+ // fetchHistory: always copy generation URLs into R2 before displaying
 
-      setCredits((prev) => ({ balance: json.credits.balance, meta: prev?.meta }));
-      setHistoryGenerations(json.generations || []);
-      setHistoryFeedbacks(json.feedbacks || []);
-    } catch (err: any) {
-      setHistoryError(err?.message || "Unable to load history.");
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
+  const fetchHistory = async () => {
+  if (!API_BASE_URL || !customerId) return;
+  try {
+    setHistoryLoading(true);
+    const res = await fetch(`${API_BASE_URL}/history/customer/${encodeURIComponent(customerId)}`);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    const json = (await res.json()) as HistoryResponse;
+    if (!json.ok) throw new Error("History error");
+
+    // update credit balance
+    setCredits((prev) => ({ balance: json.credits.balance, meta: prev?.meta }));
+
+    // fetch and store each generation’s image in R2
+    const gens = json.generations || [];
+    const updated = await Promise.all(
+      gens.map(async (g) => {
+        try {
+          const remoteUrl = await storeRemoteToR2(g.outputUrl, "generations");
+          return { ...g, outputUrl: remoteUrl };
+        } catch {
+          return g;
+        }
+      })
+    );
+    setHistoryGenerations(updated);
+
+    setHistoryFeedbacks(json.feedbacks || []);
+  } catch (err: any) {
+    setHistoryError(err?.message || "Unable to load history.");
+  } finally {
+    setHistoryLoading(false);
+  }
+};
+
   
   const getEditorialNumber = (id: string, index: number) => {
     const fallback = padEditorialNumber(index + 1);
