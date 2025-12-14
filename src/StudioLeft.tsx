@@ -228,8 +228,8 @@ const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string }>
   { key: "expand", label: "Expand", seed: "Subtle expansion, calm luxury vibe." },
   { key: "satisfying", label: "Satisfying", seed: "Slime video, satisfying, smooth, satisfying, motion loop—micro movements, clean, premium." },
   { key: "slow_motion", label: "Slow motion", seed: "Ultra slow motion, 1000fps, asmr, premium calm." },
-  { key: "fix_camera", label: "Still camera", seed: "fix camera},
-  { key: "loop", label: "Perfect loop", seed: "perfect loop},
+   { key: "fix_camera", label: "Still camera", seed: "fix camera" },
+  { key: "loop", label: "Perfect loop", seed: "perfect loop" },
 
 ];
 
