@@ -2288,10 +2288,10 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
 
   // ========================================================================
-// [PART 17 START] Profile body – editorial history (cleaned)
+// [PART 17 START] Profile body – editorial history (revamped)
 // ========================================================================
 const renderProfileBody = () => {
-  // Show expiration date if provided
+  // Helpers for formatting date and sorting generations
   const expirationCandidate =
     (credits?.meta as any)?.expiresAt ||
     (credits?.meta as any)?.expirationDate ||
@@ -2299,85 +2299,166 @@ const renderProfileBody = () => {
     (credits?.meta as any)?.expiration;
   const expirationLabel = formatDateOnly(expirationCandidate);
 
-  // Layout variants for grid sizing
-  const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
+  // Show newest first
+  const sortedVisibleHistory = [...visibleHistory].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 
-  // Render generation number (edit on double-click for admins)
-  const renderNumberBadge = (g: GenerationRecord) => {
+  // A per‑card component so we can use React state and effects
+  const HistoryCard: React.FC<{ g: GenerationRecord; index: number }> = ({
+    g,
+    index,
+  }) => {
+    const [loaded, setLoaded] = React.useState(false);
+    const [progress, setProgress] = React.useState(0);
+    const [showFull, setShowFull] = React.useState(false);
+    // simulate progress until the image loads
+    React.useEffect(() => {
+      if (loaded) return;
+      const timer = setInterval(() => {
+        setProgress((p) => (p < 95 ? p + 5 : p));
+      }, 100);
+      return () => clearInterval(timer);
+    }, [loaded]);
+    const handleLoaded = () => {
+      setLoaded(true);
+      setProgress(100);
+    };
+    // shorten long prompts unless "view more" toggled
+    const maxChars = 80;
+    const isLong = (g.prompt?.length || 0) > maxChars;
+    const promptText =
+      !showFull && isLong
+        ? (g.prompt ?? "").slice(0, maxChars).trim() + "…"
+        : g.prompt || "Untitled prompt";
+    const variantClasses = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
+    const variant = variantClasses[index % variantClasses.length];
+    // generation numbering (uses helper functions from existing code)
     const idx = historyIndexMap[g.id] ?? 0;
-    const value = getEditorialNumber(g.id, idx);
-    const isEditing = editingNumberId === g.id;
-    return (
-      <div
-        className="profile-card-number"
-        style={{ textTransform: "none", letterSpacing: "normal" }}
-        onDoubleClick={() => handleBeginEditNumber(g.id, idx)}
-        title={isAdmin ? "Double-click to edit" : undefined}
-      >
-        {isEditing ? (
-          <input
-            autoFocus
-            className="profile-card-number-input"
-            value={editingNumberValue}
-            onChange={(e) => setEditingNumberValue(e.target.value)}
-            onBlur={handleCommitNumber}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCommitNumber();
-              if (e.key === "Escape") handleCancelNumberEdit();
-            }}
-          />
-        ) : (
-          <span>{value}</span>
-        )}
-      </div>
-    );
-  };
-
-  // Render a single history card
-  const renderCard = (g: GenerationRecord, i: number) => {
-    const variant = editorialVariants[i % editorialVariants.length];
-    const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
-    const numberLabel = getEditorialNumber(g.id, i);
+    const numberLabel = getEditorialNumber(g.id, idx);
+    const [editing, setEditing] = React.useState(false);
+    const [editValue, setEditValue] = React.useState(numberLabel);
+    const commitNumber = () => {
+      handleCommitNumber();
+      setEditing(false);
+    };
     return (
       <article key={g.id} className={`profile-card profile-card--${variant}`}>
-        {renderNumberBadge(g)}
+        {/* Number badge (editable if admin) */}
+        <div
+          className="profile-card-number"
+          style={{ textTransform: "none", letterSpacing: "normal", fontFamily: "Scheibe" }}
+          onDoubleClick={() => {
+            handleBeginEditNumber(g.id, idx);
+            setEditing(true);
+          }}
+          title={isAdmin ? "Double-click to edit" : undefined}
+        >
+          {editing ? (
+            <input
+              autoFocus
+              className="profile-card-number-input"
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={commitNumber}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitNumber();
+                if (e.key === "Escape") {
+                  setEditing(false);
+                  handleCancelNumberEdit();
+                }
+              }}
+            />
+          ) : (
+            <span>{numberLabel}</span>
+          )}
+        </div>
+
+        {/* Card media with loading state */}
         <div
           className="profile-card-media"
           style={{
-            aspectRatio: aspectStyle,
-            border: "1px solid rgba(8,10,0,0.08)",
-            background: "rgba(8, 10, 0, 0.05)",
+            position: "relative",
+            background: loaded ? "transparent" : "rgba(8, 10, 0, 0.1)",
+            border: "1px solid rgba(8, 10, 0, 0.08)",
           }}
-          onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
         >
+          {/* Progress bar along the top */}
+          {!loaded && (
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                height: 3,
+                width: `${progress}%`,
+                background: "rgba(8, 10, 0, 0.8)",
+                transition: "width 0.2s ease-out",
+              }}
+            />
+          )}
+          {/* Compressed preview (if available) loads first; full res loads afterward */}
           <img
             src={toPreviewUrl(g.outputUrl)}
             loading="lazy"
             decoding="async"
             alt={g.prompt}
             referrerPolicy="no-referrer"
+            onLoad={handleLoaded}
+            style={{
+              display: loaded ? "block" : "none",
+              objectFit: "cover",
+              width: "100%",
+              height: "100%",
+            }}
           />
+          {!loaded && (
+            <div
+              style={{
+                width: "100%",
+                height: "100%",
+                background: "rgba(8, 10, 0, 0.1)",
+              }}
+            />
+          )}
+          {/* Action bar: download only */}
           <div
             className="profile-card-actions"
             style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: "4px 6px",
               backdropFilter: "blur(5px)",
               WebkitBackdropFilter: "blur(5px)",
-              background: "rgba(0,0,0,0.3)",
+              background: "rgba(0, 0, 0, 0.4)",
             }}
           >
             <button
               type="button"
-              className="link-button subtle"
               onClick={(e) => {
                 e.stopPropagation();
                 handleDownloadGeneration(g, numberLabel);
               }}
-              style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
+              style={{
+                fontWeight: "700",
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontSize: "10pt",
+                border: "none",
+                background: "transparent",
+                color: loaded ? "rgba(8, 10, 0, 0.9)" : "rgba(255, 255, 255, 0.9)",
+                cursor: "pointer",
+                fontFamily: "Scheibe",
+              }}
             >
               download
             </button>
           </div>
         </div>
+
+        {/* Meta: prompt and actions */}
         <div className="profile-card-meta">
           <div
             className="profile-card-prompt"
@@ -2388,29 +2469,42 @@ const renderProfileBody = () => {
               textOverflow: "ellipsis",
               textTransform: "none",
               letterSpacing: "normal",
+              fontFamily: "Scheibe",
             }}
           >
-            {g.prompt || "Untitled prompt"}
-            {g.prompt && g.prompt.length > 80 && (
-              <>
-                {" "}
-                <button
-                  type="button"
-                  className="link-button subtle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    alert(g.prompt);
-                  }}
-                  style={{ fontSize: "10pt", textDecoration: "underline", padding: 0 }}
-                >
-                  view more
-                </button>
-              </>
+            {promptText}{" "}
+            {isLong && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowFull(!showFull);
+                }}
+                style={{
+                  fontSize: "10pt",
+                  fontWeight: "normal",
+                  textDecoration: "underline",
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  margin: 0,
+                  color: "rgba(8, 10, 0, 0.6)",
+                  cursor: "pointer",
+                  fontFamily: "Scheibe",
+                }}
+              >
+                {showFull ? "view less" : "view more"}
+              </button>
             )}
           </div>
           <div
             className="profile-card-submeta"
-            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
+            style={{
+              fontSize: "10pt",
+              textTransform: "none",
+              letterSpacing: "normal",
+              fontFamily: "Scheibe",
+            }}
           >
             <span>{formatDateOnly(g.createdAt)}</span>
             <span
@@ -2420,7 +2514,11 @@ const renderProfileBody = () => {
                   setHistoryGenerations((prev) => prev.filter((item) => item.id !== g.id));
                 }
               }}
-              style={{ cursor: "pointer", textDecoration: "underline" }}
+              style={{
+                textDecoration: "underline",
+                cursor: "pointer",
+                marginLeft: 8,
+              }}
             >
               delete image
             </span>
@@ -2430,31 +2528,91 @@ const renderProfileBody = () => {
     );
   };
 
-  // Sort visibleHistory to show newest first
-  const sortedVisibleHistory = [...visibleHistory].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
   return (
     <div className="profile-editorial-shell">
-      <header className="profile-header">
-        <div className="profile-header-left">
-          <div
-            className="profile-header-label"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
+      {/* Header */}
+      <header
+        className="profile-header"
+        style={{ display: "flex", flexDirection: "column", fontFamily: "Scheibe" }}
+      >
+        {/* Top row: Back to studio & Sign out */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "8px",
+          }}
+        >
+          <button
+            type="button"
+            className="link-button subtle"
+            onClick={() => setActiveTab("studio")}
+            style={{
+              textTransform: "none",
+              letterSpacing: "normal",
+              fontFamily: "Scheibe",
+              fontSize: "12px",
+              fontWeight: "500",
+            }}
           >
-            Profile
+            Back to studio
+          </button>
+          <button
+            type="button"
+            className="link-button subtle"
+            onClick={handleSignOut}
+            style={{
+              textTransform: "none",
+              letterSpacing: "normal",
+              fontFamily: "Scheibe",
+              fontSize: "12px",
+              fontWeight: "500",
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+
+        {/* Second row: Profile label and meta */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            flexWrap: "wrap",
+            gap: "12px",
+          }}
+        >
+          <div>
+            <div
+              className="profile-header-label"
+              style={{
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontFamily: "Scheibe",
+                fontSize: "16px",
+                fontWeight: "600",
+              }}
+            >
+              Profile
+            </div>
           </div>
-          <div className="profile-meta-row">
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             <button
               type="button"
-              className="profile-cta"
               onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
               style={{
                 textTransform: "none",
                 letterSpacing: "normal",
+                fontFamily: "Scheibe",
                 fontSize: "12px",
-                fontWeight: 500,
+                fontWeight: "700",
+                border: "1px solid rgba(8,10,0,0.6)",
+                padding: "4px 8px",
+                cursor: "pointer",
+                background: "rgba(8,10,0,0.05)",
+                color: "rgba(8,10,0,0.9)",
               }}
             >
               Get more matchas
@@ -2462,7 +2620,7 @@ const renderProfileBody = () => {
             <div className="profile-meta-block">
               <span
                 className="profile-meta-title"
-                style={{ textTransform: "none", letterSpacing: "normal" }}
+                style={{ textTransform: "none", letterSpacing: "normal", fontFamily: "Scheibe" }}
               >
                 Matchas remaining
               </span>
@@ -2471,63 +2629,42 @@ const renderProfileBody = () => {
             <div className="profile-meta-block">
               <span
                 className="profile-meta-title"
-                style={{ textTransform: "none", letterSpacing: "normal" }}
+                style={{ textTransform: "none", letterSpacing: "normal", fontFamily: "Scheibe" }}
               >
                 Expiration date
               </span>
-              <span className="profile-meta-value">{expirationLabel}</span>
+                <span className="profile-meta-value">{expirationLabel}</span>
             </div>
           </div>
         </div>
-        <div className="profile-header-right">
-          {isAdmin && (
-            <button
-              type="button"
-              className="profile-cta ghost"
-              onClick={() => (window.location.href = "/admin")}
-              style={{
-                textTransform: "none",
-                letterSpacing: "normal",
-                fontSize: "12px",
-                fontWeight: 500,
-              }}
-            >
-              Admin
-            </button>
-          )}
-          <button
-            type="button"
-            className="profile-cta ghost"
-            onClick={handleSignOut}
-            style={{
-              textTransform: "none",
-              letterSpacing: "normal",
-              fontSize: "12px",
-              fontWeight: 500,
-            }}
-          >
-            Sign out
-          </button>
-        </div>
       </header>
 
-      {/* gallery: no editorial block; renamed to Archive */}
+      {/* Archive section */}
       <section className="profile-gallery">
-        <div className="profile-gallery-head">
+        <div
+          className="profile-gallery-head"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            marginTop: "24px",
+            fontFamily: "Scheibe",
+          }}
+        >
           <div
             className="profile-gallery-title"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
+            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "24px", fontWeight: "700" }}
           >
             Archive
           </div>
           <div
             className="profile-gallery-sub"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
+            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "14px" }}
           >
             {historyGenerations.length} pieces
           </div>
         </div>
-        {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
+        {historyLoading && <div className="profile-gallery-status">Loading archive…</div>}
         {historyError && (
           <div className="profile-gallery-status error-text">{historyError}</div>
         )}
@@ -2535,21 +2672,29 @@ const renderProfileBody = () => {
           <div className="profile-gallery-status">No archive yet.</div>
         )}
         <div className="profile-grid">
-          {sortedVisibleHistory.map((g, i) => renderCard(g, i))}
+          {sortedVisibleHistory.map((g, i) => (
+            <HistoryCard key={g.id} g={g} index={i} />
+          ))}
         </div>
         <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
       </section>
 
+      {/* Bottom navigation: only “Studio” */}
       <div className="profile-bottom-nav">
         <button
           type="button"
-          className="profile-cta"
           onClick={() => setActiveTab("studio")}
           style={{
             textTransform: "none",
             letterSpacing: "normal",
+            fontFamily: "Scheibe",
             fontSize: "12px",
-            fontWeight: 500,
+            fontWeight: "700",
+            border: "1px solid rgba(8,10,0,0.6)",
+            padding: "4px 8px",
+            background: "rgba(8,10,0,0.05)",
+            cursor: "pointer",
+            color: "rgba(8,10,0,0.9)",
           }}
         >
           Studio
@@ -2561,6 +2706,7 @@ const renderProfileBody = () => {
 // ========================================================================
 // [PART 17 END]
 // ========================================================================
+
 
 
   // ========================================================================
