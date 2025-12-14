@@ -1360,6 +1360,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         stylePresetKey: string;
         aspectRatio: string;
         productImageUrl?: string;
+          logoImageUrl?: string;
+
         styleImageUrls?: string[];
       } = {
         customerId,
@@ -1380,7 +1382,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       }
 
       // Forward inspiration up to 4 (R2 first, then http only)
-      const inspirationUrls = uploads.inspiration
+      const inspi
+          // NEW: forward logo image if available
+  const logoItem = uploads.logo[0];
+  const logoUrl = logoItem?.remoteUrl || logoItem?.url;
+  if (logoUrl && isHttpUrl(logoUrl)) {
+    payload.logoImageUrl = logoUrl;
+  }
+rationUrls = uploads.inspiration
         .map((u) => u.remoteUrl || u.url)
         .filter((u) => isHttpUrl(u))
         .slice(0, 4);
@@ -1427,7 +1436,24 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         setCredits((prev) => ({
           balance: data.credits!.balance,
           meta: prev?.meta,
-        }));
+        }))
+            // NEW: update Vision overlay with transcripts and user message
+  const imageTexts = (data as any)?.gpt?.imageTexts;
+  const userMessage = (data as any)?.gpt?.userMessage;
+  if (minaVisionEnabled && (imageTexts?.length || userMessage)) {
+    let overlay = "";
+    if (Array.isArray(imageTexts) && imageTexts.length > 0) {
+      overlay = imageTexts.join(". ");
+    }
+    if (typeof userMessage === "string" && userMessage.trim()) {
+      overlay = overlay ? `${overlay}\n\n${userMessage}` : userMessage;
+    }
+    if (overlay) {
+      setMinaMessage(overlay);
+      setMinaTalking(true);
+    }
+  }
+;
       }
     } catch (err: any) {
       setStillError(err?.message || "Unexpected error generating still.");
