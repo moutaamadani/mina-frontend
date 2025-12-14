@@ -2288,230 +2288,280 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // ========================================================================
 
   // ========================================================================
-  // [PART 17 START] Profile body – editorial history
-  // ========================================================================
-  const renderProfileBody = () => {
-    const expirationCandidate =
-      (credits?.meta as any)?.expiresAt ||
-      (credits?.meta as any)?.expirationDate ||
-      (credits?.meta as any)?.expiry ||
-      (credits?.meta as any)?.expiration;
-    const expirationLabel = formatDateOnly(expirationCandidate);
+// [PART 17 START] Profile body – editorial history (cleaned)
+// ========================================================================
+const renderProfileBody = () => {
+  // Show expiration date if provided
+  const expirationCandidate =
+    (credits?.meta as any)?.expiresAt ||
+    (credits?.meta as any)?.expirationDate ||
+    (credits?.meta as any)?.expiry ||
+    (credits?.meta as any)?.expiration;
+  const expirationLabel = formatDateOnly(expirationCandidate);
 
-    const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
+  // Layout variants for grid sizing
+  const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
 
-    const renderNumberBadge = (g: GenerationRecord) => {
-      const idx = historyIndexMap[g.id] ?? 0;
-      const value = getEditorialNumber(g.id, idx);
-      const isEditing = editingNumberId === g.id;
-      return (
-        <div
-          className="profile-card-number"
-          onDoubleClick={() => handleBeginEditNumber(g.id, idx)}
-          title={isAdmin ? "Double-click to edit" : undefined}
-        >
-          {isEditing ? (
-            <input
-              autoFocus
-              className="profile-card-number-input"
-              value={editingNumberValue}
-              onChange={(e) => setEditingNumberValue(e.target.value)}
-              onBlur={handleCommitNumber}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCommitNumber();
-                if (e.key === "Escape") handleCancelNumberEdit();
-              }}
-            />
-          ) : (
-            <span>{value}</span>
-          )}
-        </div>
-      );
-    };
-
-    const renderCard = (g: GenerationRecord, i: number) => {
-      const idx = historyIndexMap[g.id] ?? i;
-      const variant = editorialVariants[idx % editorialVariants.length];
-      const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
-      const numberLabel = getEditorialNumber(g.id, idx);
-      return (
-        <article key={g.id} className={`profile-card profile-card--${variant}`}>
-          {renderNumberBadge(g)}
-          <div
-            className="profile-card-media"
-            style={{ aspectRatio: aspectStyle }}
-            onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
-          >
-            <img
-              src={toPreviewUrl(g.outputUrl)}
-              loading="lazy"
-              decoding="async"
-              alt={g.prompt}
-              referrerPolicy="no-referrer"
-            />
-            <div className="profile-card-actions">
-              <button
-                type="button"
-                className="link-button subtle"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownloadGeneration(g, numberLabel);
-                }}
-              >
-                Download
-              </button>
-              <a
-                className="link-button subtle"
-                href={g.outputUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(e) => e.stopPropagation()}
-              >
-                Open
-              </a>
-            </div>
-          </div>
-          <div className="profile-card-meta">
-            <div className="profile-card-prompt">{g.prompt || "Untitled prompt"}</div>
-            <div className="profile-card-submeta">
-              <span>{formatDateOnly(g.createdAt)}</span>
-              <span>{g.type}</span>
-            </div>
-          </div>
-        </article>
-      );
-    };
-
+  // Render generation number (edit on double-click for admins)
+  const renderNumberBadge = (g: GenerationRecord) => {
+    const idx = historyIndexMap[g.id] ?? 0;
+    const value = getEditorialNumber(g.id, idx);
+    const isEditing = editingNumberId === g.id;
     return (
-      <div className="profile-editorial-shell">
-        <header className="profile-header">
-          <div className="profile-header-left">
-            <div className="profile-header-label">Profile</div>
-            <div className="profile-meta-row">
-              <button
-                type="button"
-                className="profile-cta"
-                onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
-              >
-                Get more Matchas
-              </button>
-              <div className="profile-meta-block">
-                <span className="profile-meta-title">Matchas remaining</span>
-                <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
-              </div>
-              <div className="profile-meta-block">
-                <span className="profile-meta-title">Expiration date</span>
-                <span className="profile-meta-value">{expirationLabel}</span>
-              </div>
-            </div>
-          </div>
-          <div className="profile-header-right">
-            {isAdmin && (
-              <button
-                type="button"
-                className="profile-cta ghost"
-                onClick={() => (window.location.href = "/admin")}
-              >
-                Admin
-              </button>
-            )}
-            <button type="button" className="profile-cta ghost" onClick={handleSignOut}>
-              Sign out
-            </button>
-          </div>
-        </header>
-
-        <section className="profile-editorial">
-          <div
-            className="profile-editorial-block"
-            onClick={() => setBrandingEditing("left")}
-            role="presentation"
-          >
-            {brandingEditing === "left" ? (
-              <div className="profile-editorial-edit">
-                <input
-                  className="profile-editorial-input big"
-                  value={brandingLeft.title}
-                  onChange={(e) => handleBrandingChange("left", "title", e.target.value)}
-                  onBlur={stopBrandingEdit}
-                  autoFocus
-                />
-                <input
-                  className="profile-editorial-input big"
-                  value={brandingLeft.accent}
-                  onChange={(e) => handleBrandingChange("left", "accent", e.target.value)}
-                  onBlur={stopBrandingEdit}
-                />
-                <input
-                  className="profile-editorial-input"
-                  value={brandingLeft.handle}
-                  onChange={(e) => handleBrandingChange("left", "handle", e.target.value)}
-                  onBlur={stopBrandingEdit}
-                />
-              </div>
-            ) : (
-              <div className="profile-editorial-text">
-                <div className="profile-editorial-kicker">{brandingLeft.handle}</div>
-                <div className="profile-editorial-title">{brandingLeft.title}</div>
-                <div className="profile-editorial-accent">{brandingLeft.accent}</div>
-              </div>
-            )}
-          </div>
-
-          <div
-            className="profile-editorial-block profile-editorial-block--right"
-            onClick={() => setBrandingEditing("right")}
-            role="presentation"
-          >
-            {brandingEditing === "right" ? (
-              <div className="profile-editorial-edit">
-                <input
-                  className="profile-editorial-input"
-                  value={brandingRight.handle}
-                  onChange={(e) => handleBrandingChange("right", "handle", e.target.value)}
-                  onBlur={stopBrandingEdit}
-                  autoFocus
-                />
-                <input
-                  className="profile-editorial-input"
-                  value={brandingRight.note}
-                  onChange={(e) => handleBrandingChange("right", "note", e.target.value)}
-                  onBlur={stopBrandingEdit}
-                />
-              </div>
-            ) : (
-              <div className="profile-editorial-text align-right">
-                <div className="profile-editorial-kicker">{brandingRight.handle}</div>
-                <div className="profile-editorial-note">{brandingRight.note}</div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="profile-gallery">
-          <div className="profile-gallery-head">
-            <div className="profile-gallery-title">History</div>
-            <div className="profile-gallery-sub">{historyGenerations.length} pieces</div>
-          </div>
-          {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
-          {historyError && <div className="profile-gallery-status error-text">{historyError}</div>}
-          {!historyLoading && !historyGenerations.length && <div className="profile-gallery-status">No history yet.</div>}
-
-          <div className="profile-grid">
-            {visibleHistory.map((g, i) => renderCard(g, i))}
-          </div>
-          <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
-        </section>
-
-        <div className="profile-bottom-nav">
-          <button type="button" className="profile-cta" onClick={() => setActiveTab("studio")}>Studio</button>
-        </div>
+      <div
+        className="profile-card-number"
+        style={{ textTransform: "none", letterSpacing: "normal" }}
+        onDoubleClick={() => handleBeginEditNumber(g.id, idx)}
+        title={isAdmin ? "Double-click to edit" : undefined}
+      >
+        {isEditing ? (
+          <input
+            autoFocus
+            className="profile-card-number-input"
+            value={editingNumberValue}
+            onChange={(e) => setEditingNumberValue(e.target.value)}
+            onBlur={handleCommitNumber}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleCommitNumber();
+              if (e.key === "Escape") handleCancelNumberEdit();
+            }}
+          />
+        ) : (
+          <span>{value}</span>
+        )}
       </div>
     );
   };
-  // ========================================================================
-  // [PART 17 END]
-  // ========================================================================
+
+  // Render a single history card
+  const renderCard = (g: GenerationRecord, i: number) => {
+    const variant = editorialVariants[i % editorialVariants.length];
+    const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
+    const numberLabel = getEditorialNumber(g.id, i);
+    return (
+      <article key={g.id} className={`profile-card profile-card--${variant}`}>
+        {renderNumberBadge(g)}
+        <div
+          className="profile-card-media"
+          style={{
+            aspectRatio: aspectStyle,
+            border: "1px solid rgba(8,10,0,0.08)",
+            background: "rgba(8, 10, 0, 0.05)",
+          }}
+          onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
+        >
+          <img
+            src={toPreviewUrl(g.outputUrl)}
+            loading="lazy"
+            decoding="async"
+            alt={g.prompt}
+            referrerPolicy="no-referrer"
+          />
+          <div
+            className="profile-card-actions"
+            style={{
+              backdropFilter: "blur(5px)",
+              WebkitBackdropFilter: "blur(5px)",
+              background: "rgba(0,0,0,0.3)",
+            }}
+          >
+            <button
+              type="button"
+              className="link-button subtle"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownloadGeneration(g, numberLabel);
+              }}
+              style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
+            >
+              download
+            </button>
+          </div>
+        </div>
+        <div className="profile-card-meta">
+          <div
+            className="profile-card-prompt"
+            style={{
+              fontSize: "10pt",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              textTransform: "none",
+              letterSpacing: "normal",
+            }}
+          >
+            {g.prompt || "Untitled prompt"}
+            {g.prompt && g.prompt.length > 80 && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="link-button subtle"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    alert(g.prompt);
+                  }}
+                  style={{ fontSize: "10pt", textDecoration: "underline", padding: 0 }}
+                >
+                  view more
+                </button>
+              </>
+            )}
+          </div>
+          <div
+            className="profile-card-submeta"
+            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
+          >
+            <span>{formatDateOnly(g.createdAt)}</span>
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm("Delete this image?")) {
+                  setHistoryGenerations((prev) => prev.filter((item) => item.id !== g.id));
+                }
+              }}
+              style={{ cursor: "pointer", textDecoration: "underline" }}
+            >
+              delete image
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  };
+
+  // Sort visibleHistory to show newest first
+  const sortedVisibleHistory = [...visibleHistory].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return (
+    <div className="profile-editorial-shell">
+      <header className="profile-header">
+        <div className="profile-header-left">
+          <div
+            className="profile-header-label"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
+            Profile
+          </div>
+          <div className="profile-meta-row">
+            <button
+              type="button"
+              className="profile-cta"
+              onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
+              style={{
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
+              Get more matchas
+            </button>
+            <div className="profile-meta-block">
+              <span
+                className="profile-meta-title"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+              >
+                Matchas remaining
+              </span>
+              <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
+            </div>
+            <div className="profile-meta-block">
+              <span
+                className="profile-meta-title"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+              >
+                Expiration date
+              </span>
+              <span className="profile-meta-value">{expirationLabel}</span>
+            </div>
+          </div>
+        </div>
+        <div className="profile-header-right">
+          {isAdmin && (
+            <button
+              type="button"
+              className="profile-cta ghost"
+              onClick={() => (window.location.href = "/admin")}
+              style={{
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
+            >
+              Admin
+            </button>
+          )}
+          <button
+            type="button"
+            className="profile-cta ghost"
+            onClick={handleSignOut}
+            style={{
+              textTransform: "none",
+              letterSpacing: "normal",
+              fontSize: "12px",
+              fontWeight: 500,
+            }}
+          >
+            Sign out
+          </button>
+        </div>
+      </header>
+
+      {/* gallery: no editorial block; renamed to Archive */}
+      <section className="profile-gallery">
+        <div className="profile-gallery-head">
+          <div
+            className="profile-gallery-title"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
+            Archive
+          </div>
+          <div
+            className="profile-gallery-sub"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
+            {historyGenerations.length} pieces
+          </div>
+        </div>
+        {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
+        {historyError && (
+          <div className="profile-gallery-status error-text">{historyError}</div>
+        )}
+        {!historyLoading && !historyGenerations.length && (
+          <div className="profile-gallery-status">No archive yet.</div>
+        )}
+        <div className="profile-grid">
+          {sortedVisibleHistory.map((g, i) => renderCard(g, i))}
+        </div>
+        <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
+      </section>
+
+      <div className="profile-bottom-nav">
+        <button
+          type="button"
+          className="profile-cta"
+          onClick={() => setActiveTab("studio")}
+          style={{
+            textTransform: "none",
+            letterSpacing: "normal",
+            fontSize: "12px",
+            fontWeight: 500,
+          }}
+        >
+          Studio
+        </button>
+      </div>
+    </div>
+  );
+};
+// ========================================================================
+// [PART 17 END]
+// ========================================================================
+
 
   // ========================================================================
   // [PART 18 START] Final layout
