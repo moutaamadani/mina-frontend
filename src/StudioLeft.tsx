@@ -504,53 +504,72 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             <div className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}>
               {!isMotion ? (
                 <>
-                  {/* Product */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      effectivePanel === "product" && "active",
-                      !productThumb && "studio-pill--solo-plus"
-                    )}
-                    style={pillBaseStyle(0)}
-                    onClick={() => openPanel("product")}
-                    onMouseEnter={() => openPanel("product")}
-                  >
-                    {renderPillIcon(productThumb, "+", true)}
-                    <span className="studio-pill-main">Product</span>
-                  </button>
+                          {/* Product */}
+                            <button
+                              type="button"
+                              className={classNames(
+                                "studio-pill",
+                                effectivePanel === "product" && "active",
+                                !productThumb && "studio-pill--solo-plus"
+                              )}
+                              style={pillBaseStyle(0)}
+                              onClick={() => {
+                                if (!productThumb) {
+                                  triggerPick("product");
+                                } else {
+                                  openPanel("product");
+                                }
+                              }}
+                              onMouseEnter={() => openPanel("product")}
+                            >
+                              {renderPillIcon(productThumb, "+", true)}
+                              <span className="studio-pill-main">Product</span>
+                            </button>
+                    
+                            {/* Logo */}
+                            <button
+                              type="button"
+                              className={classNames(
+                                "studio-pill",
+                                activePanel === "logo" && "active",
+                                !logoThumb && "studio-pill--solo-plus"
+                              )}
+                              style={pillBaseStyle(1)}
+                              onClick={() => {
+                                if (!logoThumb) {
+                                  triggerPick("logo");
+                                } else {
+                                  openPanel("logo");
+                                }
+                              }}
+                              onMouseEnter={() => openPanel("logo")}
+                            >
+                              {renderPillIcon(logoThumb, "+", true)}
+                              <span className="studio-pill-main">Logo</span>
+                            </button>
+                    
+                            {/* Inspiration */}
+                            <button
+                              type="button"
+                              className={classNames(
+                                "studio-pill",
+                                activePanel === "inspiration" && "active",
+                                !inspirationThumb && "studio-pill--solo-plus"
+                              )}
+                              style={pillBaseStyle(2)}
+                              onClick={() => {
+                                if (!inspirationThumb) {
+                                  triggerPick("inspiration");
+                                } else {
+                                  openPanel("inspiration");
+                                }
+                              }}
+                              onMouseEnter={() => openPanel("inspiration")}
+                            >
+                              {renderPillIcon(inspirationThumb, "+", true)}
+                              <span className="studio-pill-main">Inspiration</span>
+                            </button>
 
-                  {/* Logo */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      activePanel === "logo" && "active",
-                      !logoThumb && "studio-pill--solo-plus"
-                    )}
-                    style={pillBaseStyle(1)}
-                    onClick={() => openPanel("logo")}
-                    onMouseEnter={() => openPanel("logo")}
-                  >
-                    {renderPillIcon(logoThumb, "+", true)}
-                    <span className="studio-pill-main">Logo</span>
-                  </button>
-
-                  {/* Inspiration */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      activePanel === "inspiration" && "active",
-                      !inspirationThumb && "studio-pill--solo-plus"
-                    )}
-                    style={pillBaseStyle(2)}
-                    onClick={() => openPanel("inspiration")}
-                    onMouseEnter={() => openPanel("inspiration")}
-                  >
-                    {renderPillIcon(inspirationThumb, "+", true)}
-                    <span className="studio-pill-main">Inspiration</span>
-                  </button>
 
                   {/* Style */}
                   <button
@@ -584,21 +603,28 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                  {/* Image */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      effectivePanel === "product" && "active",
-                      !productThumb && "studio-pill--solo-plus"
-                    )}
-                    style={pillBaseStyle(0)}
-                    onClick={() => openPanel("product")}
-                    onMouseEnter={() => openPanel("product")}
-                  >
-                    {renderPillIcon(productThumb, "+", true)}
-                    <span className="studio-pill-main">Image</span>
-                  </button>
+                          {/* Image */}
+                          <button
+                            type="button"
+                            className={classNames(
+                              "studio-pill",
+                              effectivePanel === "product" && "active",
+                              !productThumb && "studio-pill--solo-plus"
+                            )}
+                            style={pillBaseStyle(0)}
+                            onClick={() => {
+                              if (!productThumb) {
+                                triggerPick("product");
+                              } else {
+                                openPanel("product");
+                              }
+                            }}
+                            onMouseEnter={() => openPanel("product")}
+                          >
+                            {renderPillIcon(productThumb, "+", true)}
+                            <span className="studio-pill-main">Image</span>
+                          </button>
+
 
                   {/* Type for me */}
                   <button
