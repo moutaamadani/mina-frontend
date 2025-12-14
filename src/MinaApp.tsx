@@ -573,6 +573,19 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // -------------------------
   const [showDescribeMore, setShowDescribeMore] = useState(false);
   const describeMoreTimeoutRef = useRef<number | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const typingCalmTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (describeMoreTimeoutRef.current !== null) {
+        window.clearTimeout(describeMoreTimeoutRef.current);
+      }
+      if (typingCalmTimeoutRef.current !== null) {
+        window.clearTimeout(typingCalmTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // -------------------------
   // 4.7 Brief scroll ref
@@ -683,9 +696,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   );
 
   // UI stages
-  const showPills = uiStage >= 1;
+  const stageHasPills = uiStage >= 1;
   const showPanels = uiStage >= 1;
   const showControls = uiStage >= 3;
+
+  const pillsHiddenForTyping = brief.trim().length > 5 && isTyping;
+  const showPills = stageHasPills && !pillsHiddenForTyping;
 
   // counts for +/✓
   const productCount = uploads.product.length;
@@ -1516,7 +1532,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
   // Open panel (click only)
   const openPanel = (key: PanelKey) => {
-    if (!showPills) return;
+    if (!stageHasPills) return;
     if (!key) return;
 
     setActivePanel(key);
@@ -1801,6 +1817,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       window.clearTimeout(describeMoreTimeoutRef.current);
       describeMoreTimeoutRef.current = null;
     }
+
+    if (typingCalmTimeoutRef.current !== null) {
+      window.clearTimeout(typingCalmTimeoutRef.current);
+    }
+
+    setIsTyping(true);
+    typingCalmTimeoutRef.current = window.setTimeout(() => setIsTyping(false), 900);
 
     setShowDescribeMore(false);
 
