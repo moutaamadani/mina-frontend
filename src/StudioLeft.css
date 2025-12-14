@@ -635,3 +635,30 @@
     line-height: 1.08;
   }
 }
+/* =====================================================================
+   Motion style cards: green highlight and single-line labels
+   ===================================================================== */
+
+/* active motion cards get a green outline */
+.studio-motion-style-card.active .studio-style-thumb {
+  outline: 1px solid #858e47; /* green accent */
+}
+
+/* active motion card labels turn green */
+.studio-motion-style-card.active .studio-motion-style-label {
+  color: #858e47;
+}
+
+/* motion card thumb uses subtle grey background */
+.studio-motion-style-card .studio-motion-style-thumb {
+  background: rgba(8, 10, 0, 0.05);
+}
+
+/* force motion style labels to a single line with ellipsis */
+.studio-motion-style-label {
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
