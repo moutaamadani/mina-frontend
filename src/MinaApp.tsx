@@ -1381,26 +1381,24 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
         payload.productImageUrl = productUrl;
       }
 
-      // Forward inspiration up to 4 (R2 first, then http only)
-       const inspirationItem = uploads.product[0];
-      const inspirationUrl = inspirationItem?.remoteUrl || inspirationItem?.url;
-      if (inspirationUrl && isHttpUrl(inspirationUrl)) {
-        payload.inspirationImageUrl = inspirationUrl;
+  
+       // NEW: forward logo image if available
+      const logoItem = uploads.logo[0];
+      const logoUrl = logoItem?.remoteUrl || logoItem?.url;
+      if (logoUrl && isHttpUrl(logoUrl)) {
+        payload.logoImageUrl = logoUrl;
       }
-          // NEW: forward logo image if available
-  const logoItem = uploads.logo[0];
-  const logoUrl = logoItem?.remoteUrl || logoItem?.url;
-  if (logoUrl && isHttpUrl(logoUrl)) {
-    payload.logoImageUrl = logoUrl;
-  }
-inspirationUrls = uploads.inspiration
+      
+      // Forward inspiration up to 4 (R2 first, then http only)
+      const inspirationUrls = uploads.inspiration
         .map((u) => u.remoteUrl || u.url)
         .filter((u) => isHttpUrl(u))
         .slice(0, 4);
-
+      
       if (inspirationUrls.length) {
         payload.styleImageUrls = inspirationUrls;
       }
+
 
       const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
         method: "POST",
