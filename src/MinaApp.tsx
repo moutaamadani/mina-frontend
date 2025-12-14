@@ -6,6 +6,8 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
 import { loadAdminConfig } from "./lib/adminConfig";
+import AdminLink from "./components/AdminLink"; 
+
 
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
@@ -225,10 +227,7 @@ const MINA_THINKING_DEFAULT = [
 
 const MINA_FILLER_DEFAULT = ["typing…", "breathing…", "thinking aloud…", "refining…"];
 
-const ADMIN_EMAILS = (import.meta.env.VITE_MINA_ADMIN_EMAILS || "")
-  .split(",")
-  .map((email) => email.trim())
-  .filter(Boolean);
+const ADMIN_ALLOWLIST_TABLE = "admin_allowlist";
 
 const STYLE_PRESETS = [
   {
