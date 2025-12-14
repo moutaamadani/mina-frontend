@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
-import { ADMIN_ALLOWLIST, loadAdminConfig } from "./lib/adminConfig";
+import { loadAdminConfig } from "./lib/adminConfig";
 
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
