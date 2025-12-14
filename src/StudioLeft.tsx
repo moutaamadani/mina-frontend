@@ -343,6 +343,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // pills delay style
   const pillBaseStyle = (index: number): React.CSSProperties => ({
     transitionDelay: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
+    opacity: showPills ? 1 : 0,
+    transform: showPills ? "translateY(0)" : "translateY(-10px)",
   });
 
   const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
@@ -446,7 +448,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       const exists = prev.includes(k);
       const next = exists ? prev.filter((x) => x !== k) : [...prev, k];
       added = !exists;
-      return next.length ? next : ["fix_camera"];
+      return next;
     });
     openPanel("style");
 
@@ -475,8 +477,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("product")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
+                      {plusOrTick(productCount)}
+                    </span>
                     <span className="studio-pill-main">Product</span>
-                    <span aria-hidden="true">{plusOrTick(productCount)}</span>
                   </button>
 
                   {/* Logo */}
@@ -486,8 +490,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(1)}
                     onClick={() => openPanel("logo")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
+                      {plusOrTick(logoCount)}
+                    </span>
                     <span className="studio-pill-main">Logo</span>
-                    <span aria-hidden="true">{plusOrTick(logoCount)}</span>
                   </button>
 
                   {/* Inspiration */}
@@ -497,8 +503,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(2)}
                     onClick={() => openPanel("inspiration")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
+                      {plusOrTick(inspirationCount)}
+                    </span>
                     <span className="studio-pill-main">Inspiration</span>
-                    <span aria-hidden="true">{plusOrTick(inspirationCount)}</span>
                   </button>
 
                   {/* Style */}
@@ -508,8 +516,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(3)}
                     onClick={() => openPanel("style")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✓</span>
                     <span className="studio-pill-main">Style</span>
-                    <span aria-hidden="true">✓</span>
                   </button>
 
                   {/* Ratio */}
@@ -535,8 +543,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("product")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
+                      {plusOrTick(motionImageCount)}
+                    </span>
                     <span className="studio-pill-main">Image</span>
-                    <span aria-hidden="true">{plusOrTick(motionImageCount)}</span>
                   </button>
 
                   {/* Mouvement style */}
@@ -546,6 +556,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("style")}
                   >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✓</span>
                     <span className="studio-pill-main">Mouvement style</span>
                   </button>
 
