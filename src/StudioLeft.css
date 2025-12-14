@@ -80,7 +80,7 @@
 }
 
 .studio-row--pills.hidden {
-  opacity: 0;
+  opacity: 0.1;
   pointer-events: none;
 }
 
@@ -106,9 +106,9 @@
   border: none;
   outline: none;
 
-  transition: background 220ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity 360ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background 0ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .studio-pill.active,
@@ -147,7 +147,6 @@
   font-weight: 700;
   font-size: 12px;
   line-height: 1;
-  border: 1px solid rgba(8, 10, 0, 0.25);
   width: 22px;
   height: 22px;
   margin-right: 2px;
