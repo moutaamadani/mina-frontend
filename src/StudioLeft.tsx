@@ -911,22 +911,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
                     <div className="studio-style-row">
                       {MOTION_STYLES.map((m) => (
-                        <button
-                          key={m.key}
-                          type="button"
-                          className={classNames(
-                            "studio-style-card",
-                            "studio-motion-card",
-                            motionStyleKeys.includes(m.key) && "active"
-                          )}
-                          onClick={() => pickMotionStyle(m.key)}
-                        >
-                          <div className={classNames("studio-style-thumb", "studio-motion-thumb")}>
-                            <span aria-hidden="true">{m.label.slice(0, 1)}</span>
-                          </div>
-                          <div className="studio-style-label">{m.label}</div>
-                        </button>
-                      ))}
+  <button
+    key={m.key}
+    type="button"
+    className={classNames(
+      "studio-style-card",
+      "studio-motion-style-card",
+      motionStyleKeys.includes(m.key) && "active"
+    )}
+    onClick={() => pickMotionStyle(m.key)}
+  >
+    <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
+      <span aria-hidden="true">{m.label.slice(0, 1)}</span>
+    </div>
+    <div className="studio-motion-style-label">{m.label}</div>
+  </button>
+))}
+
                     </div>
                   </div>
                 </Collapse>
