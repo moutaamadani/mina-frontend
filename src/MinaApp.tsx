@@ -1382,7 +1382,11 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       }
 
       // Forward inspiration up to 4 (R2 first, then http only)
-      const inspi
+       const inspirationItem = uploads.product[0];
+      const inspirationUrl = inspirationItem?.remoteUrl || inspirationItem?.url;
+      if (inspirationUrl && isHttpUrl(inspirationUrl)) {
+        payload.inspirationImageUrl = inspirationUrl;
+      }
           // NEW: forward logo image if available
   const logoItem = uploads.logo[0];
   const logoUrl = logoItem?.remoteUrl || logoItem?.url;
