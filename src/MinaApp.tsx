@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
-import { ADMIN_ALLOWLIST, loadAdminConfig } from "./lib/adminConfig";
+import { ADMIN_ALLOWLIST, getDefaultAdminConfig, loadAdminConfig } from "./lib/adminConfig";
 
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
@@ -406,6 +406,15 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [adminConfig, setAdminConfig] = useState(loadAdminConfig());
+  const personalityConfig = useMemo(() => {
+    const fallback = getDefaultAdminConfig().personality || {};
+    const source = adminConfig.personality || {};
+    return {
+      thinkingPhrases: source.thinkingPhrases?.length ? source.thinkingPhrases : fallback.thinkingPhrases || [],
+      typewriterSuggestions:
+        source.typewriterSuggestions?.length ? source.typewriterSuggestions : fallback.typewriterSuggestions || [],
+    };
+  }, [adminConfig.personality]);
   const [computedStylePresets, setComputedStylePresets] = useState(STYLE_PRESETS);
 
   // -------------------------
@@ -446,6 +455,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(null);
   const [motionSuggestTyping, setMotionSuggestTyping] = useState(false);
+  const [motionThinking, setMotionThinking] = useState<string | null>(null);
+  const motionThinkingTimerRef = useRef<number | null>(null);
   const [animateAspectRotated, setAnimateAspectRotated] = useState(false);
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
@@ -898,6 +909,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       if (describeMoreTimeoutRef.current !== null) {
         window.clearTimeout(describeMoreTimeoutRef.current);
       }
+      stopMotionThinking();
     };
   }, []);
 
@@ -1272,6 +1284,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     }
     setShowDescribeMore(false);
     setMotionSuggestTyping(true);
+    stopMotionThinking();
 
     for (let i = 0; i < text.length; i++) {
       const next = text.slice(0, i + 1);
@@ -1285,6 +1298,29 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     setMotionSuggestTyping(false);
   };
 
+  const stopMotionThinking = () => {
+    if (motionThinkingTimerRef.current !== null) {
+      window.clearInterval(motionThinkingTimerRef.current);
+      motionThinkingTimerRef.current = null;
+    }
+    setMotionThinking(null);
+  };
+
+  const startMotionThinking = () => {
+    const phrases = personalityConfig.thinkingPhrases?.length
+      ? personalityConfig.thinkingPhrases
+      : ["Mina is thinking…"];
+
+    stopMotionThinking();
+    let idx = 0;
+    setMotionThinking(phrases[idx] || "Mina is thinking…");
+
+    motionThinkingTimerRef.current = window.setInterval(() => {
+      idx = (idx + 1) % phrases.length;
+      setMotionThinking(phrases[idx] || phrases[0] || "Mina is thinking…");
+    }, 1400);
+  };
+
   const handleSuggestMotion = async () => {
     if (!API_BASE_URL || !motionReferenceImageUrl || motionSuggestLoading || motionSuggestTyping) return;
 
@@ -1293,6 +1329,7 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     try {
       setMotionSuggestLoading(true);
       setMotionSuggestError(null);
+      startMotionThinking();
       const res = await fetch(`${API_BASE_URL}/motion/suggest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1321,7 +1358,21 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
     } finally {
       setMotionSuggestLoading(false);
       setMotionSuggestTyping(false);
+      stopMotionThinking();
     }
+  };
+
+  const handleTypeForMe = async () => {
+    if (motionSuggestLoading || motionSuggestTyping) return;
+    const suggestion = personalityConfig.typewriterSuggestions?.[0];
+    if (!suggestion) return;
+    setAnimateMode(true);
+    setMotionSuggestLoading(true);
+    setMotionSuggestError(null);
+    startMotionThinking();
+    await applyMotionSuggestionText(suggestion);
+    setMotionSuggestLoading(false);
+    stopMotionThinking();
   };
 
   const handleGenerateMotion = async () => {
@@ -2420,11 +2471,13 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
               motionStyleKeys={motionStyleKeys}
               setMotionStyleKeys={setMotionStyleKeys}
               motionSuggesting={motionSuggestLoading || motionSuggestTyping}
+              motionThinking={motionThinking}
               canCreateMotion={canCreateMotion}
               motionHasImage={!!motionReferenceImageUrl}
               motionGenerating={motionGenerating}
               motionError={motionError}
               onCreateMotion={handleGenerateMotion}
+              onTypeForMe={handleTypeForMe}
               onGoProfile={() => setActiveTab("profile")}
             />
             {renderStudioRight()}

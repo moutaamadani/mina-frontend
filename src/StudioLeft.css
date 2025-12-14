@@ -231,6 +231,12 @@
   pointer-events: none;
 }
 
+.studio-thinking {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #858e47;
+}
+
 /* ------------------------------------------
    Panels
 ------------------------------------------ */

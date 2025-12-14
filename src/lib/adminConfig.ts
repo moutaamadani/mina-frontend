@@ -74,6 +74,10 @@ export type AdminConfig = {
     logo?: string;
     otherAssets: Array<{ id: string; name: string; url: string }>;
   };
+  personality?: {
+    thinkingPhrases?: string[];
+    typewriterSuggestions?: string[];
+  };
 };
 
 const STORAGE_KEY = "mina_admin_config_v1";
@@ -115,6 +119,18 @@ export function getDefaultAdminConfig(): AdminConfig {
       fontFamily: "Inter, sans-serif",
       otherAssets: [],
     },
+    personality: {
+      thinkingPhrases: [
+        "Mina is arranging ideas…",
+        "Sketching your vibe…",
+        "Polishing the concept…",
+        "Curating textures…",
+      ],
+      typewriterSuggestions: [
+        "Slow cinematic pan across the product on a stone pedestal, soft moss, morning mist, luxe neutrals.",
+        "Macro close-up with droplets sliding, minimal black background, spotlight bloom, elegant tempo.",
+      ],
+    },
   };
 }
 
@@ -132,6 +148,7 @@ export function loadAdminConfig(): AdminConfig {
       styles: { ...getDefaultAdminConfig().styles, ...parsed.styles },
       generations: { ...getDefaultAdminConfig().generations, ...parsed.generations },
       assets: { ...getDefaultAdminConfig().assets, ...parsed.assets },
+      personality: { ...getDefaultAdminConfig().personality, ...parsed.personality },
     };
   } catch {
     return getDefaultAdminConfig();

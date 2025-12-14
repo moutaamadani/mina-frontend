@@ -128,12 +128,14 @@ type StudioLeftProps = {
   setMotionStyleKeys?: (k: MotionStyleKey[]) => void;
 
   motionSuggesting?: boolean;
+  motionThinking?: string | null;
   canCreateMotion?: boolean;
   motionHasImage?: boolean;
 
   motionGenerating?: boolean;
   motionError?: string | null;
   onCreateMotion?: () => void;
+  onTypeForMe?: () => void;
 
   onGoProfile: () => void;
 };
@@ -296,6 +298,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stillError,
     onCreateStill,
 
+    motionStyleKeys: motionStyleKeysProp,
+    setMotionStyleKeys: setMotionStyleKeysProp,
+    motionSuggesting: motionSuggestingProp,
+    motionThinking,
+    canCreateMotion: canCreateMotionProp,
+    motionGenerating: motionGeneratingProp,
+    motionError: motionErrorProp,
+    onCreateMotion: onCreateMotionProp,
+    onTypeForMe: onTypeForMeProp,
+
     motionHasImage,
 
     onGoProfile,
@@ -309,8 +321,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const prevAnimateModeRef = useRef(animateMode);
 
   const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey[]>(["fix_camera"]);
-  const motionStyleKeys = props.motionStyleKeys ?? localMotionStyle;
-  const setMotionStyleKeys = props.setMotionStyleKeys ?? setLocalMotionStyle;
+  const motionStyleKeys = motionStyleKeysProp ?? localMotionStyle;
+  const setMotionStyleKeys = setMotionStyleKeysProp ?? setLocalMotionStyle;
 
   const stillBriefRef = useRef<string>("");
   const motionBriefRef = useRef<string>("");
@@ -377,15 +389,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // -------------------------
   // Create CTA state machine
   // -------------------------
-  const motionGenerating = !!props.motionGenerating;
-  const motionError = props.motionError ?? null;
-  const hasMotionHandler = typeof props.onCreateMotion === "function";
+  const motionGenerating = !!motionGeneratingProp;
+  const motionError = motionErrorProp ?? null;
+  const hasMotionHandler = typeof onCreateMotionProp === "function";
 
   const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
     stillGenerating ? "creating" : uploadsPending ? "uploading" : briefLen < 40 ? "describe_more" : "ready";
 
-  const motionSuggesting = !!props.motionSuggesting;
-  const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
+  const motionSuggesting = !!motionSuggestingProp;
+  const canCreateMotion = canCreateMotionProp ?? briefLen >= 1;
 
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
@@ -420,7 +432,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const handleCreateClick = () => {
     if (createState === "ready") {
       if (isMotion) {
-        props.onCreateMotion?.();
+        onCreateMotionProp?.();
       } else {
         onCreateStill();
       }
@@ -549,11 +561,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">Image</span>
                   </button>
 
+                  {/* Type for me */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", motionSuggesting && "active")}
+                    style={pillBaseStyle(1)}
+                    onClick={() => onTypeForMeProp?.()}
+                    disabled={motionSuggesting}
+                  >
+                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✎</span>
+                    <span className="studio-pill-main">Type for me</span>
+                  </button>
+
                   {/* Mouvement style */}
                   <button
                     type="button"
                     className={classNames("studio-pill", effectivePanel === "style" && "active")}
-                    style={pillBaseStyle(0)}
+                    style={pillBaseStyle(2)}
                     onClick={() => openPanel("style")}
                   >
                     <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✓</span>
@@ -564,7 +588,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(2)}
+                    style={pillBaseStyle(3)}
                     disabled
                   >
                     <span className="studio-pill-icon">
@@ -604,6 +628,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 onBlur={() => setBriefFocused(false)}
               />
               {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
+              {isMotion && motionThinking && (
+                <div className="studio-thinking">{motionThinking}</div>
+              )}
             </div>
           </div>
         </div>
