@@ -49,6 +49,7 @@ export type MotionStyleKey = "melt" | "drop" | "expand" | "satisfying" | "slow_m
 
 type StudioLeftProps = {
   globalDragging: boolean;
+  typingHidden: boolean;
 
   showPills: boolean;
   showPanels: boolean;
@@ -139,6 +140,8 @@ type StudioLeftProps = {
   minaMessage?: string;
   minaTalking?: boolean;
 
+  timingVars?: React.CSSProperties;
+  
   onGoProfile: () => void;
 };
 
@@ -237,6 +240,7 @@ const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string }>
 const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const {
     globalDragging,
+    typingHidden,
     showPills,
     showPanels,
     showControls,
@@ -310,6 +314,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     minaMessage,
     minaTalking,
 
+    timingVars,
+
     onGoProfile,
   } = props;
 
@@ -356,18 +362,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const pillBaseStyle = (index: number): React.CSSProperties => ({
     transitionDelay: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
     opacity: showPills ? 1 : 0,
-    transform: showPills ? "translateY(0)" : "translateY(-10px)",
+    transform: showPills ? "translateY(0)" : "translateY(-8px)",
   });
-
-  const plusOrTick = (n: number) => (n > 0 ? "✓" : "+");
 
   // panel behavior
   const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
 
-  const productCount = uploads.product.length;
-  const logoCount = uploads.logo.length;
-  const inspirationCount = uploads.inspiration.length;
-  const motionImageCount = motionHasImage ? 1 : productCount;
+  const getFirstImageUrl = (items: UploadItem[]) => items[0]?.remoteUrl || items[0]?.url || "";
+  const productThumb = getFirstImageUrl(uploads.product);
+  const logoThumb = getFirstImageUrl(uploads.logo);
+  const inspirationThumb = getFirstImageUrl(uploads.inspiration);
 
   const allStyleCards = useMemo(() => {
     return [
@@ -385,6 +389,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       })),
     ];
   }, [stylePresets, customStyles, getStyleLabel]);
+
+  const currentStyleCard = allStyleCards.find((c) => c.key === stylePresetKey) || null;
+  const styleThumb = currentStyleCard?.thumb || "";
+  const styleLabel = currentStyleCard?.label || "Style";
+
+  const renderPillIcon = (src: string, fallback: React.ReactNode, isPlus?: boolean) => (
+    <span
+      className={classNames(
+        "studio-pill-icon",
+        src ? "studio-pill-icon-thumb" : "studio-pill-icon-mark",
+        !src && isPlus && "studio-pill-icon--plus"
+      )}
+      aria-hidden="true"
+    >
+      {src ? <img src={src} alt="" /> : fallback}
+    </span>
+  );
 
   // -------------------------
   // Create CTA state machine
@@ -471,7 +492,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   return (
-    <div className={classNames("studio-left", globalDragging && "drag-active")}>
+    <div
+      className={classNames(
+        "studio-left",
+        globalDragging && "drag-active",
+        typingHidden && "is-typing-hidden",
+        minaTalking && "is-thinking"
+      )}
+      style={timingVars}
+    >
       <div className="studio-left-main">
         {/* Input 1 */}
         <div className="studio-input1-block">
@@ -483,51 +512,65 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   {/* Product */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", effectivePanel === "product" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "product" && "active",
+                      !productThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("product")}
+                    onMouseEnter={() => openPanel("product")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
-                      {plusOrTick(productCount)}
-                    </span>
+                    {renderPillIcon(productThumb, "+", true)}
                     <span className="studio-pill-main">Product</span>
                   </button>
 
                   {/* Logo */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", activePanel === "logo" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      activePanel === "logo" && "active",
+                      !logoThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(1)}
                     onClick={() => openPanel("logo")}
+                    onMouseEnter={() => openPanel("logo")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
-                      {plusOrTick(logoCount)}
-                    </span>
+                    {renderPillIcon(logoThumb, "+", true)}
                     <span className="studio-pill-main">Logo</span>
                   </button>
 
                   {/* Inspiration */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", activePanel === "inspiration" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      activePanel === "inspiration" && "active",
+                      !inspirationThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(2)}
                     onClick={() => openPanel("inspiration")}
+                    onMouseEnter={() => openPanel("inspiration")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
-                      {plusOrTick(inspirationCount)}
-                    </span>
+                    {renderPillIcon(inspirationThumb, "+", true)}
                     <span className="studio-pill-main">Inspiration</span>
                   </button>
 
                   {/* Style */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", activePanel === "style" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      activePanel === "style" && "active",
+                      !styleThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(3)}
                     onClick={() => openPanel("style")}
+                    onMouseEnter={() => openPanel("style")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✓</span>
-                    <span className="studio-pill-main">Style</span>
+                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
+                    <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
                   {/* Ratio */}
@@ -549,13 +592,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   {/* Image */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", effectivePanel === "product" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "product" && "active",
+                      !productThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("product")}
+                    onMouseEnter={() => openPanel("product")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
-                      {plusOrTick(motionImageCount)}
-                    </span>
+                    {renderPillIcon(productThumb, "+", true)}
                     <span className="studio-pill-main">Image</span>
                   </button>
 
@@ -580,11 +626,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   {/* Mouvement style */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", effectivePanel === "style" && "active")}
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "style" && "active",
+                      !styleThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(0)}
                     onClick={() => openPanel("style")}
+                    onMouseEnter={() => openPanel("style")}
                   >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">✓</span>
+                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
                     <span className="studio-pill-main">Mouvement style</span>
                   </button>
 
@@ -639,6 +690,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   }
                 }}
               />
+              <div
+                className={classNames("studio-brief-overlay", minaTalking && "is-visible")}
+                aria-hidden="true"
+              >
+                {minaTalking ? minaMessage : ""}
+              </div>
               {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
             </div>
             {minaMessage && (

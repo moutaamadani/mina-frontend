@@ -253,10 +253,15 @@ const PANEL_LIMITS: Record<UploadPanelKey, number> = {
 
 const CUSTOM_STYLES_LS_KEY = "minaCustomStyles_v1";
 // Premium reveal timing
-const PILL_INITIAL_DELAY_MS = 520;   // when the first pill starts appearing
-const PILL_STAGGER_MS = 240;         // delay between each pill
+const PILL_INITIAL_DELAY_MS = 260; // when the first pill starts appearing
+const PILL_STAGGER_MS = 90; // delay between each pill (accordion / wave)
+const PILL_SLIDE_DURATION_MS = 320; // slide + fade duration (must exceed stagger for smoothness)
 const PANEL_REVEAL_DELAY_MS = PILL_INITIAL_DELAY_MS; // panel shows with first pill
 const CONTROLS_REVEAL_DELAY_MS = 3800; // vision + create show later
+const GROUP_FADE_DURATION_MS = 320; // shared fade timing for pills/panels/controls/textarea
+const TYPING_HIDE_DELAY_MS = 2000; // wait before hiding UI when typing starts
+const TYPING_REVEAL_DELAY_MS = 1000; // wait before showing UI after typing stops
+const TEXTAREA_FLOAT_DISTANCE_PX = 4; // tiny translate to avoid layout jump
 
 function classNames(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -593,6 +598,9 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const describeMoreTimeoutRef = useRef<number | null>(null);
   const [isTyping, setIsTyping] = useState(false);
   const typingCalmTimeoutRef = useRef<number | null>(null);
+  const typingHideTimeoutRef = useRef<number | null>(null);
+  const typingRevealTimeoutRef = useRef<number | null>(null);
+  const [typingUiHidden, setTypingUiHidden] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -601,6 +609,12 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
       }
       if (typingCalmTimeoutRef.current !== null) {
         window.clearTimeout(typingCalmTimeoutRef.current);
+      }
+      if (typingHideTimeoutRef.current !== null) {
+        window.clearTimeout(typingHideTimeoutRef.current);
+      }
+      if (typingRevealTimeoutRef.current !== null) {
+        window.clearTimeout(typingRevealTimeoutRef.current);
       }
     };
   }, []);
@@ -717,9 +731,16 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const stageHasPills = uiStage >= 1;
   const showPanels = uiStage >= 1;
   const showControls = uiStage >= 3;
+  const showPills = stageHasPills && !typingUiHidden;
 
-  const pillsHiddenForTyping = brief.trim().length > 5 && isTyping;
-  const showPills = stageHasPills && !pillsHiddenForTyping;
+  const animationTimingVars = useMemo<React.CSSProperties>(
+    () => ({
+      "--pill-slide-duration": `${PILL_SLIDE_DURATION_MS}ms`,
+      "--group-fade-duration": `${GROUP_FADE_DURATION_MS}ms`,
+      "--textarea-float-distance": `${TEXTAREA_FLOAT_DISTANCE_PX}px`,
+    }),
+    []
+  );
 
   // counts for +/✓
   const productCount = uploads.product.length;
@@ -761,6 +782,32 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
 
   const briefHintVisible = showDescribeMore;
+
+  useEffect(() => {
+    if (isTyping) {
+      if (typingRevealTimeoutRef.current !== null) {
+        window.clearTimeout(typingRevealTimeoutRef.current);
+        typingRevealTimeoutRef.current = null;
+      }
+      if (typingHideTimeoutRef.current === null && !typingUiHidden) {
+        typingHideTimeoutRef.current = window.setTimeout(() => {
+          setTypingUiHidden(true);
+          typingHideTimeoutRef.current = null;
+        }, TYPING_HIDE_DELAY_MS);
+      }
+      return;
+    }
+
+    if (typingHideTimeoutRef.current !== null) {
+      window.clearTimeout(typingHideTimeoutRef.current);
+      typingHideTimeoutRef.current = null;
+    }
+
+    typingRevealTimeoutRef.current = window.setTimeout(() => {
+      setTypingUiHidden(false);
+      typingRevealTimeoutRef.current = null;
+    }, TYPING_REVEAL_DELAY_MS);
+  }, [isTyping, typingUiHidden]);
 
   // Style key for API (avoid unknown custom keys)
   const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
@@ -1961,6 +2008,16 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
 
     setIsTyping(true);
     typingCalmTimeoutRef.current = window.setTimeout(() => setIsTyping(false), 900);
+    if (typingHideTimeoutRef.current === null && !typingUiHidden) {
+      typingHideTimeoutRef.current = window.setTimeout(() => {
+        setTypingUiHidden(true);
+        typingHideTimeoutRef.current = null;
+      }, TYPING_HIDE_DELAY_MS);
+    }
+    if (typingRevealTimeoutRef.current !== null) {
+      window.clearTimeout(typingRevealTimeoutRef.current);
+      typingRevealTimeoutRef.current = null;
+    }
 
     setShowDescribeMore(false);
 
@@ -2503,6 +2560,8 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
           <div className={classNames("studio-body", "studio-body--two-col")}>
             <StudioLeft
               globalDragging={globalDragging}
+              typingHidden={typingUiHidden}
+              timingVars={animationTimingVars}
               showPills={showPills}
               showPanels={showPanels}
               showControls={showControls}
