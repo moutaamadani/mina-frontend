@@ -1,14 +1,24 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
 import {
   AdminConfig,
   AdminStyleAsset,
   isAdmin,
-  maskSecret,
   upsertAdminSecret,
   useAdminConfigState,
 } from "./lib/adminConfig";
 import "./admin.css";
+
+/**
+ * IMPORTANT:
+ * - Config (AI/Pricing/Styles/Assets/Architecture) is stored in mina_admin_config (singleton).
+ * - Users + Generations should NOT be stored in config (too heavy + not "config").
+ *
+ * So:
+ * - We load clients + generations LIVE from Supabase tables (read-only here).
+ * - We show them in tabs.
+ * - Save button saves ONLY config parts (and skips live data).
+ */
 
 type TabKey =
   | "ai"
@@ -31,7 +41,35 @@ const TAB_LABELS: Record<TabKey, string> = {
   assets: "Assets",
 };
 
-function AdminHeader({ onSave }: { onSave: () => Promise<void> }) {
+type LiveClient = {
+  id: string;
+  email: string;
+  credits: number;
+  expiresAt?: string | null;
+  lastActive?: string | null;
+  disabled?: boolean | null;
+};
+
+type LiveGeneration = {
+  id: string;
+  user: string; // email or user_id
+  prompt: string;
+  model: string;
+  status: string;
+  url?: string | null;
+  cost?: number | null;
+  liked?: boolean | null;
+  createdAt: string;
+  params?: any;
+};
+
+function AdminHeader({
+  onSave,
+  rightStatus,
+}: {
+  onSave: () => Promise<void>;
+  rightStatus?: React.ReactNode;
+}) {
   return (
     <header className="admin-header">
       <div>
@@ -39,6 +77,7 @@ function AdminHeader({ onSave }: { onSave: () => Promise<void> }) {
         <div className="admin-subtitle">Editorial dashboard (Supabase live config)</div>
       </div>
       <div className="admin-actions">
+        {rightStatus}
         <button className="admin-button" onClick={() => void onSave()}>
           Save
         </button>
@@ -104,7 +143,6 @@ function useAdminGuard() {
         const email = data.user?.email?.toLowerCase() || "";
 
         if (!email) {
-          // Not logged in → send to Profile (adjust if your login route is different)
           window.location.replace("/profile");
           return;
         }
@@ -167,12 +205,140 @@ function EditableKeyValue({
           </button>
         </div>
       ))}
-      <button className="admin-button ghost" type="button" onClick={() => onChange([...params, { key: "", value: "" }])}>
+      <button
+        className="admin-button ghost"
+        type="button"
+        onClick={() => onChange([...params, { key: "", value: "" }])}
+      >
         Add param
       </button>
     </div>
   );
 }
+
+/* -----------------------------
+   LIVE DATA LOADERS (REAL DB)
+------------------------------ */
+
+/**
+ * We try multiple possible table names because your project naming might differ.
+ * The first one that works is used.
+ */
+async function trySelectFirstWorkingTable(
+  candidates: string[],
+  select: string,
+  options?: { limit?: number; orderBy?: { col: string; asc?: boolean } }
+): Promise<{ table: string; rows: any[] }> {
+  let lastError: any = null;
+
+  for (const table of candidates) {
+    // eslint-disable-next-line no-await-in-loop
+    let q = supabase.from(table).select(select);
+
+    if (options?.orderBy?.col) {
+      q = q.order(options.orderBy.col, { ascending: options.orderBy.asc ?? false });
+    }
+    if (options?.limit) {
+      q = q.limit(options.limit);
+    }
+
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await q;
+
+    if (!error && Array.isArray(data)) {
+      return { table, rows: data };
+    }
+
+    // If table doesn't exist or access is denied, keep trying.
+    lastError = error ?? lastError;
+  }
+
+  const msg =
+    lastError?.message ||
+    "No candidate table worked (table missing OR blocked by RLS).";
+  throw new Error(msg);
+}
+
+function pickString(row: any, keys: string[], fallback = ""): string {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return fallback;
+}
+
+function pickNumber(row: any, keys: string[], fallback = 0): number {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return fallback;
+}
+
+function pickBool(row: any, keys: string[], fallback = false): boolean {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return Boolean(v);
+    if (typeof v === "string") {
+      const s = v.toLowerCase();
+      if (s === "true") return true;
+      if (s === "false") return false;
+    }
+  }
+  return fallback;
+}
+
+function normalizeClients(rows: any[]): LiveClient[] {
+  return rows.map((r) => {
+    const id = pickString(r, ["id", "user_id", "uid", "profile_id"], String(Math.random()));
+    const email = pickString(r, ["email", "user_email", "mail"], "(no email)");
+    const credits = pickNumber(r, ["credits", "credit", "balance", "matchas", "tokens"], 0);
+    const expiresAt = pickString(r, ["expires_at", "expiresAt", "credit_expires_at"], "") || null;
+    const lastActive = pickString(r, ["last_active", "lastActive", "updated_at", "last_seen_at"], "") || null;
+    const disabled = pickBool(r, ["disabled", "is_disabled", "blocked", "banned"], false);
+    return { id, email, credits, expiresAt, lastActive, disabled };
+  });
+}
+
+function normalizeGenerations(rows: any[]): LiveGeneration[] {
+  return rows.map((r) => {
+    const id = pickString(r, ["id", "generation_id", "gid"], String(Math.random()));
+    const prompt = pickString(r, ["prompt", "input_prompt", "text", "caption"], "");
+    const model = pickString(r, ["model", "model_name", "provider_model"], "");
+    const status = pickString(r, ["status", "state"], "unknown");
+    const url =
+      pickString(r, ["url", "image_url", "output_url", "result_url", "asset_url"], "") || null;
+
+    const createdAt =
+      pickString(r, ["created_at", "createdAt", "inserted_at", "started_at"], new Date().toISOString()) ||
+      new Date().toISOString();
+
+    const user =
+      pickString(r, ["user_email", "email"], "") ||
+      pickString(r, ["user_id", "uid", "owner_id"], "") ||
+      "(unknown user)";
+
+    const cost = (() => {
+      const n = pickNumber(r, ["cost", "credits_cost", "credit_cost", "matchas_cost"], NaN);
+      return Number.isNaN(n) ? null : n;
+    })();
+
+    const liked = (() => {
+      if (r?.liked === undefined && r?.is_liked === undefined) return null;
+      return pickBool(r, ["liked", "is_liked"], false);
+    })();
+
+    const params = r?.params ?? r?.parameters ?? r?.meta ?? r?.metadata ?? null;
+
+    return { id, user, prompt, model, status, url, cost, liked, createdAt, params };
+  });
+}
+
+/* -----------------------------
+   TABS
+------------------------------ */
 
 function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
   const ai = config.ai;
@@ -202,7 +368,9 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
                 />
               </div>
 
-              <div className="admin-masked">{row.masked ? row.masked : <span className="admin-muted">not set</span>}</div>
+              <div className="admin-masked">
+                {row.masked ? row.masked : <span className="admin-muted">not set</span>}
+              </div>
 
               <div className="admin-row-actions">
                 <button
@@ -265,7 +433,9 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
               type="number"
               step="0.1"
               value={ai.temperature}
-              onChange={(e) => setConfig({ ...config, ai: { ...ai, temperature: parseFloat(e.target.value) || 0 } })}
+              onChange={(e) =>
+                setConfig({ ...config, ai: { ...ai, temperature: parseFloat(e.target.value) || 0 } })
+              }
             />
           </label>
           <label>
@@ -297,7 +467,10 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
       </Section>
 
       <Section title="Provider parameters" description="Expose low-level flags (e.g. seedream params)">
-        <EditableKeyValue params={ai.providerParams} onChange={(next) => setConfig({ ...config, ai: { ...ai, providerParams: next } })} />
+        <EditableKeyValue
+          params={ai.providerParams}
+          onChange={(next) => setConfig({ ...config, ai: { ...ai, providerParams: next } })}
+        />
       </Section>
 
       <Section title="Future models" description="Drop replicate snippets for SVG/audio ahead of time.">
@@ -312,8 +485,6 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
   );
 }
 
-/* --- the rest of your tabs are unchanged (pricing/styles/generations/clients/logs/architecture/assets) --- */
-/* Paste your existing implementations below this line without changes */
 function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
   const pricing = config.pricing;
   return (
@@ -325,7 +496,9 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
             <input
               type="number"
               value={pricing.defaultCredits}
-              onChange={(e) => setConfig({ ...config, pricing: { ...pricing, defaultCredits: Number(e.target.value) || 0 } })}
+              onChange={(e) =>
+                setConfig({ ...config, pricing: { ...pricing, defaultCredits: Number(e.target.value) || 0 } })
+              }
             />
           </label>
           <label>
@@ -333,7 +506,9 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
             <input
               type="number"
               value={pricing.expirationDays}
-              onChange={(e) => setConfig({ ...config, pricing: { ...pricing, expirationDays: Number(e.target.value) || 0 } })}
+              onChange={(e) =>
+                setConfig({ ...config, pricing: { ...pricing, expirationDays: Number(e.target.value) || 0 } })
+              }
             />
           </label>
           <label>
@@ -341,7 +516,9 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
             <input
               type="number"
               value={pricing.imageCost}
-              onChange={(e) => setConfig({ ...config, pricing: { ...pricing, imageCost: Number(e.target.value) || 0 } })}
+              onChange={(e) =>
+                setConfig({ ...config, pricing: { ...pricing, imageCost: Number(e.target.value) || 0 } })
+              }
             />
           </label>
           <label>
@@ -349,7 +526,9 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
             <input
               type="number"
               value={pricing.motionCost}
-              onChange={(e) => setConfig({ ...config, pricing: { ...pricing, motionCost: Number(e.target.value) || 0 } })}
+              onChange={(e) =>
+                setConfig({ ...config, pricing: { ...pricing, motionCost: Number(e.target.value) || 0 } })
+              }
             />
           </label>
         </div>
@@ -358,7 +537,6 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
   );
 }
 
-/* Keep your existing StylesTab/GenerationsTab/ClientsTab/LogsTab/ArchitectureTab/AssetsTab exactly as-is */
 function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
   const [draftStyle, setDraftStyle] = useState<AdminStyleAsset>({
     id: String(Date.now()),
@@ -544,11 +722,21 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
   );
 }
 
-/* Keep your existing GenerationsTab/ClientsTab/LogsTab/ArchitectureTab/AssetsTab from your current file */
-function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
+function GenerationsTab({
+  records,
+  loading,
+  error,
+  onRefresh,
+}: {
+  records: LiveGeneration[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
   const [page, setPage] = useState(0);
   const pageSize = 28;
-  const { records, filters } = config.generations;
+
+  const [filters, setFilters] = useState({ status: "", model: "", query: "" });
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
@@ -560,59 +748,57 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
   }, [records, filters]);
 
   const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
-  const [selected, setSelected] = useState<typeof records[0] | null>(null);
+  const [selected, setSelected] = useState<LiveGeneration | null>(null);
 
   useEffect(() => {
-    if (selected && !filtered.includes(selected)) setSelected(null);
+    if (selected && !filtered.find((x) => x.id === selected.id)) setSelected(null);
   }, [filtered, selected]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [filters.status, filters.model, filters.query]);
 
   return (
     <div className="admin-grid admin-split">
-      <Section title="Generations" description="7-column grid with detail panel">
+      <Section title="Generations" description="Live data from Supabase (not stored in config).">
         <div className="admin-inline">
           <input
             placeholder="Search prompt/user"
             value={filters.query}
-            onChange={(e) =>
-              setConfig({
-                ...config,
-                generations: { ...config.generations, filters: { ...filters, query: e.target.value } },
-              })
-            }
+            onChange={(e) => setFilters((p) => ({ ...p, query: e.target.value }))}
           />
           <input
             placeholder="Model"
             value={filters.model}
-            onChange={(e) =>
-              setConfig({
-                ...config,
-                generations: { ...config.generations, filters: { ...filters, model: e.target.value } },
-              })
-            }
+            onChange={(e) => setFilters((p) => ({ ...p, model: e.target.value }))}
           />
           <input
             placeholder="Status"
             value={filters.status}
-            onChange={(e) =>
-              setConfig({
-                ...config,
-                generations: { ...config.generations, filters: { ...filters, status: e.target.value } },
-              })
-            }
+            onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
           />
-          <button
-            className="admin-button ghost"
-            type="button"
-            onClick={() =>
-              setConfig({
-                ...config,
-                generations: { ...config.generations, filters: { status: "", model: "", query: "" } },
-              })
-            }
-          >
+          <button className="admin-button ghost" type="button" onClick={() => setFilters({ status: "", model: "", query: "" })}>
             Clear filters
           </button>
+          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
         </div>
+
+        {error && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>Generations load error:</strong> {error}
+            <div style={{ marginTop: 6, color: "#333" }}>
+              This usually means: wrong table name OR RLS blocks access for your admin user.
+            </div>
+          </div>
+        )}
+
+        {!error && !loading && records.length === 0 && (
+          <div style={{ padding: 12, marginTop: 10 }} className="admin-muted">
+            No generations found (table exists but empty).
+          </div>
+        )}
 
         <div className="admin-grid-gallery">
           {visible.map((g) => (
@@ -621,10 +807,14 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
               className={`admin-grid-card ${selected?.id === g.id ? "active" : ""}`}
               onClick={() => setSelected(g)}
             >
-              {g.url ? <img src={g.url} alt={g.prompt} loading="lazy" /> : <div className="admin-placeholder">no image</div>}
+              {g.url ? (
+                <img src={g.url} alt={g.prompt} loading="lazy" />
+              ) : (
+                <div className="admin-placeholder">no image</div>
+              )}
               <div className="admin-grid-meta">
-                <div className="admin-grid-prompt">{g.prompt}</div>
-                <div className="admin-grid-sub">{g.model}</div>
+                <div className="admin-grid-prompt">{g.prompt || <span className="admin-muted">no prompt</span>}</div>
+                <div className="admin-grid-sub">{g.model || <span className="admin-muted">no model</span>}</div>
               </div>
             </button>
           ))}
@@ -632,7 +822,8 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
 
         <div className="admin-pagination">
           <span>
-            Page {page + 1} / {Math.max(1, Math.ceil(filtered.length / pageSize))}
+            Page {page + 1} / {Math.max(1, Math.ceil(filtered.length / pageSize))} —{" "}
+            <strong>{filtered.length}</strong> result(s)
           </span>
           <div>
             <button className="admin-button ghost" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
@@ -674,7 +865,7 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
             </div>
             <div className="admin-detail-row">
               <strong>Liked</strong>
-              <span>{selected.liked ? "Yes" : "No"}</span>
+              <span>{selected.liked === null ? "—" : selected.liked ? "Yes" : "No"}</span>
             </div>
             <div className="admin-detail-row">
               <strong>Created</strong>
@@ -682,7 +873,7 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
             </div>
             <div className="admin-detail-row">
               <strong>Params</strong>
-              <pre>{JSON.stringify(selected.params ?? {}, null, 2)}</pre>
+              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(selected.params ?? {}, null, 2)}</pre>
             </div>
           </div>
         ) : (
@@ -693,35 +884,111 @@ function GenerationsTab({ config, setConfig }: { config: AdminConfig; setConfig:
   );
 }
 
-function ClientsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  const clients = config.clients;
+function ClientsTab({
+  clients,
+  loading,
+  error,
+  onRefresh,
+}: {
+  clients: LiveClient[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  const [local, setLocal] = useState<LiveClient[]>([]);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    setLocal(clients);
+    setDirty(false);
+  }, [clients]);
+
+  const updateRow = (idx: number, next: LiveClient) => {
+    const copy = [...local];
+    copy[idx] = next;
+    setLocal(copy);
+    setDirty(true);
+  };
+
+  const saveEditsToSupabase = async () => {
+    // This does a best-effort update to common table candidates.
+    // If your RLS blocks it, you'll see an error.
+    const candidates = ["profiles", "clients", "mina_clients", "user_profiles"];
+
+    // try detect original table by checking a working select of 1 row.
+    let table = "";
+    try {
+      const found = await trySelectFirstWorkingTable(candidates, "*", { limit: 1 });
+      table = found.table;
+    } catch (e: any) {
+      alert(`Cannot detect clients table: ${e?.message ?? "unknown"}`);
+      return;
+    }
+
+    // Build payloads (try common columns)
+    const payloads = local.map((c) => ({
+      // primary key possibilities
+      id: c.id,
+      user_id: c.id,
+      email: c.email,
+      credits: c.credits,
+      expires_at: c.expiresAt ?? null,
+      disabled: c.disabled ?? false,
+      last_active: c.lastActive ?? null,
+      updated_at: new Date().toISOString(),
+    }));
+
+    // We do upsert to be robust (if row doesn't exist yet).
+    const { error } = await supabase.from(table).upsert(payloads as any, { onConflict: "id" });
+
+    if (error) {
+      alert(`Save clients failed: ${error.message}`);
+      return;
+    }
+
+    setDirty(false);
+    alert("Clients saved ✅");
+    onRefresh();
+  };
+
   return (
     <div className="admin-grid">
-      <Section title="Clients" description="Edit credits and disable accounts">
+      <Section title="Clients" description="Live data from Supabase (edit credits/disable).">
+        <div className="admin-inline">
+          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button className="admin-button" type="button" onClick={saveEditsToSupabase} disabled={!dirty}>
+            Save clients edits
+          </button>
+          {dirty && <span className="admin-muted">You have unsaved changes.</span>}
+        </div>
+
+        {error && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>Clients load error:</strong> {error}
+            <div style={{ marginTop: 6, color: "#333" }}>
+              This usually means: wrong table name OR RLS blocks access for your admin user.
+            </div>
+          </div>
+        )}
+
         <Table headers={["Client", "Credits", "Expires", "Last active", "Status", "Actions"]}>
-          {clients.map((c, idx) => (
+          {local.map((c, idx) => (
             <div className="admin-table-row" key={c.id}>
               <div>{c.email}</div>
               <div>
                 <input
                   type="number"
                   value={c.credits}
-                  onChange={(e) => {
-                    const next = [...clients];
-                    next[idx] = { ...c, credits: Number(e.target.value) || 0 };
-                    setConfig({ ...config, clients: next });
-                  }}
+                  onChange={(e) => updateRow(idx, { ...c, credits: Number(e.target.value) || 0 })}
                 />
               </div>
               <div>
                 <input
                   type="date"
-                  value={c.expiresAt?.slice(0, 10) || ""}
-                  onChange={(e) => {
-                    const next = [...clients];
-                    next[idx] = { ...c, expiresAt: e.target.value };
-                    setConfig({ ...config, clients: next });
-                  }}
+                  value={(c.expiresAt || "").slice(0, 10)}
+                  onChange={(e) => updateRow(idx, { ...c, expiresAt: e.target.value || null })}
                 />
               </div>
               <div>{c.lastActive || "—"}</div>
@@ -729,58 +996,31 @@ function ClientsTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
               <div className="admin-row-actions">
                 <button
                   className="admin-button ghost"
-                  onClick={() => {
-                    const next = [...clients];
-                    next[idx] = { ...c, disabled: !c.disabled };
-                    setConfig({ ...config, clients: next });
-                  }}
+                  onClick={() => updateRow(idx, { ...c, disabled: !c.disabled })}
                 >
                   {c.disabled ? "Enable" : "Disable"}
-                </button>
-                <button
-                  className="admin-button ghost"
-                  onClick={() => {
-                    const ok = window.confirm("Delete client record?");
-                    if (ok) setConfig({ ...config, clients: clients.filter((_, i) => i !== idx) });
-                  }}
-                >
-                  Delete
                 </button>
               </div>
             </div>
           ))}
         </Table>
+
+        {!error && !loading && clients.length === 0 && (
+          <div style={{ padding: 12 }} className="admin-muted">
+            No clients found (table exists but empty).
+          </div>
+        )}
       </Section>
     </div>
   );
 }
 
-function LogsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
+function LogsTab({ config }: { config: AdminConfig }) {
   const [filter, setFilter] = useState<string>("");
-
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      setConfig({
-        ...config,
-        logs: [
-          ...config.logs.slice(-200),
-          {
-            id: String(Date.now()),
-            level: "info" as const,
-            message: "Heartbeat",
-            at: new Date().toISOString(),
-            source: "client-poll",
-          },
-        ],
-      });
-    }, 6000);
-    return () => window.clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="admin-grid">
-      <Section title="Realtime-ish logs" description="This tab is still local/polling.">
+      <Section title="Logs (local)" description="This tab is local-only for now.">
         <div className="admin-inline">
           <select value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All</option>
@@ -788,7 +1028,10 @@ function LogsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next:
             <option value="warn">Warn</option>
             <option value="error">Error</option>
           </select>
-          <button className="admin-button ghost" onClick={() => navigator.clipboard?.writeText(JSON.stringify(config.logs, null, 2))}>
+          <button
+            className="admin-button ghost"
+            onClick={() => navigator.clipboard?.writeText(JSON.stringify(config.logs, null, 2))}
+          >
             Copy JSON
           </button>
         </div>
@@ -817,7 +1060,11 @@ function ArchitectureTab({ config, setConfig }: { config: AdminConfig; setConfig
   return (
     <div className="admin-grid">
       <Section title="Architecture map" description="Editable description of the pipeline">
-        <textarea className="admin-textarea" value={config.architecture} onChange={(e) => setConfig({ ...config, architecture: e.target.value })} />
+        <textarea
+          className="admin-textarea"
+          value={config.architecture}
+          onChange={(e) => setConfig({ ...config, architecture: e.target.value })}
+        />
         <ol className="admin-steps">
           {config.architecture
             .split(/\n|\d\)/)
@@ -854,15 +1101,24 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
         <div className="admin-inline">
           <label>
             <strong>Primary color</strong>
-            <input value={assets.primaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, primaryColor: e.target.value } })} />
+            <input
+              value={assets.primaryColor}
+              onChange={(e) => setConfig({ ...config, assets: { ...assets, primaryColor: e.target.value } })}
+            />
           </label>
           <label>
             <strong>Secondary color</strong>
-            <input value={assets.secondaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, secondaryColor: e.target.value } })} />
+            <input
+              value={assets.secondaryColor}
+              onChange={(e) => setConfig({ ...config, assets: { ...assets, secondaryColor: e.target.value } })}
+            />
           </label>
           <label>
             <strong>Font</strong>
-            <input value={assets.fontFamily} onChange={(e) => setConfig({ ...config, assets: { ...assets, fontFamily: e.target.value } })} />
+            <input
+              value={assets.fontFamily}
+              onChange={(e) => setConfig({ ...config, assets: { ...assets, fontFamily: e.target.value } })}
+            />
           </label>
         </div>
 
@@ -870,7 +1126,11 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
           <div>
             <strong>Logo</strong>
             {assets.logo && <img className="admin-logo" src={assets.logo} alt="logo" />}
-            <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => setConfig({ ...config, assets: { ...assets, logo: url } }))} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleUpload(e.target.files, (url) => setConfig({ ...config, assets: { ...assets, logo: url } }))}
+            />
           </div>
 
           <div>
@@ -884,7 +1144,10 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
                     ...config,
                     assets: {
                       ...assets,
-                      otherAssets: [...assets.otherAssets, { id: String(Date.now()), name: `asset-${assets.otherAssets.length + 1}`, url }],
+                      otherAssets: [
+                        ...assets.otherAssets,
+                        { id: String(Date.now()), name: `asset-${assets.otherAssets.length + 1}`, url },
+                      ],
                     },
                   })
                 )
@@ -905,15 +1168,86 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
   );
 }
 
+/* -----------------------------
+   MAIN
+------------------------------ */
+
 export default function AdminDashboard() {
   const allowed = useAdminGuard();
   const { config, updateConfig, loading, error } = useAdminConfigState();
   const [draft, setDraft] = useState<AdminConfig | null>(null);
   const [tab, setTab] = useState<TabKey>("ai");
 
+  // Live data state
+  const [clients, setClients] = useState<LiveClient[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientsError, setClientsError] = useState<string | null>(null);
+  const [clientsTable, setClientsTable] = useState<string>("");
+
+  const [generations, setGenerations] = useState<LiveGeneration[]>([]);
+  const [gensLoading, setGensLoading] = useState(false);
+  const [gensError, setGensError] = useState<string | null>(null);
+  const [gensTable, setGensTable] = useState<string>("");
+
+  const firstLoadRef = useRef(false);
+
   useEffect(() => {
     if (!loading) setDraft(config);
   }, [loading, config]);
+
+  const refreshClients = async () => {
+    setClientsLoading(true);
+    setClientsError(null);
+    try {
+      // candidates for "users" table
+      const candidates = ["profiles", "clients", "mina_clients", "user_profiles", "users_profile"];
+      // select common fields (we try "*" to avoid "column not found" issues across schemas)
+      const result = await trySelectFirstWorkingTable(candidates, "*", {
+        limit: 500,
+        orderBy: { col: "updated_at", asc: false },
+      });
+      setClientsTable(result.table);
+      setClients(normalizeClients(result.rows));
+    } catch (e: any) {
+      setClientsError(e?.message ?? "Failed to load clients");
+      setClients([]);
+      setClientsTable("");
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
+  const refreshGenerations = async () => {
+    setGensLoading(true);
+    setGensError(null);
+    try {
+      // candidates for generations table
+      const candidates = ["generations", "mina_generations", "image_generations", "ai_generations", "runs"];
+      const result = await trySelectFirstWorkingTable(candidates, "*", {
+        limit: 800,
+        orderBy: { col: "created_at", asc: false },
+      });
+      setGensTable(result.table);
+      setGenerations(normalizeGenerations(result.rows));
+    } catch (e: any) {
+      setGensError(e?.message ?? "Failed to load generations");
+      setGenerations([]);
+      setGensTable("");
+    } finally {
+      setGensLoading(false);
+    }
+  };
+
+  // Auto load live tables once admin is allowed (so tab isn't empty)
+  useEffect(() => {
+    if (allowed !== true) return;
+    if (firstLoadRef.current) return;
+    firstLoadRef.current = true;
+
+    void refreshClients();
+    void refreshGenerations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allowed]);
 
   if (allowed === null || loading || !draft) return <div style={{ padding: 24 }}>Loading admin…</div>;
   if (allowed === false) return null;
@@ -922,16 +1256,43 @@ export default function AdminDashboard() {
 
   const handleSave = async () => {
     try {
-      await updateConfig(draft);
+      /**
+       * IMPORTANT:
+       * We DO NOT want to store live clients/generations inside config table.
+       * So we save a "clean" config payload.
+       */
+      const clean: AdminConfig = {
+        ...draft,
+        // optional: keep logs local; if your AdminConfig includes logs, keep as-is or empty
+        // @ts-ignore
+        clients: Array.isArray((draft as any).clients) ? (draft as any).clients : [],
+        // @ts-ignore
+        generations: (draft as any).generations ? { ...(draft as any).generations, records: [] } : (draft as any).generations,
+      };
+
+      await updateConfig(clean);
       alert("Saved ✅");
     } catch (e: any) {
       alert(e?.message ?? "Save failed");
     }
   };
 
+  const rightStatus = (
+    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      <span className="admin-muted" style={{ fontSize: 12 }}>
+        Clients: <strong>{clients.length}</strong>
+        {clientsTable ? <span> ({clientsTable})</span> : ""}
+      </span>
+      <span className="admin-muted" style={{ fontSize: 12 }}>
+        Generations: <strong>{generations.length}</strong>
+        {gensTable ? <span> ({gensTable})</span> : ""}
+      </span>
+    </div>
+  );
+
   return (
     <div className="admin-shell">
-      <AdminHeader onSave={handleSave} />
+      <AdminHeader onSave={handleSave} rightStatus={rightStatus} />
       <StickyTabs active={tab} onChange={setTab} />
 
       {error && <div style={{ padding: 12, color: "crimson" }}>{error}</div>}
@@ -940,14 +1301,37 @@ export default function AdminDashboard() {
         {tab === "ai" && <AISettingsTab config={draft} setConfig={setConfig} />}
         {tab === "pricing" && <PricingTab config={draft} setConfig={setConfig} />}
         {tab === "styles" && <StylesTab config={draft} setConfig={setConfig} />}
-        {tab === "generations" && <GenerationsTab config={draft} setConfig={setConfig} />}
-        {tab === "clients" && <ClientsTab config={draft} setConfig={setConfig} />}
-        {tab === "logs" && <LogsTab config={draft} setConfig={setConfig} />}
+
+        {tab === "generations" && (
+          <GenerationsTab
+            records={generations}
+            loading={gensLoading}
+            error={gensError}
+            onRefresh={() => void refreshGenerations()}
+          />
+        )}
+
+        {tab === "clients" && (
+          <ClientsTab
+            clients={clients}
+            loading={clientsLoading}
+            error={clientsError}
+            onRefresh={() => void refreshClients()}
+          />
+        )}
+
+        {tab === "logs" && <LogsTab config={draft} />}
+
         {tab === "architecture" && <ArchitectureTab config={draft} setConfig={setConfig} />}
         {tab === "assets" && <AssetsTab config={draft} setConfig={setConfig} />}
       </div>
 
-      <div className="admin-footer">Saved in Supabase: mina_admin_config + mina_admin_secrets</div>
+      <div className="admin-footer">
+        Saved in Supabase: mina_admin_config + mina_admin_secrets
+        <span className="admin-muted" style={{ marginLeft: 10 }}>
+          (live data not saved)
+        </span>
+      </div>
     </div>
   );
 }
