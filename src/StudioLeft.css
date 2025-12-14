@@ -168,7 +168,7 @@
 }
 
 .studio-pill-icon-thumb {
-  border-radius: 3px;
+  border-radius: 0px;
   overflow: hidden;
   background: rgba(8, 10, 0, 0.06);
 }
