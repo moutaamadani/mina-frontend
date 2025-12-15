@@ -9,7 +9,7 @@ type AuthGateProps = {
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL || "https://mina-editorial-ai-api.onrender.com";
 // ✅ baseline: your “3,7k” starting point
-const BASELINE_USERS = 3700;
+const BASELINE_USERS = 0;
 
 /**
  * Create / upsert a Shopify customer (lead) for email marketing.
