@@ -53,6 +53,42 @@ async function syncShopifyWelcome(
     window.clearTimeout(timeout);
   }
 }
+async function syncSupabaseUserTables(params: {
+  userId: string;
+  email: string;
+  shopifyCustomerId: string;
+}) {
+  const cleanEmail = (params.email || "").trim().toLowerCase();
+  if (!cleanEmail || !params.userId || !params.shopifyCustomerId) return;
+
+  const nowIso = new Date().toISOString();
+
+  // 1) customers: PK appears to be shopify_customer_id (from your screenshot)
+  await supabase
+    .from("customers")
+    .upsert(
+      {
+        shopify_customer_id: params.shopifyCustomerId,
+        user_id: params.userId,     // uuid string is fine here
+        email: cleanEmail,
+        last_active: nowIso,
+      },
+      { onConflict: "shopify_customer_id" }
+    );
+
+  // 2) users_profile: PK appears to be id (text) = email (from your screenshot)
+  await supabase
+    .from("users_profile")
+    .upsert(
+      {
+        id: cleanEmail,
+        user_id: params.userId,     // NOTE: your column is text currently; better as uuid long-term
+        email: cleanEmail,
+        last_active: nowIso,
+      },
+      { onConflict: "id" }
+    );
+}
 
 function getInboxHref(email: string | null): string {
   if (!email) return "mailto:";
@@ -146,22 +182,38 @@ export function AuthGate({ children }: AuthGateProps) {
 
       // ✅ After successful auth, we can sync again with userId (better dedupe / linkage)
       if (event === "SIGNED_IN" && newSession?.user?.email) {
-        const signedEmail = newSession.user.email;
-        const userId = newSession.user.id;
-
-        // don’t use `await` directly in this callback
-        void (async () => {
-          const shopifyCustomerId = await syncShopifyWelcome(signedEmail, userId);
-
-          if (shopifyCustomerId && typeof window !== "undefined") {
+      const signedEmail = newSession.user.email;
+      const userId = newSession.user.id;
+    
+      void (async () => {
+        const shopifyCustomerId =
+          (await syncShopifyWelcome(signedEmail, userId)) ||
+          (() => {
             try {
-              window.localStorage.setItem("minaCustomerId", shopifyCustomerId);
+              return window.localStorage.getItem("minaCustomerId") || signedEmail;
             } catch {
-              // ignore
+              return signedEmail;
             }
+          })();
+    
+        // keep localStorage updated
+        if (shopifyCustomerId && typeof window !== "undefined") {
+          try {
+            window.localStorage.setItem("minaCustomerId", shopifyCustomerId);
+          } catch {
+            // ignore
           }
-        })();
-      }
+        }
+    
+        // ✅ THIS is what fixes your NULL emails in Supabase tables
+        await syncSupabaseUserTables({
+          userId,
+          email: signedEmail,
+          shopifyCustomerId: shopifyCustomerId || signedEmail,
+        });
+      })();
+    }
+
     });
 
     return () => {
