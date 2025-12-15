@@ -2,7 +2,7 @@
 // ============================================================================
 // [PART 1 START] Imports & environment
 // ============================================================================
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
 import { loadAdminConfig } from "./lib/adminConfig";
@@ -79,6 +79,10 @@ type GenerationRecord = {
   platform: string;
   prompt: string;
   outputUrl: string;
+  fullUrl?: string;
+  smallUrl?: string;
+  width?: number;
+  height?: number;
   createdAt: string;
   meta?: {
     tone?: string;
@@ -90,6 +94,13 @@ type GenerationRecord = {
     aspectRatio?: string;
     [key: string]: unknown;
   } | null;
+};
+
+type StoredMedia = {
+  fullUrl: string;
+  smallUrl?: string;
+  width?: number;
+  height?: number;
 };
 
 type FeedbackRecord = {
@@ -123,9 +134,13 @@ type HistoryResponse = {
 type StillItem = {
   id: string;
   url: string;
+  fullUrl?: string;
+  smallUrl?: string;
   createdAt: string;
   prompt: string;
   aspectRatio?: string;
+  width?: number;
+  height?: number;
 };
 
 type MotionItem = {
@@ -158,6 +173,9 @@ type UploadItem = {
 
   // remoteUrl = REAL stored URL in R2 (https://...)
   remoteUrl?: string;
+  remoteSmallUrl?: string;
+  width?: number;
+  height?: number;
 
   file?: File; // only for kind=file
   uploading?: boolean;
@@ -269,7 +287,20 @@ function classNames(...parts: Array<string | false | null | undefined>): string 
   return parts.filter(Boolean).join(" ");
 }
 
-function getInitialCustomerId(initialCustomerId?: string): string {
+const PROFILE_PATH_REGEX = /^\/(?:profile|u)\/([^/]+)\/?$/i;
+
+function parseProfileHandleFromPathname(pathname: string | null | undefined): string | null {
+  if (!pathname) return null;
+  const match = pathname.match(PROFILE_PATH_REGEX);
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
+
+function buildProfilePath(handle: string) {
+  return `/u/${encodeURIComponent(handle)}`;
+}
+
+function getInitialCustomerId(initialCustomerId?: string, routeHandle?: string): string {
+  if (routeHandle && routeHandle.trim().length > 0) return routeHandle.trim();
   try {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -316,11 +347,14 @@ function padEditorialNumber(value: number | string) {
   return String(value).trim() || "00";
 }
 
-function toPreviewUrl(url: string) {
+function buildSmallImageUrl(url?: string | null, targetWidth = 720) {
+  if (!url) return "";
   try {
     const parsed = new URL(url);
-    if (!parsed.searchParams.has("w")) parsed.searchParams.set("w", "900");
-    if (!parsed.searchParams.has("auto")) parsed.searchParams.set("auto", "format");
+    parsed.searchParams.set("w", String(targetWidth));
+    parsed.searchParams.set("q", "70");
+    parsed.searchParams.set("auto", "format,compress");
+    parsed.searchParams.set("format", "webp");
     return parsed.toString();
   } catch {
     return url;
@@ -421,8 +455,14 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // -------------------------
   // 4.1 Global tab + customer
   // -------------------------
-  const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
-  const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
+  const initialProfileHandle =
+    typeof window !== "undefined" ? parseProfileHandleFromPathname(window.location.pathname) : null;
+  const initialTab = initialProfileHandle ? "profile" : "studio";
+
+  const [activeTab, setActiveTab] = useState<"studio" | "profile">(initialTab);
+  const [customerId, setCustomerId] = useState<string>(() =>
+    getInitialCustomerId(initialCustomerId, initialProfileHandle)
+  );
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -763,7 +803,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     : animateImage?.url && isHttpUrl(animateImage.url)
       ? animateImage.url
       : "";
-  const motionReferenceImageUrl = animateImageHttp || latestStill?.url || "";
+  const motionReferenceImageUrl = animateImageHttp || latestStill?.fullUrl || latestStill?.url || "";
 
   const personalityThinking = useMemo(
     () =>
@@ -869,7 +909,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   }, [animateImage?.remoteUrl, animateImage?.url, latestStill?.aspectRatio, latestStill?.url, currentAspect.ratio]);
 
   useEffect(() => {
-    const url = currentMotion?.url || currentStill?.url;
+    const url = currentMotion?.url || currentStill?.smallUrl || currentStill?.url;
     if (!url) {
       setIsRightMediaDark(false);
       return undefined;
@@ -906,7 +946,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     return () => {
       cancelled = true;
     };
-  }, [currentMotion?.url, currentStill?.url]);
+  }, [currentMotion?.url, currentStill?.smallUrl, currentStill?.url]);
 
   const motionTextTrimmed = motionDescription.trim();
   const canCreateMotion = !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping;
@@ -1074,6 +1114,23 @@ useEffect(() => {
   }, [customerId]);
 
   useEffect(() => {
+    const handlePopState = () => {
+      if (typeof window === "undefined") return;
+      const nextHandle = parseProfileHandleFromPathname(window.location.pathname);
+      const nextTab = nextHandle ? "profile" : "studio";
+      setActiveTab(nextTab);
+
+      if (nextHandle && nextHandle !== customerId) {
+        setCustomerId(nextHandle);
+        setCustomerIdInput(nextHandle);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [customerId]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const hydrateUser = async () => {
@@ -1117,6 +1174,42 @@ useEffect(() => {
       }
     };
   }, []);
+
+  const updateHistoryPath = useCallback(
+    (tab: "studio" | "profile", handle?: string, replace?: boolean) => {
+      if (typeof window === "undefined") return;
+      const handleValue = handle || customerId || "anonymous";
+      const search = window.location.search || "";
+      const targetPath =
+        tab === "profile" ? buildProfilePath(handleValue) : search ? `/${search}` : "/";
+      const current = window.location.pathname + window.location.search;
+      if (current === targetPath) return;
+
+      const method: "pushState" | "replaceState" = replace ? "replaceState" : "pushState";
+      window.history[method]({ tab }, "", targetPath);
+    },
+    [customerId]
+  );
+
+  useEffect(() => {
+    if (activeTab === "profile") {
+      updateHistoryPath("profile", customerId, true);
+    }
+  }, [activeTab, customerId, updateHistoryPath]);
+
+  const goToStudio = useCallback(() => {
+    setActiveTab("studio");
+    updateHistoryPath("studio");
+  }, [updateHistoryPath]);
+
+  const goToProfile = useCallback(
+    (handle?: string) => {
+      const targetHandle = handle || customerId || "anonymous";
+      setActiveTab("profile");
+      updateHistoryPath("profile", targetHandle);
+    },
+    [customerId, updateHistoryPath]
+  );
 
   // revoke blob urls on unmount
   useEffect(() => {
@@ -1211,41 +1304,64 @@ useEffect(() => {
     return null;
   };
 
- // fetchHistory: always copy generation URLs into R2 before displaying
+  const normalizeGeneration = (g: GenerationRecord | (GenerationRecord & { small_url?: string; full_url?: string })) => {
+    const fullUrl = (g as any).fullUrl || (g as any).full_url || g.outputUrl;
+    const smallUrl = (g as any).smallUrl || (g as any).small_url || buildSmallImageUrl(fullUrl);
+    const width = (g as any).width || (g.meta as any)?.width;
+    const height = (g as any).height || (g.meta as any)?.height;
+
+    return {
+      ...g,
+      outputUrl: fullUrl || g.outputUrl,
+      fullUrl: fullUrl || g.outputUrl,
+      smallUrl,
+      width: width || undefined,
+      height: height || undefined,
+    } as GenerationRecord;
+  };
+
+  // fetchHistory: always copy generation URLs into R2 before displaying
 
   const fetchHistory = async () => {
-  if (!API_BASE_URL || !customerId) return;
-  try {
-    setHistoryLoading(true);
-    const res = await fetch(`${API_BASE_URL}/history/customer/${encodeURIComponent(customerId)}`);
-    if (!res.ok) throw new Error(`Status ${res.status}`);
-    const json = (await res.json()) as HistoryResponse;
-    if (!json.ok) throw new Error("History error");
+    if (!API_BASE_URL || !customerId) return;
+    try {
+      setHistoryLoading(true);
+      const res = await fetch(`${API_BASE_URL}/history/customer/${encodeURIComponent(customerId)}`);
+      if (!res.ok) throw new Error(`Status ${res.status}`);
+      const json = (await res.json()) as HistoryResponse;
+      if (!json.ok) throw new Error("History error");
 
-    // update credit balance
-    setCredits((prev) => ({ balance: json.credits.balance, meta: prev?.meta }));
+      // update credit balance
+      setCredits((prev) => ({ balance: json.credits.balance, meta: prev?.meta }));
 
-    // fetch and store each generation’s image in R2
-    const gens = json.generations || [];
-    const updated = await Promise.all(
-      gens.map(async (g) => {
-        try {
-          const remoteUrl = await storeRemoteToR2(g.outputUrl, "generations");
-          return { ...g, outputUrl: remoteUrl };
-        } catch {
-          return g;
-        }
-      })
-    );
-    setHistoryGenerations(updated);
+      // fetch and store each generation’s image in R2
+      const gens = json.generations || [];
+      const updated = await Promise.all(
+        gens.map(async (g) => {
+          try {
+            const stored = await storeRemoteToR2(g.outputUrl, "generations");
+            return normalizeGeneration({
+              ...g,
+              outputUrl: stored.fullUrl,
+              fullUrl: stored.fullUrl,
+              smallUrl: stored.smallUrl,
+              width: stored.width ?? (g as any).width,
+              height: stored.height ?? (g as any).height,
+            });
+          } catch {
+            return normalizeGeneration(g);
+          }
+        })
+      );
+      setHistoryGenerations(updated);
 
-    setHistoryFeedbacks(json.feedbacks || []);
-  } catch (err: any) {
-    setHistoryError(err?.message || "Unable to load history.");
-  } finally {
-    setHistoryLoading(false);
-  }
-};
+      setHistoryFeedbacks(json.feedbacks || []);
+    } catch (err: any) {
+      setHistoryError(err?.message || "Unable to load history.");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   
   const getEditorialNumber = (id: string, index: number) => {
@@ -1275,7 +1391,8 @@ useEffect(() => {
 
   const handleDownloadGeneration = (item: GenerationRecord, label: string) => {
     const link = document.createElement("a");
-    link.href = item.outputUrl;
+    const fullUrl = item.fullUrl || item.outputUrl;
+    link.href = fullUrl;
     link.download = `mina-v3-prompt-${label || item.id}`;
     link.target = "_blank";
     link.rel = "noreferrer";
@@ -1300,17 +1417,34 @@ useEffect(() => {
   // ==============================
   // R2 helpers (upload + store)
   // ==============================
-  function pickUrlFromR2Response(json: any): string | null {
-    if (!json) return null;
-    if (typeof json.url === "string" && json.url.startsWith("http")) return json.url;
-    if (typeof json.signedUrl === "string" && json.signedUrl.startsWith("http")) return json.signedUrl;
-    if (typeof json.publicUrl === "string" && json.publicUrl.startsWith("http")) return json.publicUrl;
-    if (json.result && typeof json.result.url === "string" && json.result.url.startsWith("http")) return json.result.url;
-    if (json.data && typeof json.data.url === "string" && json.data.url.startsWith("http")) return json.data.url;
-    return null;
+  function pickStoredMediaFromR2Response(json: any, fallback: string): StoredMedia {
+    const result = json?.result || json?.data || json;
+    const fullUrl =
+      (typeof result?.fullUrl === "string" && result.fullUrl) ||
+      (typeof result?.full_url === "string" && result.full_url) ||
+      (typeof result?.url === "string" && result.url.startsWith("http") && result.url) ||
+      (typeof result?.signedUrl === "string" && result.signedUrl) ||
+      (typeof result?.publicUrl === "string" && result.publicUrl) ||
+      fallback;
+
+    const smallUrl =
+      (typeof result?.smallUrl === "string" && result.smallUrl) ||
+      (typeof result?.small_url === "string" && result.small_url) ||
+      (typeof result?.thumbnailUrl === "string" && result.thumbnailUrl) ||
+      undefined;
+
+    const width = typeof result?.width === "number" ? result.width : undefined;
+    const height = typeof result?.height === "number" ? result.height : undefined;
+
+    return {
+      fullUrl,
+      smallUrl: smallUrl || buildSmallImageUrl(fullUrl),
+      width,
+      height,
+    };
   }
 
-  async function uploadFileToR2(panel: UploadPanelKey, file: File): Promise<string> {
+  async function uploadFileToR2(panel: UploadPanelKey, file: File): Promise<StoredMedia> {
     if (!API_BASE_URL) throw new Error("Missing API base URL");
     const dataUrl = await fileToDataUrl(file);
 
@@ -1329,31 +1463,35 @@ useEffect(() => {
       throw new Error(json?.message || json?.error || `Upload failed (${res.status})`);
     }
 
-    const url = pickUrlFromR2Response(json);
-    if (!url) throw new Error("Upload succeeded but no URL returned");
-    return url;
+    return pickStoredMediaFromR2Response(json, dataUrl);
   }
 
-  async function storeRemoteToR2(url: string, kind: string): Promise<string> {
-    if (!API_BASE_URL) throw new Error("Missing API base URL");
-
-    const res = await fetch(`${API_BASE_URL}/api/r2/store-remote-signed`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url,
-        kind, // "generations" | "motions" | etc.
-        customerId,
-      }),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json?.ok === false) {
-      // if storing fails, just return original url (non-blocking)
-      return url;
+  async function storeRemoteToR2(url: string, kind: string): Promise<StoredMedia> {
+    if (!API_BASE_URL) {
+      return { fullUrl: url, smallUrl: buildSmallImageUrl(url) };
     }
 
-    return pickUrlFromR2Response(json) || url;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/r2/store-remote-signed`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          kind, // "generations" | "motions" | etc.
+          customerId,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json?.ok === false) {
+        // if storing fails, just return original url (non-blocking)
+        return { fullUrl: url, smallUrl: buildSmallImageUrl(url) };
+      }
+
+      return pickStoredMediaFromR2Response(json, url);
+    } catch {
+      return { fullUrl: url, smallUrl: buildSmallImageUrl(url) };
+    }
   }
 
   function patchUploadItem(panel: UploadPanelKey, id: string, patch: Partial<UploadItem>) {
@@ -1366,8 +1504,14 @@ useEffect(() => {
   async function startUploadForFileItem(panel: UploadPanelKey, id: string, file: File) {
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
-      const remoteUrl = await uploadFileToR2(panel, file);
-      patchUploadItem(panel, id, { remoteUrl, uploading: false });
+      const stored = await uploadFileToR2(panel, file);
+      patchUploadItem(panel, id, {
+        remoteUrl: stored.fullUrl,
+        remoteSmallUrl: stored.smallUrl,
+        width: stored.width,
+        height: stored.height,
+        uploading: false,
+      });
     } catch (err: any) {
       patchUploadItem(panel, id, { uploading: false, error: err?.message || "Upload failed" });
     }
@@ -1376,8 +1520,14 @@ useEffect(() => {
   async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: string) {
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
-      const remoteUrl = await storeRemoteToR2(url, panel);
-      patchUploadItem(panel, id, { remoteUrl, uploading: false });
+      const stored = await storeRemoteToR2(url, panel);
+      patchUploadItem(panel, id, {
+        remoteUrl: stored.fullUrl,
+        remoteSmallUrl: stored.smallUrl,
+        width: stored.width,
+        height: stored.height,
+        uploading: false,
+      });
     } catch (err: any) {
       patchUploadItem(panel, id, { uploading: false, error: err?.message || "Store failed" });
     }
@@ -1467,11 +1617,15 @@ const handleGenerateStill = async () => {
     const url = data.imageUrl || data.imageUrls?.[0];
     if (!url) throw new Error("No image URL in Mina response.");
 
-    const storedUrl = await storeRemoteToR2(url, "generations");
+    const stored = await storeRemoteToR2(url, "generations");
 
     const item: StillItem = {
       id: data.generationId || `still_${Date.now()}`,
-      url: storedUrl,
+      url: stored.fullUrl,
+      fullUrl: stored.fullUrl,
+      smallUrl: stored.smallUrl,
+      width: stored.width,
+      height: stored.height,
       createdAt: new Date().toISOString(),
       prompt: data.prompt || trimmed,
       aspectRatio: currentAspect.ratio,
@@ -1627,11 +1781,11 @@ const handleGenerateStill = async () => {
       const url = data.videoUrl;
       if (!url) throw new Error("No video URL in Mina response.");
 
-      const storedUrl = await storeRemoteToR2(url, "motions");
+      const stored = await storeRemoteToR2(url, "motions");
 
       const item: MotionItem = {
         id: data.generationId || `motion_${Date.now()}`,
-        url: storedUrl,
+        url: stored.fullUrl,
         createdAt: new Date().toISOString(),
         prompt: data.prompt || motionTextTrimmed,
       };
@@ -1712,7 +1866,7 @@ const handleGenerateStill = async () => {
     const comment = feedbackText.trim();
 
     const targetVideo = currentMotion?.url || "";
-    const targetImage = currentStill?.url || "";
+    const targetImage = currentStill?.fullUrl || currentStill?.url || "";
 
     try {
       setFeedbackSending(true);
@@ -1742,7 +1896,7 @@ const handleGenerateStill = async () => {
   };
 
   const handleDownloadCurrentStill = () => {
-    const target = currentMotion?.url || currentStill?.url;
+    const target = currentMotion?.url || currentStill?.fullUrl || currentStill?.url;
     if (!target) return;
 
     let filename = "";
@@ -2439,8 +2593,15 @@ const renderProfileBody = () => {
   // Render a single history card
   const renderCard = (g: GenerationRecord, i: number) => {
     const variant = editorialVariants[i % editorialVariants.length];
-    const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
+    const aspectStyle =
+      g.width && g.height
+        ? `${g.width} / ${g.height}`
+        : g.meta?.aspectRatio
+          ? g.meta.aspectRatio.replace(":", " / ")
+          : undefined;
     const numberLabel = getEditorialNumber(g.id, i);
+    const fullUrl = g.fullUrl || g.outputUrl;
+    const smallUrl = g.smallUrl || buildSmallImageUrl(fullUrl);
     return (
       <article key={g.id} className={`profile-card profile-card--${variant}`}>
         {renderNumberBadge(g)}
@@ -2451,10 +2612,10 @@ const renderProfileBody = () => {
             border: "1px solid rgba(8,10,0,0.08)",
             background: "rgba(8, 10, 0, 0.05)",
           }}
-          onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
+          onClick={() => window.open(fullUrl, "_blank", "noreferrer")}
         >
           <img
-            src={toPreviewUrl(g.outputUrl)}
+            src={smallUrl}
             loading="lazy"
             decoding="async"
             alt={g.prompt}
@@ -2647,7 +2808,7 @@ const renderProfileBody = () => {
         <button
           type="button"
           className="profile-cta"
-          onClick={() => setActiveTab("studio")}
+          onClick={goToStudio}
           style={{
             textTransform: "none",
             letterSpacing: "normal",
@@ -2708,7 +2869,7 @@ const renderProfileBody = () => {
             )}
 
             {activeTab === "profile" && (
-              <button type="button" className="link-button subtle" onClick={() => setActiveTab("studio")}>
+              <button type="button" className="link-button subtle" onClick={goToStudio}>
                 Back to studio
               </button>
             )}
@@ -2782,7 +2943,7 @@ const renderProfileBody = () => {
               onTypeForMe={handleSuggestMotion}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
-              onGoProfile={() => setActiveTab("profile")}
+              onGoProfile={() => goToProfile()}
             />
             {renderStudioRight()}
           </div>

@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./StudioRight.css";
 
-type StillItem = { id: string; url: string };
+type StillItem = { id: string; url: string; smallUrl?: string; fullUrl?: string };
 type MotionItem = { id: string; url: string };
 
 type StudioRightProps = {
@@ -38,7 +38,11 @@ export default function StudioRight(props: StudioRightProps) {
 
   const media = useMemo(() => {
     if (currentMotion) return { type: "video" as const, url: currentMotion.url };
-    if (currentStill) return { type: "image" as const, url: currentStill.url };
+    if (currentStill)
+      return {
+        type: "image" as const,
+        url: currentStill.smallUrl || currentStill.url,
+      };
     return null;
   }, [currentMotion, currentStill]);
 
