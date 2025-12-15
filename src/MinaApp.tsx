@@ -41,6 +41,14 @@ type CreditsState = {
   meta?: CreditsMeta;
 };
 
+type GptMeta = {
+  userMessage?: string;   // what you want to show to the user
+  imageTexts?: string[];  // optional: short vision analysis strings
+  input?: string;         // optional: raw prompt sent to GPT (if you return it)
+  output?: string;        // optional: raw GPT output (if you return it)
+  model?: string;         // optional: which model used
+};
+
 type EditorialResponse = {
   ok: boolean;
   prompt?: string;
@@ -48,6 +56,10 @@ type EditorialResponse = {
   imageUrls?: string[];
   generationId?: string;
   sessionId?: string;
+
+  // ✅ Add this
+  gpt?: GptMeta;
+
   credits?: {
     balance: number;
     cost?: number;
@@ -57,6 +69,9 @@ type EditorialResponse = {
 type MotionSuggestResponse = {
   ok: boolean;
   suggestion?: string;
+
+  // optional (only if your backend returns it)
+  gpt?: GptMeta;
 };
 
 type MotionResponse = {
@@ -65,11 +80,16 @@ type MotionResponse = {
   videoUrl?: string;
   generationId?: string;
   sessionId?: string;
+
+  // ✅ Add this (only if your backend returns it)
+  gpt?: GptMeta;
+
   credits?: {
     balance: number;
     cost?: number;
   };
 };
+
 
 type GenerationRecord = {
   id: string;
@@ -1497,6 +1517,38 @@ const handleGenerateStill = async () => {
     const url = data.imageUrl || data.imageUrls?.[0];
     if (!url) throw new Error("No image URL in Mina response.");
 
+    // ✅ Build the text we want to SHOW to the user (userMessage + prompt)
+    const serverUserMessage =
+      typeof data.gpt?.userMessage === "string" ? data.gpt.userMessage.trim() : "";
+
+    const promptText = typeof data.prompt === "string" ? data.prompt.trim() : "";
+
+    const imageTexts =
+      Array.isArray(data.gpt?.imageTexts)
+        ? data.gpt!.imageTexts!.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim())
+        : [];
+
+    const clamp = (t: string, max: number) => (t.length > max ? `${t.slice(0, max)}…` : t);
+
+    const briefEcho = clamp(trimmed, 220);
+    const promptShort = clamp(promptText, 380);
+
+    let overlay = serverUserMessage || briefEcho;
+
+    // include prompt (what you asked)
+    if (promptShort) {
+      overlay = `${overlay}\n\nPrompt:\n${promptShort}`;
+    }
+
+    // optional: include a little of vision text (if present)
+    if (imageTexts.length) {
+      const lines = imageTexts.slice(0, 3).map((t) => `• ${clamp(t, 140)}`).join("\n");
+      overlay = `${overlay}\n\nNotes:\n${lines}`;
+    }
+
+    if (overlay.trim()) setMinaOverrideText(overlay.trim());
+
+    // store remote AFTER we already showed text (faster UX)
     const storedUrl = await storeRemoteToR2(url, "generations");
 
     const item: StillItem = {
@@ -1522,32 +1574,13 @@ const handleGenerateStill = async () => {
         meta: prev?.meta,
       }));
     }
-
-    // ✅ Show “real text” AFTER response (prefer server userMessage; fallback to user brief)
-    if (minaVisionEnabled) {
-      const gptAny = (data as any)?.gpt || {};
-      const serverUserMessage = typeof gptAny.userMessage === "string" ? gptAny.userMessage.trim() : "";
-      const imageTexts = Array.isArray(gptAny.imageTexts)
-        ? gptAny.imageTexts.filter((x: any) => typeof x === "string" && x.trim())
-        : [];
-
-      const briefEcho = trimmed.length > 220 ? `${trimmed.slice(0, 220)}…` : trimmed;
-
-      let overlay = serverUserMessage || briefEcho;
-
-      // optional: append imageTexts if you want (kept subtle)
-      if (overlay && imageTexts.length) {
-        overlay = `${overlay}\n\n${imageTexts.slice(0, 3).join(". ")}`;
-      }
-
-      if (overlay) setMinaOverrideText(overlay);
-    }
   } catch (err: any) {
     setStillError(err?.message || "Unexpected error generating still.");
   } finally {
     setStillGenerating(false);
   }
 };
+
 // ========================================================================
 // [PART 9 END]
 // ========================================================================
@@ -1624,6 +1657,9 @@ const handleGenerateMotion = async () => {
   }
 
   try {
+    // clear old “real” message so placeholder can run while generating
+    setMinaOverrideText(null);
+
     setMotionGenerating(true);
     setMotionError(null);
 
@@ -1653,6 +1689,21 @@ const handleGenerateMotion = async () => {
     const url = data.videoUrl;
     if (!url) throw new Error("No video URL in Mina response.");
 
+    // ✅ Show message + prompt (if backend returns it)
+    const serverUserMessage =
+      typeof data.gpt?.userMessage === "string" ? data.gpt.userMessage.trim() : "";
+
+    const promptText = typeof data.prompt === "string" ? data.prompt.trim() : "";
+
+    const clamp = (t: string, max: number) => (t.length > max ? `${t.slice(0, max)}…` : t);
+    const promptShort = clamp(promptText, 380);
+
+    let overlay = serverUserMessage || "Motion is ready.";
+
+    if (promptShort) overlay = `${overlay}\n\nPrompt:\n${promptShort}`;
+
+    if (overlay.trim()) setMinaOverrideText(overlay.trim());
+
     const storedUrl = await storeRemoteToR2(url, "motions");
 
     const item: MotionItem = {
@@ -1680,6 +1731,7 @@ const handleGenerateMotion = async () => {
     setMotionGenerating(false);
   }
 };
+
 // ========================================================================
 // [PART 10 END]
 // ========================================================================
