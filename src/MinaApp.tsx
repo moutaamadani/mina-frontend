@@ -916,52 +916,48 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   // ========================================================================
 
   // ============================================
-// PART UI STAGING (premium reveal / no jumping)
-// ============================================
+  // PART UI STAGING (premium reveal / no jumping)
+  // ============================================
+  useEffect(() => {
+    // Persist style storage
+    try {
+      window.localStorage.setItem("minaStyleLabelOverrides", JSON.stringify(styleLabelOverrides));
+    } catch {
+      // ignore
+    }
+  }, [styleLabelOverrides]);
 
-// Persist style storage
-useEffect(() => {
-  try {
-    window.localStorage.setItem("minaStyleLabelOverrides", JSON.stringify(styleLabelOverrides));
-  } catch {
-    // ignore
-  }
-}, [styleLabelOverrides]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("minaCustomStyles", JSON.stringify(customStyles));
+    } catch {
+      // ignore
+    }
+  }, [customStyles]);
 
-useEffect(() => {
-  try {
-    window.localStorage.setItem("minaCustomStyles", JSON.stringify(customStyles));
-  } catch {
-    // ignore
-  }
-}, [customStyles]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(likedMap));
+    } catch {
+      // ignore
+    }
+  }, [likedMap]);
 
-useEffect(() => {
-  try {
-    window.localStorage.setItem(LIKE_STORAGE_KEY, JSON.stringify(likedMap));
-  } catch {
-    // ignore
-  }
-}, [likedMap]);
-
-// ----------------------------
-// MINA “thinking out loud” UI
-// ----------------------------
-
-// 1) Placeholder text WHILE busy (only if no override text)
+  useEffect(() => {
+  // 1) Placeholder “thinking out loud” WHILE busy, only if no override text
 useEffect(() => {
   if (!minaBusy) return;
-  if (minaOverrideText) return;
+  if (minaOverrideText) return; // don't overwrite the real message
 
   setMinaTalking(true);
 
-  const phrases = [...personalityThinking, ...personalityFiller].filter(Boolean);
+  const phrases = [...personalityThinking, ...personalityFiller];
   let phraseIndex = 0;
   let charIndex = 0;
   let t: number | null = null;
 
-  const CHAR_MS = 35;       // faster typing
-  const END_PAUSE_MS = 160; // faster pause
+  const CHAR_MS = 70;          // faster than before (was ~140)
+  const END_PAUSE_MS = 220;    // faster than before (was ~360)
 
   const tick = () => {
     const phrase = phrases[phraseIndex % phrases.length] || "";
@@ -984,7 +980,7 @@ useEffect(() => {
   };
 }, [minaBusy, minaOverrideText, personalityThinking, personalityFiller]);
 
-// 2) When override arrives, type it VERY fast
+// 2) When override text arrives, type it FAST and stop placeholders
 useEffect(() => {
   if (!minaOverrideText) return;
 
@@ -996,13 +992,16 @@ useEffect(() => {
   let t: number | null = null;
 
   const text = minaOverrideText;
-  const CHAR_MS = 6; // very fast
+  const CHAR_MS = 8; // very fast
 
   const tick = () => {
     if (cancelled) return;
     i += 1;
     setMinaMessage(text.slice(0, i));
-    if (i < text.length) t = window.setTimeout(tick, CHAR_MS);
+
+    if (i < text.length) {
+      t = window.setTimeout(tick, CHAR_MS);
+    }
   };
 
   t = window.setTimeout(tick, CHAR_MS);
@@ -1013,57 +1012,56 @@ useEffect(() => {
   };
 }, [minaOverrideText]);
 
-// 3) When not busy, keep override briefly then clear
+// 3) When Mina stops being busy, keep the override visible briefly, then clear
 useEffect(() => {
   if (minaBusy) return;
 
+  // if we just showed a real message, keep it for a moment
   if (minaOverrideText) {
     const hold = window.setTimeout(() => {
       setMinaTalking(false);
       setMinaMessage("");
       setMinaOverrideText(null);
-    }, 2200);
+    }, 2500);
 
     return () => window.clearTimeout(hold);
   }
 
+  // otherwise, clear immediately
   setMinaTalking(false);
   setMinaMessage("");
 }, [minaBusy, minaOverrideText]);
 
-// ----------------------------
-// UI Stage reveal
-// ----------------------------
-useEffect(() => {
-  // Stage 0: only textarea (no pills, no panels)
-  if (briefLength <= 0) {
-    if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
-    if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
-    stageT2Ref.current = null;
-    stageT3Ref.current = null;
 
-    setUiStage(0);
-    setActivePanel(null);
-    setGlobalDragging(false);
-    dragDepthRef.current = 0;
-    return;
-  }
+  useEffect(() => {
+    // Stage 0: only textarea (no pills, no panels)
+    if (briefLength <= 0) {
+      if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
+      if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
+      stageT2Ref.current = null;
+      stageT3Ref.current = null;
 
-  // Start the reveal ONLY once (when transitioning 0 -> typing)
-  if (uiStage === 0) {
-    setUiStage(1);
-    setActivePanel((prev) => prev ?? "product");
+      setUiStage(0);
+      setActivePanel(null);
+      setGlobalDragging(false);
+      dragDepthRef.current = 0;
+      return;
+    }
 
-    stageT2Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 2 ? 2 : s));
-    }, PANEL_REVEAL_DELAY_MS);
+    // Start the reveal ONLY once (when transitioning 0 -> typing)
+    if (uiStage === 0) {
+      setUiStage(1);
+      setActivePanel((prev) => prev ?? "product");
 
-    stageT3Ref.current = window.setTimeout(() => {
-      setUiStage((s) => (s < 3 ? 3 : s));
-    }, CONTROLS_REVEAL_DELAY_MS);
-  }
-}, [briefLength, uiStage]);
+      stageT2Ref.current = window.setTimeout(() => {
+        setUiStage((s) => (s < 2 ? 2 : s));
+      }, PANEL_REVEAL_DELAY_MS);
 
+      stageT3Ref.current = window.setTimeout(() => {
+        setUiStage((s) => (s < 3 ? 3 : s));
+      }, CONTROLS_REVEAL_DELAY_MS);
+    }
+  }, [briefLength, uiStage]);
 
   // ========================================================================
   // [PART 6 START] Effects – persist customer + bootstrap
@@ -1384,145 +1382,146 @@ useEffect(() => {
   }
 
   // ========================================================================
-// [PART 9 START] Stills (editorial)
-// ========================================================================
-const handleGenerateStill = async () => {
-  const trimmed = stillBrief.trim();
-  if (trimmed.length < 40) return;
+  // [PART 9 START] Stills (editorial)
+  // ========================================================================
+  const handleGenerateStill = async () => {
+    const trimmed = stillBrief.trim();
+    if (trimmed.length < 40) return;
 
-  if (!API_BASE_URL) {
-    setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
-    return;
-  }
-
-  const sid = await ensureSession();
-  if (!sid) {
-    setStillError("Could not start Mina session.");
-    return;
-  }
-
-  try {
-    // clear old “real” message so placeholder can run while generating
-    setMinaOverrideText(null);
-
-    setStillGenerating(true);
-    setStillError(null);
-
-    const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
-
-    const payload: {
-      customerId: string;
-      sessionId: string;
-      brief: string;
-      tone: string;
-      platform: string;
-      minaVisionEnabled: boolean;
-      stylePresetKey: string;
-      aspectRatio: string;
-      productImageUrl?: string;
-      logoImageUrl?: string;
-      styleImageUrls?: string[];
-    } = {
-      customerId,
-      sessionId: sid,
-      brief: trimmed,
-      tone,
-      platform: currentAspect.platformKey,
-      minaVisionEnabled,
-      stylePresetKey: stylePresetKeyForApi,
-      aspectRatio: safeAspectRatio,
-    };
-
-    // Forward product (R2 first, then http only)
-    const productItem = uploads.product[0];
-    const productUrl = productItem?.remoteUrl || productItem?.url;
-    if (productUrl && isHttpUrl(productUrl)) payload.productImageUrl = productUrl;
-
-    // Forward logo (optional)
-    const logoItem = uploads.logo[0];
-    const logoUrl = logoItem?.remoteUrl || logoItem?.url;
-    if (logoUrl && isHttpUrl(logoUrl)) payload.logoImageUrl = logoUrl;
-
-    // Forward inspiration up to 4
-    const inspirationUrls = uploads.inspiration
-      .map((u) => u.remoteUrl || u.url)
-      .filter((u) => isHttpUrl(u))
-      .slice(0, 4);
-
-    if (inspirationUrls.length) payload.styleImageUrls = inspirationUrls;
-
-    const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => null);
-      const msg = errJson?.message || `Error ${res.status}: Failed to generate editorial still.`;
-      throw new Error(msg);
+    if (!API_BASE_URL) {
+      setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
+      return;
     }
 
-    const data = (await res.json()) as EditorialResponse;
-    const url = data.imageUrl || data.imageUrls?.[0];
-    if (!url) throw new Error("No image URL in Mina response.");
-
-    const storedUrl = await storeRemoteToR2(url, "generations");
-
-    const item: StillItem = {
-      id: data.generationId || `still_${Date.now()}`,
-      url: storedUrl,
-      createdAt: new Date().toISOString(),
-      prompt: data.prompt || trimmed,
-      aspectRatio: currentAspect.ratio,
-    };
-
-    setStillItems((prev) => {
-      const next = [item, ...prev];
-      setStillIndex(0);
-      return next;
-    });
-
-    setLastStillPrompt(item.prompt);
-
-    // Update credits
-    if (data.credits?.balance !== undefined) {
-      setCredits((prev) => ({
-        balance: data.credits!.balance,
-        meta: prev?.meta,
-      }));
+    const sid = await ensureSession();
+    if (!sid) {
+      setStillError("Could not start Mina session.");
+      return;
     }
 
-    // ✅ Show “real text” AFTER response (prefer server userMessage; fallback to user brief)
-    if (minaVisionEnabled) {
-      const gptAny = (data as any)?.gpt || {};
-      const serverUserMessage =
-        typeof gptAny.userMessage === "string" ? gptAny.userMessage.trim() : "";
-      const imageTexts = Array.isArray(gptAny.imageTexts)
-        ? gptAny.imageTexts.filter((x: any) => typeof x === "string" && x.trim())
-        : [];
+    try {setMinaOverrideText(null);
 
-      const briefEcho = trimmed.length > 220 ? `${trimmed.slice(0, 220)}…` : trimmed;
+      setStillGenerating(true);
+      setStillError(null);
 
-      let overlay = serverUserMessage || briefEcho;
+      const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
 
-      // optional: append imageTexts if you want (kept subtle)
-      if (overlay && imageTexts.length) {
-        overlay = `${overlay}\n\n${imageTexts.slice(0, 3).join(". ")}`;
+      const payload: {
+        customerId: string;
+        sessionId: string;
+        brief: string;
+        tone: string;
+        platform: string;
+        minaVisionEnabled: boolean;
+        stylePresetKey: string;
+        aspectRatio: string;
+        productImageUrl?: string;
+          logoImageUrl?: string;
+
+        styleImageUrls?: string[];
+      } = {
+        customerId,
+        sessionId: sid,
+        brief: trimmed,
+        tone,
+        platform: currentAspect.platformKey,
+        minaVisionEnabled,
+        stylePresetKey: stylePresetKeyForApi,
+        aspectRatio: safeAspectRatio,
+      };
+
+      // Forward product (R2 first, then http only)
+      const productItem = uploads.product[0];
+      const productUrl = productItem?.remoteUrl || productItem?.url;
+      if (productUrl && isHttpUrl(productUrl)) {
+        payload.productImageUrl = productUrl;
       }
 
-      if (overlay) setMinaOverrideText(overlay);
-    }
-  } catch (err: any) {
-    setStillError(err?.message || "Unexpected error generating still.");
-  } finally {
-    setStillGenerating(false);
-  }
-};
-// ========================================================================
-// [PART 9 END]
-// ========================================================================
+  
+       // NEW: forward logo image if available
+      const logoItem = uploads.logo[0];
+      const logoUrl = logoItem?.remoteUrl || logoItem?.url;
+      if (logoUrl && isHttpUrl(logoUrl)) {
+        payload.logoImageUrl = logoUrl;
+      }
+      
+      // Forward inspiration up to 4 (R2 first, then http only)
+      const inspirationUrls = uploads.inspiration
+        .map((u) => u.remoteUrl || u.url)
+        .filter((u) => isHttpUrl(u))
+        .slice(0, 4);
+      
+      if (inspirationUrls.length) {
+        payload.styleImageUrls = inspirationUrls;
+      }
 
+
+      const res = await fetch(`${API_BASE_URL}/editorial/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg = errJson?.message || `Error ${res.status}: Failed to generate editorial still.`;
+        throw new Error(msg);
+      }
+
+      const data = (await res.json()) as EditorialResponse;
+      const url = data.imageUrl || data.imageUrls?.[0];
+      if (!url) throw new Error("No image URL in Mina response.");
+
+      const storedUrl = await storeRemoteToR2(url, "generations");
+
+      const item: StillItem = {
+        id: data.generationId || `still_${Date.now()}`,
+        url: storedUrl,
+        createdAt: new Date().toISOString(),
+        prompt: data.prompt || trimmed,
+        aspectRatio: currentAspect.ratio,
+      };
+
+      setStillItems((prev) => {
+        const next = [item, ...prev]; // ✅ newest first
+        setStillIndex(0); // ✅ always show the newest immediately
+        return next;
+      });
+
+      setLastStillPrompt(item.prompt);
+
+      if (data.credits?.balance !== undefined) {
+        setCredits((prev) => ({
+          balance: data.credits!.balance,
+          meta: prev?.meta,
+        }))
+            // NEW: update Vision overlay with transcripts and user message
+  const imageTexts = (data as any)?.gpt?.imageTexts;
+  const userMessage = (data as any)?.gpt?.userMessage;
+  if (minaVisionEnabled && (imageTexts?.length || userMessage)) {
+    let overlay = "";
+    if (Array.isArray(imageTexts) && imageTexts.length > 0) {
+      overlay = imageTexts.join(". ");
+    }
+    if (typeof userMessage === "string" && userMessage.trim()) {
+      overlay = overlay ? `${overlay}\n\n${userMessage}` : userMessage;
+    }
+   if (overlay) {
+  setMinaOverrideText(overlay); // ✅ this will replace placeholder & type fast
+
+    }
+  }
+;
+      }
+    } catch (err: any) {
+      setStillError(err?.message || "Unexpected error generating still.");
+    } finally {
+      setStillGenerating(false);
+    }
+  };
+  // ========================================================================
+  // [PART 9 END]
+  // ========================================================================
 
   // ========================================================================
   // [PART 10 START] Motion (suggest + generate)
