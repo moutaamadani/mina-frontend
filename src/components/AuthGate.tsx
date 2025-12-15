@@ -9,18 +9,37 @@ type AuthGateProps = {
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL || "https://mina-editorial-ai-api.onrender.com";
 
-async function syncShopifyWelcome(email: string | null | undefined) {
+// src/components/AuthGate.tsx
+
+async function syncShopifyWelcome(
+  email: string | null | undefined,
+  userId?: string
+): Promise<string | null> {
   const clean = (email || "").trim().toLowerCase();
-  if (!API_BASE_URL || !clean) return;
+  if (!API_BASE_URL || !clean) return null;
 
   try {
-    await fetch(`${API_BASE_URL}/auth/shopify-sync`, {
+    const res = await fetch(`${API_BASE_URL}/auth/shopify-sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: clean }),
+      body: JSON.stringify({ email: clean, userId }),
     });
+
+    const json = await res.json().catch(() => ({} as any));
+    if (!res.ok || json?.ok === false) return null;
+
+    const shopifyCustomerId =
+      typeof json.shopifyCustomerId === "string"
+        ? json.shopifyCustomerId
+        : typeof json.customerId === "string"
+          ? json.customerId
+          : typeof json.id === "string"
+            ? json.id
+            : null;
+
+    return shopifyCustomerId;
   } catch {
-    // non-blocking
+    return null; // non-blocking
   }
 }
 
