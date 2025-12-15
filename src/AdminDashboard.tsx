@@ -10,57 +10,45 @@ import {
 import "./admin.css";
 
 /**
- * IMPORTANT:
- * - Config (AI/Pricing/Styles/Assets/Architecture) is stored in mina_admin_config (singleton).
- * - Users + Generations should NOT be stored in config (too heavy + not "config").
+ * What this dashboard does:
+ * - Config: stored in mina_admin_config + mina_admin_secrets (same as before)
+ * - Live data: reads from Supabase tables:
+ *   - customers
+ *   - generations
+ *   - credit_transactions
+ *   - sessions
+ *   - feedback
  *
- * So:
- * - We load clients + generations LIVE from Supabase tables (read-only here).
- * - We show them in tabs.
- * - Save button saves ONLY config parts (and skips live data).
+ * IMPORTANT SECURITY:
+ * - If RLS is enabled, your admin user must have policies allowing select/update.
+ * - Do NOT put Supabase service_role key in frontend.
  */
 
 type TabKey =
   | "ai"
   | "pricing"
   | "styles"
-  | "generations"
-  | "clients"
-  | "logs"
+  | "assets"
   | "architecture"
-  | "assets";
+  | "customers"
+  | "generations"
+  | "transactions"
+  | "sessions"
+  | "feedback"
+  | "logs";
 
 const TAB_LABELS: Record<TabKey, string> = {
   ai: "AI Settings",
   pricing: "Credits & Pricing",
   styles: "Styles",
-  generations: "Generations",
-  clients: "Clients",
-  logs: "Logs",
-  architecture: "Architecture",
   assets: "Assets",
-};
-
-type LiveClient = {
-  id: string;
-  email: string;
-  credits: number;
-  expiresAt?: string | null;
-  lastActive?: string | null;
-  disabled?: boolean | null;
-};
-
-type LiveGeneration = {
-  id: string;
-  user: string; // email or user_id
-  prompt: string;
-  model: string;
-  status: string;
-  url?: string | null;
-  cost?: number | null;
-  liked?: boolean | null;
-  createdAt: string;
-  params?: any;
+  architecture: "Architecture",
+  customers: "Customers",
+  generations: "Generations",
+  transactions: "Credit Transactions",
+  sessions: "Sessions",
+  feedback: "Feedback",
+  logs: "Logs",
 };
 
 function AdminHeader({
@@ -74,7 +62,7 @@ function AdminHeader({
     <header className="admin-header">
       <div>
         <div className="admin-title">Mina Admin</div>
-        <div className="admin-subtitle">Editorial dashboard (Supabase live config)</div>
+        <div className="admin-subtitle">Editorial dashboard (Supabase live data)</div>
       </div>
       <div className="admin-actions">
         {rightStatus}
@@ -167,6 +155,118 @@ function useAdminGuard() {
   return allowed;
 }
 
+/* -----------------------------
+   Helpers
+------------------------------ */
+
+function isUuid(s: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
+}
+
+function pickFirstKey(row: any, keys: string[]) {
+  for (const k of keys) {
+    if (row && Object.prototype.hasOwnProperty.call(row, k)) return k;
+  }
+  return null;
+}
+
+function pickString(row: any, keys: string[], fallback = ""): string {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  return fallback;
+}
+
+function pickNumber(row: any, keys: string[], fallback = 0): number {
+  for (const k of keys) {
+    const v = row?.[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return fallback;
+}
+
+function formatMoneyMaybeCents(amount: number, currency = "usd") {
+  if (!Number.isFinite(amount)) return "—";
+  // heuristics: if it's very large assume cents
+  const isCents = Math.abs(amount) >= 1000 && Math.abs(amount) % 1 === 0;
+  const value = isCents ? amount / 100 : amount;
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() }).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${currency.toUpperCase()}`;
+  }
+}
+
+function safeJson(obj: any) {
+  try {
+    return JSON.stringify(obj ?? {}, null, 2);
+  } catch {
+    return String(obj);
+  }
+}
+
+function extractLikelyImageUrl(row: any): string | null {
+  const keys = Object.keys(row || {});
+  const urlKey =
+    keys.find((k) => /^(url|image_url|output_url|result_url|asset_url)$/i.test(k)) ||
+    keys.find((k) => /(url|image|output|result)/i.test(k) && typeof row?.[k] === "string");
+  const val = urlKey ? row?.[urlKey] : null;
+  return typeof val === "string" && val.startsWith("http") ? val : null;
+}
+
+function highlightTraceFields(row: any) {
+  const keys = Object.keys(row || {});
+  const candidates = [
+    // GPT / LLM
+    "gpt_input",
+    "gpt_prompt",
+    "llm_input",
+    "llm_prompt",
+    "system_prompt",
+    "messages",
+    "gpt_output",
+    "llm_output",
+    "caption",
+    "text_output",
+    // seedream / image gen
+    "seedream_prompt",
+    "image_prompt",
+    "seedream_input",
+    "seedream_output",
+    "image_url",
+    "output_url",
+    "url",
+    // generic params
+    "params",
+    "meta",
+    "metadata",
+    "trace",
+    "debug",
+  ];
+
+  const present = candidates
+    .map((k) => {
+      const hit = keys.find((kk) => kk.toLowerCase() === k.toLowerCase());
+      return hit || null;
+    })
+    .filter(Boolean) as string[];
+
+  // Also add any key containing these substrings
+  for (const k of keys) {
+    if (/gpt|llm|seedream|prompt|output|trace|debug/i.test(k) && !present.includes(k)) {
+      present.push(k);
+    }
+  }
+
+  return present.slice(0, 18);
+}
+
+/* -----------------------------
+   Config Tabs (same idea as before)
+------------------------------ */
+
 function EditableKeyValue({
   params,
   onChange,
@@ -205,147 +305,19 @@ function EditableKeyValue({
           </button>
         </div>
       ))}
-      <button
-        className="admin-button ghost"
-        type="button"
-        onClick={() => onChange([...params, { key: "", value: "" }])}
-      >
+      <button className="admin-button ghost" type="button" onClick={() => onChange([...params, { key: "", value: "" }])}>
         Add param
       </button>
     </div>
   );
 }
 
-/* -----------------------------
-   LIVE DATA LOADERS (REAL DB)
------------------------------- */
-
-/**
- * We try multiple possible table names because your project naming might differ.
- * The first one that works is used.
- */
-async function trySelectFirstWorkingTable(
-  candidates: string[],
-  select: string,
-  options?: { limit?: number; orderBy?: { col: string; asc?: boolean } }
-): Promise<{ table: string; rows: any[] }> {
-  let lastError: any = null;
-
-  for (const table of candidates) {
-    // eslint-disable-next-line no-await-in-loop
-    let q = supabase.from(table).select(select);
-
-    if (options?.orderBy?.col) {
-      q = q.order(options.orderBy.col, { ascending: options.orderBy.asc ?? false });
-    }
-    if (options?.limit) {
-      q = q.limit(options.limit);
-    }
-
-    // eslint-disable-next-line no-await-in-loop
-    const { data, error } = await q;
-
-    if (!error && Array.isArray(data)) {
-      return { table, rows: data };
-    }
-
-    // If table doesn't exist or access is denied, keep trying.
-    lastError = error ?? lastError;
-  }
-
-  const msg =
-    lastError?.message ||
-    "No candidate table worked (table missing OR blocked by RLS).";
-  throw new Error(msg);
-}
-
-function pickString(row: any, keys: string[], fallback = ""): string {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return fallback;
-}
-
-function pickNumber(row: any, keys: string[], fallback = 0): number {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v);
-  }
-  return fallback;
-}
-
-function pickBool(row: any, keys: string[], fallback = false): boolean {
-  for (const k of keys) {
-    const v = row?.[k];
-    if (typeof v === "boolean") return v;
-    if (typeof v === "number") return Boolean(v);
-    if (typeof v === "string") {
-      const s = v.toLowerCase();
-      if (s === "true") return true;
-      if (s === "false") return false;
-    }
-  }
-  return fallback;
-}
-
-function normalizeClients(rows: any[]): LiveClient[] {
-  return rows.map((r) => {
-    const id = pickString(r, ["id", "user_id", "uid", "profile_id"], String(Math.random()));
-    const email = pickString(r, ["email", "user_email", "mail"], "(no email)");
-    const credits = pickNumber(r, ["credits", "credit", "balance", "matchas", "tokens"], 0);
-    const expiresAt = pickString(r, ["expires_at", "expiresAt", "credit_expires_at"], "") || null;
-    const lastActive = pickString(r, ["last_active", "lastActive", "updated_at", "last_seen_at"], "") || null;
-    const disabled = pickBool(r, ["disabled", "is_disabled", "blocked", "banned"], false);
-    return { id, email, credits, expiresAt, lastActive, disabled };
-  });
-}
-
-function normalizeGenerations(rows: any[]): LiveGeneration[] {
-  return rows.map((r) => {
-    const id = pickString(r, ["id", "generation_id", "gid"], String(Math.random()));
-    const prompt = pickString(r, ["prompt", "input_prompt", "text", "caption"], "");
-    const model = pickString(r, ["model", "model_name", "provider_model"], "");
-    const status = pickString(r, ["status", "state"], "unknown");
-    const url =
-      pickString(r, ["url", "image_url", "output_url", "result_url", "asset_url"], "") || null;
-
-    const createdAt =
-      pickString(r, ["created_at", "createdAt", "inserted_at", "started_at"], new Date().toISOString()) ||
-      new Date().toISOString();
-
-    const user =
-      pickString(r, ["user_email", "email"], "") ||
-      pickString(r, ["user_id", "uid", "owner_id"], "") ||
-      "(unknown user)";
-
-    const cost = (() => {
-      const n = pickNumber(r, ["cost", "credits_cost", "credit_cost", "matchas_cost"], NaN);
-      return Number.isNaN(n) ? null : n;
-    })();
-
-    const liked = (() => {
-      if (r?.liked === undefined && r?.is_liked === undefined) return null;
-      return pickBool(r, ["liked", "is_liked"], false);
-    })();
-
-    const params = r?.params ?? r?.parameters ?? r?.meta ?? r?.metadata ?? null;
-
-    return { id, user, prompt, model, status, url, cost, liked, createdAt, params };
-  });
-}
-
-/* -----------------------------
-   TABS
------------------------------- */
-
 function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
   const ai = config.ai;
 
   return (
     <div className="admin-grid">
-      <Section title="Providers" description="Keys are stored in Supabase (mina_admin_secrets).">
+      <Section title="Providers" description="Keys stored in Supabase (mina_admin_secrets).">
         <Table headers={["Provider", "Model", "Key", "Actions"]}>
           {ai.providerKeys.map((row, idx) => (
             <div className="admin-table-row" key={`${row.provider}-${idx}`}>
@@ -368,9 +340,7 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
                 />
               </div>
 
-              <div className="admin-masked">
-                {row.masked ? row.masked : <span className="admin-muted">not set</span>}
-              </div>
+              <div className="admin-masked">{row.masked ? row.masked : <span className="admin-muted">not set</span>}</div>
 
               <div className="admin-row-actions">
                 <button
@@ -389,16 +359,14 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
                   className="admin-button ghost"
                   type="button"
                   onClick={async () => {
-                    const replacement = window.prompt(`Paste new secret for "${row.provider}" (stored in Supabase)`);
+                    const replacement = window.prompt(`Paste new secret for "${row.provider}"`);
                     if (replacement === null) return;
 
                     try {
                       const masked = await upsertAdminSecret(row.provider, replacement);
-
                       const next = [...ai.providerKeys];
                       next[idx] = { ...row, masked, secret: undefined };
                       setConfig({ ...config, ai: { ...ai, providerKeys: next } });
-
                       alert(`Saved secret for ${row.provider}: ${masked}`);
                     } catch (e: any) {
                       alert(e?.message ?? "Failed to save secret");
@@ -415,71 +383,37 @@ function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: 
         <div className="admin-inline">
           <label>
             <strong>Default provider</strong>
-            <input
-              value={ai.defaultProvider}
-              onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultProvider: e.target.value } })}
-            />
+            <input value={ai.defaultProvider} onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultProvider: e.target.value } })} />
           </label>
           <label>
             <strong>Default model</strong>
-            <input
-              value={ai.defaultModel}
-              onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultModel: e.target.value } })}
-            />
+            <input value={ai.defaultModel} onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultModel: e.target.value } })} />
           </label>
           <label>
             <strong>Temperature</strong>
-            <input
-              type="number"
-              step="0.1"
-              value={ai.temperature}
-              onChange={(e) =>
-                setConfig({ ...config, ai: { ...ai, temperature: parseFloat(e.target.value) || 0 } })
-              }
-            />
+            <input type="number" step="0.1" value={ai.temperature} onChange={(e) => setConfig({ ...config, ai: { ...ai, temperature: parseFloat(e.target.value) || 0 } })} />
           </label>
           <label>
             <strong>top_p</strong>
-            <input
-              type="number"
-              step="0.05"
-              value={ai.topP}
-              onChange={(e) => setConfig({ ...config, ai: { ...ai, topP: parseFloat(e.target.value) || 0 } })}
-            />
+            <input type="number" step="0.05" value={ai.topP} onChange={(e) => setConfig({ ...config, ai: { ...ai, topP: parseFloat(e.target.value) || 0 } })} />
           </label>
           <label>
             <strong>Max tokens</strong>
-            <input
-              type="number"
-              value={ai.maxTokens}
-              onChange={(e) => setConfig({ ...config, ai: { ...ai, maxTokens: Number(e.target.value) || 0 } })}
-            />
+            <input type="number" value={ai.maxTokens} onChange={(e) => setConfig({ ...config, ai: { ...ai, maxTokens: Number(e.target.value) || 0 } })} />
           </label>
         </div>
       </Section>
 
       <Section title="Context" description="Overrides the baked system prompt across pipelines.">
-        <textarea
-          className="admin-textarea"
-          value={ai.context}
-          onChange={(e) => setConfig({ ...config, ai: { ...ai, context: e.target.value } })}
-        />
+        <textarea className="admin-textarea" value={ai.context} onChange={(e) => setConfig({ ...config, ai: { ...ai, context: e.target.value } })} />
       </Section>
 
       <Section title="Provider parameters" description="Expose low-level flags (e.g. seedream params)">
-        <EditableKeyValue
-          params={ai.providerParams}
-          onChange={(next) => setConfig({ ...config, ai: { ...ai, providerParams: next } })}
-        />
+        <EditableKeyValue params={ai.providerParams} onChange={(next) => setConfig({ ...config, ai: { ...ai, providerParams: next } })} />
       </Section>
 
       <Section title="Future models" description="Drop replicate snippets for SVG/audio ahead of time.">
-        <textarea
-          className="admin-textarea"
-          value={ai.futureReplicateNotes}
-          onChange={(e) => setConfig({ ...config, ai: { ...ai, futureReplicateNotes: e.target.value } })}
-          placeholder="Copy/paste replicate code blocks"
-        />
+        <textarea className="admin-textarea" value={ai.futureReplicateNotes} onChange={(e) => setConfig({ ...config, ai: { ...ai, futureReplicateNotes: e.target.value } })} placeholder="Copy/paste replicate code blocks" />
       </Section>
     </div>
   );
@@ -493,43 +427,19 @@ function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (ne
         <div className="admin-inline">
           <label>
             <strong>Default free credits</strong>
-            <input
-              type="number"
-              value={pricing.defaultCredits}
-              onChange={(e) =>
-                setConfig({ ...config, pricing: { ...pricing, defaultCredits: Number(e.target.value) || 0 } })
-              }
-            />
+            <input type="number" value={pricing.defaultCredits} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, defaultCredits: Number(e.target.value) || 0 } })} />
           </label>
           <label>
             <strong>Expiration (days)</strong>
-            <input
-              type="number"
-              value={pricing.expirationDays}
-              onChange={(e) =>
-                setConfig({ ...config, pricing: { ...pricing, expirationDays: Number(e.target.value) || 0 } })
-              }
-            />
+            <input type="number" value={pricing.expirationDays} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, expirationDays: Number(e.target.value) || 0 } })} />
           </label>
           <label>
-            <strong>Still cost (Matchas)</strong>
-            <input
-              type="number"
-              value={pricing.imageCost}
-              onChange={(e) =>
-                setConfig({ ...config, pricing: { ...pricing, imageCost: Number(e.target.value) || 0 } })
-              }
-            />
+            <strong>Still cost</strong>
+            <input type="number" value={pricing.imageCost} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, imageCost: Number(e.target.value) || 0 } })} />
           </label>
           <label>
-            <strong>Motion cost (Matchas)</strong>
-            <input
-              type="number"
-              value={pricing.motionCost}
-              onChange={(e) =>
-                setConfig({ ...config, pricing: { ...pricing, motionCost: Number(e.target.value) || 0 } })
-              }
-            />
+            <strong>Motion cost</strong>
+            <input type="number" value={pricing.motionCost} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, motionCost: Number(e.target.value) || 0 } })} />
           </label>
         </div>
       </Section>
@@ -577,19 +487,11 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
                 <input value={preset.name} onChange={(e) => updatePreset(idx, { ...preset, name: e.target.value })} />
               </div>
               <div>
-                <textarea
-                  className="admin-textarea"
-                  value={preset.trainingText}
-                  onChange={(e) => updatePreset(idx, { ...preset, trainingText: e.target.value })}
-                />
+                <textarea className="admin-textarea" value={preset.trainingText} onChange={(e) => updatePreset(idx, { ...preset, trainingText: e.target.value })} />
               </div>
               <div className="admin-thumb-col">
                 {preset.heroImage ? <img src={preset.heroImage} alt="hero" /> : <span>—</span>}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleUpload(e.target.files, (url) => updatePreset(idx, { ...preset, heroImage: url }))}
-                />
+                <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => updatePreset(idx, { ...preset, heroImage: url }))} />
               </div>
               <div>
                 <div className="admin-image-grid">
@@ -610,10 +512,7 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
                 />
               </div>
               <div>
-                <select
-                  value={preset.status}
-                  onChange={(e) => updatePreset(idx, { ...preset, status: e.target.value as AdminStyleAsset["status"] })}
-                >
+                <select value={preset.status} onChange={(e) => updatePreset(idx, { ...preset, status: e.target.value as AdminStyleAsset["status"] })}>
                   <option value="draft">Draft</option>
                   <option value="published">Published</option>
                 </select>
@@ -660,10 +559,7 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
             </label>
             <label>
               <strong>Status</strong>
-              <select
-                value={draftStyle.status}
-                onChange={(e) => setDraftStyle({ ...draftStyle, status: e.target.value as AdminStyleAsset["status"] })}
-              >
+              <select value={draftStyle.status} onChange={(e) => setDraftStyle({ ...draftStyle, status: e.target.value as AdminStyleAsset["status"] })}>
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
               </select>
@@ -672,21 +568,13 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
 
           <label>
             <strong>Training text</strong>
-            <textarea
-              className="admin-textarea"
-              value={draftStyle.trainingText}
-              onChange={(e) => setDraftStyle({ ...draftStyle, trainingText: e.target.value })}
-            />
+            <textarea className="admin-textarea" value={draftStyle.trainingText} onChange={(e) => setDraftStyle({ ...draftStyle, trainingText: e.target.value })} />
           </label>
 
           <div className="admin-inline">
             <div>
               <strong>Hero image</strong>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => handleUpload(e.target.files, (url) => setDraftStyle({ ...draftStyle, heroImage: url }))}
-              />
+              <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => setDraftStyle({ ...draftStyle, heroImage: url }))} />
             </div>
             <div>
               <strong>Gallery</strong>
@@ -695,9 +583,7 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
                 accept="image/*"
                 multiple
                 onChange={(e) =>
-                  handleUpload(e.target.files, (url) =>
-                    setDraftStyle({ ...draftStyle, images: [...draftStyle.images, url].slice(-10) })
-                  )
+                  handleUpload(e.target.files, (url) => setDraftStyle({ ...draftStyle, images: [...draftStyle.images, url].slice(-10) }))
                 }
               />
             </div>
@@ -707,10 +593,7 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
             className="admin-button"
             type="button"
             onClick={() => {
-              setConfig({
-                ...config,
-                styles: { ...styles, presets: [draftStyle, ...styles.presets].slice(0, 20) },
-              });
+              setConfig({ ...config, styles: { ...styles, presets: [draftStyle, ...styles.presets].slice(0, 20) } });
               setDraftStyle({ id: String(Date.now()), name: "Untitled", images: [], trainingText: "", status: "draft" });
             }}
           >
@@ -722,358 +605,11 @@ function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
   );
 }
 
-function GenerationsTab({
-  records,
-  loading,
-  error,
-  onRefresh,
-}: {
-  records: LiveGeneration[];
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}) {
-  const [page, setPage] = useState(0);
-  const pageSize = 28;
-
-  const [filters, setFilters] = useState({ status: "", model: "", query: "" });
-
-  const filtered = useMemo(() => {
-    return records.filter((r) => {
-      const matchStatus = !filters.status || r.status === filters.status;
-      const matchModel = !filters.model || r.model === filters.model;
-      const matchQuery = !filters.query || `${r.prompt} ${r.user}`.toLowerCase().includes(filters.query.toLowerCase());
-      return matchStatus && matchModel && matchQuery;
-    });
-  }, [records, filters]);
-
-  const visible = filtered.slice(page * pageSize, (page + 1) * pageSize);
-  const [selected, setSelected] = useState<LiveGeneration | null>(null);
-
-  useEffect(() => {
-    if (selected && !filtered.find((x) => x.id === selected.id)) setSelected(null);
-  }, [filtered, selected]);
-
-  useEffect(() => {
-    setPage(0);
-  }, [filters.status, filters.model, filters.query]);
-
-  return (
-    <div className="admin-grid admin-split">
-      <Section title="Generations" description="Live data from Supabase (not stored in config).">
-        <div className="admin-inline">
-          <input
-            placeholder="Search prompt/user"
-            value={filters.query}
-            onChange={(e) => setFilters((p) => ({ ...p, query: e.target.value }))}
-          />
-          <input
-            placeholder="Model"
-            value={filters.model}
-            onChange={(e) => setFilters((p) => ({ ...p, model: e.target.value }))}
-          />
-          <input
-            placeholder="Status"
-            value={filters.status}
-            onChange={(e) => setFilters((p) => ({ ...p, status: e.target.value }))}
-          />
-          <button className="admin-button ghost" type="button" onClick={() => setFilters({ status: "", model: "", query: "" })}>
-            Clear filters
-          </button>
-          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        {error && (
-          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
-            <strong>Generations load error:</strong> {error}
-            <div style={{ marginTop: 6, color: "#333" }}>
-              This usually means: wrong table name OR RLS blocks access for your admin user.
-            </div>
-          </div>
-        )}
-
-        {!error && !loading && records.length === 0 && (
-          <div style={{ padding: 12, marginTop: 10 }} className="admin-muted">
-            No generations found (table exists but empty).
-          </div>
-        )}
-
-        <div className="admin-grid-gallery">
-          {visible.map((g) => (
-            <button
-              key={g.id}
-              className={`admin-grid-card ${selected?.id === g.id ? "active" : ""}`}
-              onClick={() => setSelected(g)}
-            >
-              {g.url ? (
-                <img src={g.url} alt={g.prompt} loading="lazy" />
-              ) : (
-                <div className="admin-placeholder">no image</div>
-              )}
-              <div className="admin-grid-meta">
-                <div className="admin-grid-prompt">{g.prompt || <span className="admin-muted">no prompt</span>}</div>
-                <div className="admin-grid-sub">{g.model || <span className="admin-muted">no model</span>}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        <div className="admin-pagination">
-          <span>
-            Page {page + 1} / {Math.max(1, Math.ceil(filtered.length / pageSize))} —{" "}
-            <strong>{filtered.length}</strong> result(s)
-          </span>
-          <div>
-            <button className="admin-button ghost" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-              Prev
-            </button>
-            <button
-              className="admin-button ghost"
-              disabled={(page + 1) * pageSize >= filtered.length}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Details" description="Metadata surface">
-        {selected ? (
-          <div className="admin-detail">
-            <div className="admin-detail-row">
-              <strong>Prompt</strong>
-              <span>{selected.prompt}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>User</strong>
-              <span>{selected.user}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Model</strong>
-              <span>{selected.model}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Status</strong>
-              <span>{selected.status}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Cost</strong>
-              <span>{selected.cost ?? "—"}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Liked</strong>
-              <span>{selected.liked === null ? "—" : selected.liked ? "Yes" : "No"}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Created</strong>
-              <span>{selected.createdAt}</span>
-            </div>
-            <div className="admin-detail-row">
-              <strong>Params</strong>
-              <pre style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(selected.params ?? {}, null, 2)}</pre>
-            </div>
-          </div>
-        ) : (
-          <p className="admin-muted">Select a generation to inspect.</p>
-        )}
-      </Section>
-    </div>
-  );
-}
-
-function ClientsTab({
-  clients,
-  loading,
-  error,
-  onRefresh,
-}: {
-  clients: LiveClient[];
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}) {
-  const [local, setLocal] = useState<LiveClient[]>([]);
-  const [dirty, setDirty] = useState(false);
-
-  useEffect(() => {
-    setLocal(clients);
-    setDirty(false);
-  }, [clients]);
-
-  const updateRow = (idx: number, next: LiveClient) => {
-    const copy = [...local];
-    copy[idx] = next;
-    setLocal(copy);
-    setDirty(true);
-  };
-
-  const saveEditsToSupabase = async () => {
-    // This does a best-effort update to common table candidates.
-    // If your RLS blocks it, you'll see an error.
-    const candidates = ["profiles", "clients", "mina_clients", "user_profiles"];
-
-    // try detect original table by checking a working select of 1 row.
-    let table = "";
-    try {
-      const found = await trySelectFirstWorkingTable(candidates, "*", { limit: 1 });
-      table = found.table;
-    } catch (e: any) {
-      alert(`Cannot detect clients table: ${e?.message ?? "unknown"}`);
-      return;
-    }
-
-    // Build payloads (try common columns)
-    const payloads = local.map((c) => ({
-      // primary key possibilities
-      id: c.id,
-      user_id: c.id,
-      email: c.email,
-      credits: c.credits,
-      expires_at: c.expiresAt ?? null,
-      disabled: c.disabled ?? false,
-      last_active: c.lastActive ?? null,
-      updated_at: new Date().toISOString(),
-    }));
-
-    // We do upsert to be robust (if row doesn't exist yet).
-    const { error } = await supabase.from(table).upsert(payloads as any, { onConflict: "id" });
-
-    if (error) {
-      alert(`Save clients failed: ${error.message}`);
-      return;
-    }
-
-    setDirty(false);
-    alert("Clients saved ✅");
-    onRefresh();
-  };
-
-  return (
-    <div className="admin-grid">
-      <Section title="Clients" description="Live data from Supabase (edit credits/disable).">
-        <div className="admin-inline">
-          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
-          <button className="admin-button" type="button" onClick={saveEditsToSupabase} disabled={!dirty}>
-            Save clients edits
-          </button>
-          {dirty && <span className="admin-muted">You have unsaved changes.</span>}
-        </div>
-
-        {error && (
-          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
-            <strong>Clients load error:</strong> {error}
-            <div style={{ marginTop: 6, color: "#333" }}>
-              This usually means: wrong table name OR RLS blocks access for your admin user.
-            </div>
-          </div>
-        )}
-
-        <Table headers={["Client", "Credits", "Expires", "Last active", "Status", "Actions"]}>
-          {local.map((c, idx) => (
-            <div className="admin-table-row" key={c.id}>
-              <div>{c.email}</div>
-              <div>
-                <input
-                  type="number"
-                  value={c.credits}
-                  onChange={(e) => updateRow(idx, { ...c, credits: Number(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <input
-                  type="date"
-                  value={(c.expiresAt || "").slice(0, 10)}
-                  onChange={(e) => updateRow(idx, { ...c, expiresAt: e.target.value || null })}
-                />
-              </div>
-              <div>{c.lastActive || "—"}</div>
-              <div>{c.disabled ? "Disabled" : "Active"}</div>
-              <div className="admin-row-actions">
-                <button
-                  className="admin-button ghost"
-                  onClick={() => updateRow(idx, { ...c, disabled: !c.disabled })}
-                >
-                  {c.disabled ? "Enable" : "Disable"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </Table>
-
-        {!error && !loading && clients.length === 0 && (
-          <div style={{ padding: 12 }} className="admin-muted">
-            No clients found (table exists but empty).
-          </div>
-        )}
-      </Section>
-    </div>
-  );
-}
-
-function LogsTab({ config }: { config: AdminConfig }) {
-  const [filter, setFilter] = useState<string>("");
-
-  return (
-    <div className="admin-grid">
-      <Section title="Logs (local)" description="This tab is local-only for now.">
-        <div className="admin-inline">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">All</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
-          </select>
-          <button
-            className="admin-button ghost"
-            onClick={() => navigator.clipboard?.writeText(JSON.stringify(config.logs, null, 2))}
-          >
-            Copy JSON
-          </button>
-        </div>
-        <div className="admin-log-shell">
-          {config.logs
-            .filter((l) => !filter || l.level === filter)
-            .slice(-300)
-            .reverse()
-            .map((log) => (
-              <div key={log.id} className={`admin-log-row level-${log.level}`}>
-                <div className="admin-log-meta">
-                  <span>{log.level.toUpperCase()}</span>
-                  <span>{log.at}</span>
-                  <span>{log.source}</span>
-                </div>
-                <div>{log.message}</div>
-              </div>
-            ))}
-        </div>
-      </Section>
-    </div>
-  );
-}
-
 function ArchitectureTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
   return (
     <div className="admin-grid">
       <Section title="Architecture map" description="Editable description of the pipeline">
-        <textarea
-          className="admin-textarea"
-          value={config.architecture}
-          onChange={(e) => setConfig({ ...config, architecture: e.target.value })}
-        />
-        <ol className="admin-steps">
-          {config.architecture
-            .split(/\n|\d\)/)
-            .map((s) => s.trim())
-            .filter(Boolean)
-            .map((line, idx) => (
-              <li key={`${line}-${idx}`}>{line}</li>
-            ))}
-        </ol>
+        <textarea className="admin-textarea" value={config.architecture} onChange={(e) => setConfig({ ...config, architecture: e.target.value })} />
       </Section>
     </div>
   );
@@ -1101,24 +637,15 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
         <div className="admin-inline">
           <label>
             <strong>Primary color</strong>
-            <input
-              value={assets.primaryColor}
-              onChange={(e) => setConfig({ ...config, assets: { ...assets, primaryColor: e.target.value } })}
-            />
+            <input value={assets.primaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, primaryColor: e.target.value } })} />
           </label>
           <label>
             <strong>Secondary color</strong>
-            <input
-              value={assets.secondaryColor}
-              onChange={(e) => setConfig({ ...config, assets: { ...assets, secondaryColor: e.target.value } })}
-            />
+            <input value={assets.secondaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, secondaryColor: e.target.value } })} />
           </label>
           <label>
             <strong>Font</strong>
-            <input
-              value={assets.fontFamily}
-              onChange={(e) => setConfig({ ...config, assets: { ...assets, fontFamily: e.target.value } })}
-            />
+            <input value={assets.fontFamily} onChange={(e) => setConfig({ ...config, assets: { ...assets, fontFamily: e.target.value } })} />
           </label>
         </div>
 
@@ -1126,11 +653,7 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
           <div>
             <strong>Logo</strong>
             {assets.logo && <img className="admin-logo" src={assets.logo} alt="logo" />}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => handleUpload(e.target.files, (url) => setConfig({ ...config, assets: { ...assets, logo: url } }))}
-            />
+            <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => setConfig({ ...config, assets: { ...assets, logo: url } }))} />
           </div>
 
           <div>
@@ -1144,10 +667,7 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
                     ...config,
                     assets: {
                       ...assets,
-                      otherAssets: [
-                        ...assets.otherAssets,
-                        { id: String(Date.now()), name: `asset-${assets.otherAssets.length + 1}`, url },
-                      ],
+                      otherAssets: [...assets.otherAssets, { id: String(Date.now()), name: `asset-${assets.otherAssets.length + 1}`, url }],
                     },
                   })
                 )
@@ -1169,6 +689,509 @@ function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (nex
 }
 
 /* -----------------------------
+   Generic RAW Viewer
+------------------------------ */
+
+function RawViewer({ row }: { row: any }) {
+  const url = extractLikelyImageUrl(row);
+  const highlights = highlightTraceFields(row);
+
+  return (
+    <div className="admin-detail">
+      {url && (
+        <div style={{ marginBottom: 12 }}>
+          <strong>Preview</strong>
+          <div style={{ marginTop: 8 }}>
+            <img src={url} alt="output" style={{ maxWidth: "100%", borderRadius: 12 }} />
+          </div>
+        </div>
+      )}
+
+      {highlights.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <strong>Important fields (auto-detected)</strong>
+          <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            {highlights.map((k) => (
+              <div key={k} style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>{k}</div>
+                <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{safeJson(row?.[k])}</pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <details>
+        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Raw JSON (everything)</summary>
+        <pre style={{ whiteSpace: "pre-wrap" }}>{safeJson(row)}</pre>
+      </details>
+    </div>
+  );
+}
+
+/* -----------------------------
+   Live Data Tabs
+------------------------------ */
+
+type LiveRow = { id: string; label: string; createdAt?: string; raw: any };
+
+async function loadTable(table: string, limit = 500, orderCol = "created_at") {
+  // order may fail if column doesn't exist; we fallback to no ordering
+  const attempt = await supabase.from(table).select("*").order(orderCol, { ascending: false }).limit(limit);
+  if (!attempt.error) return attempt.data ?? [];
+
+  const fallback = await supabase.from(table).select("*").limit(limit);
+  if (fallback.error) throw new Error(fallback.error.message);
+  return fallback.data ?? [];
+}
+
+function makeRowsFromAny(table: string, rows: any[]): LiveRow[] {
+  return rows.map((r, idx) => {
+    const id =
+      pickString(r, ["id", "uuid", "generation_id", "session_id", "tx_id"], "") ||
+      pickString(r, ["user_id", "customer_id", "shopify_customer_id", "email"], "") ||
+      `${table}-${idx}`;
+
+    const createdAt = pickString(r, ["created_at", "inserted_at", "at", "timestamp"], "");
+
+    const label =
+      pickString(r, ["email", "user_email"], "") ||
+      pickString(r, ["shopify_customer_id", "customer_id"], "") ||
+      pickString(r, ["user_id"], "") ||
+      pickString(r, ["status"], "") ||
+      id;
+
+    return { id, label, createdAt: createdAt || undefined, raw: r };
+  });
+}
+
+function LiveTableTab({
+  title,
+  description,
+  rows,
+  loading,
+  error,
+  onRefresh,
+  filterLabel,
+}: {
+  title: string;
+  description: string;
+  rows: LiveRow[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  filterLabel?: React.ReactNode;
+}) {
+  const [selected, setSelected] = useState<LiveRow | null>(null);
+
+  useEffect(() => {
+    if (selected && !rows.find((x) => x.id === selected.id)) setSelected(null);
+  }, [rows, selected]);
+
+  return (
+    <div className="admin-grid admin-split">
+      <Section title={title} description={description}>
+        <div className="admin-inline">
+          {filterLabel}
+          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button
+            className="admin-button ghost"
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(JSON.stringify(rows.map((r) => r.raw), null, 2))}
+          >
+            Copy JSON
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>Load error:</strong> {error}
+            <div style={{ marginTop: 6, color: "#333" }}>
+              Usually: wrong table name, missing columns in order(), or RLS blocked your admin.
+            </div>
+          </div>
+        )}
+
+        {!error && !loading && rows.length === 0 && <div className="admin-muted" style={{ padding: 12 }}>No rows found.</div>}
+
+        <div className="admin-grid-gallery">
+          {rows.slice(0, 250).map((r) => {
+            const url = extractLikelyImageUrl(r.raw);
+            return (
+              <button
+                key={r.id}
+                className={`admin-grid-card ${selected?.id === r.id ? "active" : ""}`}
+                onClick={() => setSelected(r)}
+              >
+                {url ? <img src={url} alt={r.label} loading="lazy" /> : <div className="admin-placeholder">no preview</div>}
+                <div className="admin-grid-meta">
+                  <div className="admin-grid-prompt">{r.label || <span className="admin-muted">—</span>}</div>
+                  <div className="admin-grid-sub">{r.createdAt || "—"}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      <Section title="Details" description="Everything stored for this row">
+        {selected ? <RawViewer row={selected.raw} /> : <p className="admin-muted">Select a row to inspect.</p>}
+      </Section>
+    </div>
+  );
+}
+
+/* -----------------------------
+   Customers (editable credits + show payments)
+------------------------------ */
+
+type CustomerRow = {
+  pkCol: string;
+  pkVal: string;
+  email: string;
+  userId: string | null;
+  shopifyCustomerId: string | null;
+  credits: number;
+  expiresAt: string | null;
+  lastActive: string | null;
+  raw: any;
+};
+
+function normalizeCustomers(rows: any[]): CustomerRow[] {
+  return rows.map((r) => {
+    const userId = pickString(r, ["user_id", "uid"], "") || null;
+    const shopifyCustomerId = pickString(r, ["shopify_customer_id", "shopify_id", "customer_id"], "") || null;
+    const email = pickString(r, ["email", "user_email"], "") || (shopifyCustomerId?.includes("@") ? shopifyCustomerId : "(no email)");
+
+    const credits = pickNumber(r, ["credits", "credit", "balance"], 0);
+    const expiresAt = pickString(r, ["expires_at", "expiresAt"], "") || null;
+    const lastActive = pickString(r, ["last_active", "lastActive", "updated_at"], "") || null;
+
+    // pick best PK
+    let pkCol = "shopify_customer_id";
+    let pkVal = shopifyCustomerId || email;
+
+    if (userId) {
+      pkCol = "user_id";
+      pkVal = userId;
+    } else if (pickString(r, ["id"], "")) {
+      pkCol = "id";
+      pkVal = String(r.id);
+    } else if (shopifyCustomerId) {
+      pkCol = "shopify_customer_id";
+      pkVal = shopifyCustomerId;
+    } else if (email) {
+      pkCol = "email";
+      pkVal = email;
+    }
+
+    return { pkCol, pkVal, email, userId, shopifyCustomerId, credits, expiresAt, lastActive, raw: r };
+  });
+}
+
+async function updateCustomerCreditsAndExpiry(opts: {
+  table: string;
+  customer: CustomerRow;
+  nextCredits: number;
+  nextExpiresAt: string | null;
+  note?: string;
+}) {
+  const { table, customer, nextCredits, nextExpiresAt, note } = opts;
+
+  // build update patch only for existing cols
+  const patch: any = {};
+  const creditCol = pickFirstKey(customer.raw, ["credits", "credit", "balance"]) || "credits";
+  patch[creditCol] = nextCredits;
+
+  if (pickFirstKey(customer.raw, ["expires_at", "expiresAt"])) {
+    patch[pickFirstKey(customer.raw, ["expires_at", "expiresAt"]) as string] = nextExpiresAt;
+  } else if (nextExpiresAt !== null) {
+    // optional: only set if exists
+  }
+
+  // update customer
+  const q = supabase.from(table).update(patch).eq(customer.pkCol, customer.pkVal);
+  const { error } = await q;
+  if (error) throw new Error(error.message);
+
+  // OPTIONAL audit in credit_transactions if table/cols exist
+  // (best effort — it’s okay if it fails)
+  try {
+    const delta = nextCredits - customer.credits;
+    if (delta !== 0) {
+      const { data: u } = await supabase.auth.getUser();
+      const adminUid = u.user?.id ?? null;
+
+      const tx: any = {
+        created_at: new Date().toISOString(),
+        type: "admin_adjust",
+        delta,
+        note: note || "admin adjust",
+      };
+
+      // attach identifiers if present
+      if (customer.userId) tx.user_id = customer.userId;
+      if (customer.shopifyCustomerId) tx.shopify_customer_id = customer.shopifyCustomerId;
+      if (customer.email && customer.email.includes("@")) tx.email = customer.email;
+      if (adminUid) tx.created_by = adminUid;
+
+      await supabase.from("credit_transactions").insert(tx);
+    }
+  } catch {
+    // ignore audit failure
+  }
+}
+
+async function loadTransactionsForCustomer(customer: CustomerRow) {
+  // Fetch latest 300 transactions then filter in JS (works across schema differences)
+  const rows = await loadTable("credit_transactions", 300, "created_at");
+  const raw = rows as any[];
+
+  const match = (r: any) => {
+    const email = pickString(r, ["email", "user_email"], "");
+    const userId = pickString(r, ["user_id", "uid"], "");
+    const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "");
+    return (
+      (customer.userId && userId === customer.userId) ||
+      (customer.shopifyCustomerId && shopify === customer.shopifyCustomerId) ||
+      (customer.email && email && email.toLowerCase() === customer.email.toLowerCase())
+    );
+  };
+
+  return raw.filter(match);
+}
+
+function CustomersTab({
+  customers,
+  loading,
+  error,
+  onRefresh,
+  customersTable,
+}: {
+  customers: CustomerRow[];
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  customersTable: string;
+}) {
+  const [selected, setSelected] = useState<CustomerRow | null>(null);
+  const [local, setLocal] = useState<CustomerRow[]>([]);
+  const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const [txRows, setTxRows] = useState<any[] | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
+
+  useEffect(() => {
+    setLocal(customers);
+    setDirtyMap({});
+  }, [customers]);
+
+  useEffect(() => {
+    setTxRows(null);
+    if (!selected) return;
+    setTxLoading(true);
+    void (async () => {
+      try {
+        const rows = await loadTransactionsForCustomer(selected);
+        setTxRows(rows);
+      } catch {
+        setTxRows([]);
+      } finally {
+        setTxLoading(false);
+      }
+    })();
+  }, [selected?.pkCol, selected?.pkVal]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateRow = (idx: number, next: CustomerRow) => {
+    const copy = [...local];
+    copy[idx] = next;
+    setLocal(copy);
+    setDirtyMap((m) => ({ ...m, [next.pkCol + ":" + next.pkVal]: true }));
+  };
+
+  const anyDirty = Object.values(dirtyMap).some(Boolean);
+
+  const saveAll = async () => {
+    setSaving(true);
+    try {
+      for (const c of local) {
+        const key = c.pkCol + ":" + c.pkVal;
+        if (!dirtyMap[key]) continue;
+        // eslint-disable-next-line no-await-in-loop
+        await updateCustomerCreditsAndExpiry({
+          table: customersTable,
+          customer: customers.find((x) => x.pkCol === c.pkCol && x.pkVal === c.pkVal) || c,
+          nextCredits: c.credits,
+          nextExpiresAt: c.expiresAt,
+          note: "admin dashboard edit",
+        });
+      }
+      alert("Customers saved ✅");
+      setDirtyMap({});
+      onRefresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const totalPaid = useMemo(() => {
+    if (!txRows) return null;
+
+    // Heuristic: try multiple columns
+    const sum = txRows.reduce((acc, r) => {
+      const amt =
+        pickNumber(r, ["amount_cents", "amount", "paid_amount", "price_cents", "usd_cents"], 0) || 0;
+      // only count purchases if we can detect
+      const type = pickString(r, ["type", "kind", "source"], "").toLowerCase();
+      const isPurchase = !type || type.includes("purchase") || type.includes("stripe") || type.includes("payment");
+      return acc + (isPurchase ? amt : 0);
+    }, 0);
+
+    const currency = pickString(txRows[0], ["currency"], "usd") || "usd";
+    return formatMoneyMaybeCents(sum, currency);
+  }, [txRows]);
+
+  return (
+    <div className="admin-grid admin-split">
+      <Section title="Customers" description={`Live data from Supabase table "${customersTable}" (edit credits).`}>
+        <div className="admin-inline">
+          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+          <button className="admin-button" type="button" onClick={saveAll} disabled={!anyDirty || saving}>
+            {saving ? "Saving..." : "Save edits"}
+          </button>
+          {anyDirty && <span className="admin-muted">Unsaved changes.</span>}
+        </div>
+
+        {error && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>Customers load error:</strong> {error}
+          </div>
+        )}
+
+        <Table headers={["Email / ID", "Credits", "Expires", "Last active", "Pick"]}>
+          {local.map((c, idx) => (
+            <div className="admin-table-row" key={`${c.pkCol}:${c.pkVal}`}>
+              <div style={{ display: "grid" }}>
+                <div style={{ fontWeight: 700 }}>{c.email}</div>
+                <div className="admin-muted" style={{ fontSize: 12 }}>
+                  {c.userId ? `user_id: ${c.userId}` : c.shopifyCustomerId ? `shopify: ${c.shopifyCustomerId}` : `${c.pkCol}: ${c.pkVal}`}
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="number"
+                  value={c.credits}
+                  onChange={(e) => updateRow(idx, { ...c, credits: Number(e.target.value) || 0 })}
+                />
+              </div>
+
+              <div>
+                <input
+                  type="date"
+                  value={(c.expiresAt || "").slice(0, 10)}
+                  onChange={(e) => updateRow(idx, { ...c, expiresAt: e.target.value || null })}
+                />
+              </div>
+
+              <div>{c.lastActive || "—"}</div>
+
+              <div>
+                <button className="admin-button ghost" type="button" onClick={() => setSelected(c)}>
+                  View
+                </button>
+              </div>
+            </div>
+          ))}
+        </Table>
+      </Section>
+
+      <Section title="Customer details" description="Raw data + recent transactions">
+        {selected ? (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 800 }}>{selected.email}</div>
+              <div className="admin-muted" style={{ fontSize: 12 }}>
+                {selected.userId ? `user_id: ${selected.userId}` : `${selected.pkCol}: ${selected.pkVal}`}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
+              <strong>Payments / Purchases (heuristic)</strong>
+              <div style={{ marginTop: 8 }}>
+                {txLoading ? "Loading..." : txRows ? <>Total paid (from latest 300 tx): <strong>{totalPaid ?? "—"}</strong></> : "—"}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <strong>Recent credit transactions</strong>
+              {txLoading ? (
+                <div className="admin-muted" style={{ marginTop: 8 }}>Loading...</div>
+              ) : (
+                <pre style={{ whiteSpace: "pre-wrap" }}>{safeJson(txRows ?? [])}</pre>
+              )}
+            </div>
+
+            <RawViewer row={selected.raw} />
+          </>
+        ) : (
+          <p className="admin-muted">Select a customer.</p>
+        )}
+      </Section>
+    </div>
+  );
+}
+
+/* -----------------------------
+   Logs tab (same idea)
+------------------------------ */
+
+function LogsTab({ config }: { config: AdminConfig }) {
+  const [filter, setFilter] = useState<string>("");
+
+  return (
+    <div className="admin-grid">
+      <Section title="Logs (local)" description="Local logs stored in config (if you keep them).">
+        <div className="admin-inline">
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="">All</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+          </select>
+          <button className="admin-button ghost" onClick={() => navigator.clipboard?.writeText(JSON.stringify(config.logs, null, 2))}>
+            Copy JSON
+          </button>
+        </div>
+
+        <div className="admin-log-shell">
+          {config.logs
+            .filter((l) => !filter || l.level === filter)
+            .slice(-300)
+            .reverse()
+            .map((log) => (
+              <div key={log.id} className={`admin-log-row level-${log.level}`}>
+                <div className="admin-log-meta">
+                  <span>{log.level.toUpperCase()}</span>
+                  <span>{log.at}</span>
+                  <span>{log.source}</span>
+                </div>
+                <div>{log.message}</div>
+              </div>
+            ))}
+        </div>
+      </Section>
+    </div>
+  );
+}
+
+/* -----------------------------
    MAIN
 ------------------------------ */
 
@@ -1176,18 +1199,32 @@ export default function AdminDashboard() {
   const allowed = useAdminGuard();
   const { config, updateConfig, loading, error } = useAdminConfigState();
   const [draft, setDraft] = useState<AdminConfig | null>(null);
-  const [tab, setTab] = useState<TabKey>("ai");
+  const [tab, setTab] = useState<TabKey>("customers");
 
-  // Live data state
-  const [clients, setClients] = useState<LiveClient[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-  const [clientsError, setClientsError] = useState<string | null>(null);
-  const [clientsTable, setClientsTable] = useState<string>("");
+  // live state
+  const [customersTable] = useState("customers");
+  const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(false);
+  const [customersError, setCustomersError] = useState<string | null>(null);
 
-  const [generations, setGenerations] = useState<LiveGeneration[]>([]);
-  const [gensLoading, setGensLoading] = useState(false);
-  const [gensError, setGensError] = useState<string | null>(null);
-  const [gensTable, setGensTable] = useState<string>("");
+  const [generations, setGenerations] = useState<LiveRow[]>([]);
+  const [generationsLoading, setGenerationsLoading] = useState(false);
+  const [generationsError, setGenerationsError] = useState<string | null>(null);
+
+  const [transactions, setTransactions] = useState<LiveRow[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [transactionsError, setTransactionsError] = useState<string | null>(null);
+
+  const [sessions, setSessions] = useState<LiveRow[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  const [feedback, setFeedback] = useState<LiveRow[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  // filters
+  const [userFilter, setUserFilter] = useState<string>("");
 
   const firstLoadRef = useRef(false);
 
@@ -1195,59 +1232,145 @@ export default function AdminDashboard() {
     if (!loading) setDraft(config);
   }, [loading, config]);
 
-  const refreshClients = async () => {
-    setClientsLoading(true);
-    setClientsError(null);
+  const refreshCustomers = async () => {
+    setCustomersLoading(true);
+    setCustomersError(null);
     try {
-      // candidates for "users" table
-      const candidates = ["profiles", "clients", "mina_clients", "user_profiles", "users_profile"];
-      // select common fields (we try "*" to avoid "column not found" issues across schemas)
-      const result = await trySelectFirstWorkingTable(candidates, "*", {
-        limit: 500,
-        orderBy: { col: "updated_at", asc: false },
-      });
-      setClientsTable(result.table);
-      setClients(normalizeClients(result.rows));
+      let rows = await loadTable("customers", 800, "updated_at");
+      // filter client-side (works even if schema is inconsistent)
+      const f = userFilter.trim().toLowerCase();
+      if (f) {
+        rows = (rows as any[]).filter((r) => {
+          const email = pickString(r, ["email", "user_email", "shopify_customer_id"], "").toLowerCase();
+          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
+          const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
+          return email.includes(f) || userId === f || shopify.includes(f) || String(r?.id ?? "").toLowerCase() === f;
+        });
+      }
+      setCustomers(normalizeCustomers(rows as any[]));
     } catch (e: any) {
-      setClientsError(e?.message ?? "Failed to load clients");
-      setClients([]);
-      setClientsTable("");
+      setCustomersError(e?.message ?? "Failed to load customers");
+      setCustomers([]);
     } finally {
-      setClientsLoading(false);
+      setCustomersLoading(false);
     }
   };
 
   const refreshGenerations = async () => {
-    setGensLoading(true);
-    setGensError(null);
+    setGenerationsLoading(true);
+    setGenerationsError(null);
     try {
-      // candidates for generations table
-      const candidates = ["generations", "mina_generations", "image_generations", "ai_generations", "runs"];
-      const result = await trySelectFirstWorkingTable(candidates, "*", {
-        limit: 800,
-        orderBy: { col: "created_at", asc: false },
-      });
-      setGensTable(result.table);
-      setGenerations(normalizeGenerations(result.rows));
+      let rows = await loadTable("generations", 900, "created_at");
+      const f = userFilter.trim().toLowerCase();
+      if (f) {
+        rows = (rows as any[]).filter((r) => {
+          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
+          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
+          const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
+          const prompt = pickString(r, ["prompt", "input_prompt", "caption", "text"], "").toLowerCase();
+          return email.includes(f) || userId === f || shopify.includes(f) || prompt.includes(f);
+        });
+      }
+      setGenerations(makeRowsFromAny("generations", rows as any[]));
     } catch (e: any) {
-      setGensError(e?.message ?? "Failed to load generations");
+      setGenerationsError(e?.message ?? "Failed to load generations");
       setGenerations([]);
-      setGensTable("");
     } finally {
-      setGensLoading(false);
+      setGenerationsLoading(false);
     }
   };
 
-  // Auto load live tables once admin is allowed (so tab isn't empty)
+  const refreshTransactions = async () => {
+    setTransactionsLoading(true);
+    setTransactionsError(null);
+    try {
+      let rows = await loadTable("credit_transactions", 900, "created_at");
+      const f = userFilter.trim().toLowerCase();
+      if (f) {
+        rows = (rows as any[]).filter((r) => {
+          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
+          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
+          const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
+          const type = pickString(r, ["type", "kind", "source"], "").toLowerCase();
+          return email.includes(f) || userId === f || shopify.includes(f) || type.includes(f);
+        });
+      }
+      setTransactions(makeRowsFromAny("credit_transactions", rows as any[]));
+    } catch (e: any) {
+      setTransactionsError(e?.message ?? "Failed to load credit_transactions");
+      setTransactions([]);
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
+  const refreshSessions = async () => {
+    setSessionsLoading(true);
+    setSessionsError(null);
+    try {
+      let rows = await loadTable("sessions", 800, "created_at");
+      const f = userFilter.trim().toLowerCase();
+      if (f) {
+        rows = (rows as any[]).filter((r) => {
+          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
+          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
+          const customer = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
+          return email.includes(f) || userId === f || customer.includes(f);
+        });
+      }
+      setSessions(makeRowsFromAny("sessions", rows as any[]));
+    } catch (e: any) {
+      setSessionsError(e?.message ?? "Failed to load sessions");
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const refreshFeedback = async () => {
+    setFeedbackLoading(true);
+    setFeedbackError(null);
+    try {
+      let rows = await loadTable("feedback", 800, "created_at");
+      const f = userFilter.trim().toLowerCase();
+      if (f) {
+        rows = (rows as any[]).filter((r) => {
+          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
+          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
+          const genId = pickString(r, ["generation_id", "gen_id"], "").toLowerCase();
+          return email.includes(f) || userId === f || genId.includes(f);
+        });
+      }
+      setFeedback(makeRowsFromAny("feedback", rows as any[]));
+    } catch (e: any) {
+      setFeedbackError(e?.message ?? "Failed to load feedback");
+      setFeedback([]);
+    } finally {
+      setFeedbackLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (allowed !== true) return;
     if (firstLoadRef.current) return;
     firstLoadRef.current = true;
 
-    void refreshClients();
+    void refreshCustomers();
     void refreshGenerations();
+    void refreshTransactions();
+    void refreshSessions();
+    void refreshFeedback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed]);
+
+  // refresh on filter apply (manual button only; avoids spamming)
+  const applyFilter = () => {
+    void refreshCustomers();
+    void refreshGenerations();
+    void refreshTransactions();
+    void refreshSessions();
+    void refreshFeedback();
+  };
 
   if (allowed === null || loading || !draft) return <div style={{ padding: 24 }}>Loading admin…</div>;
   if (allowed === false) return null;
@@ -1256,21 +1379,8 @@ export default function AdminDashboard() {
 
   const handleSave = async () => {
     try {
-      /**
-       * IMPORTANT:
-       * We DO NOT want to store live clients/generations inside config table.
-       * So we save a "clean" config payload.
-       */
-      const clean: AdminConfig = {
-        ...draft,
-        // optional: keep logs local; if your AdminConfig includes logs, keep as-is or empty
-        // @ts-ignore
-        clients: Array.isArray((draft as any).clients) ? (draft as any).clients : [],
-        // @ts-ignore
-        generations: (draft as any).generations ? { ...(draft as any).generations, records: [] } : (draft as any).generations,
-      };
-
-      await updateConfig(clean);
+      // Keep config clean (do not embed live tables)
+      await updateConfig(draft);
       alert("Saved ✅");
     } catch (e: any) {
       alert(e?.message ?? "Save failed");
@@ -1280,14 +1390,42 @@ export default function AdminDashboard() {
   const rightStatus = (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
       <span className="admin-muted" style={{ fontSize: 12 }}>
-        Clients: <strong>{clients.length}</strong>
-        {clientsTable ? <span> ({clientsTable})</span> : ""}
+        Customers: <strong>{customers.length}</strong>
       </span>
       <span className="admin-muted" style={{ fontSize: 12 }}>
         Generations: <strong>{generations.length}</strong>
-        {gensTable ? <span> ({gensTable})</span> : ""}
+      </span>
+      <span className="admin-muted" style={{ fontSize: 12 }}>
+        Tx: <strong>{transactions.length}</strong>
+      </span>
+      <span className="admin-muted" style={{ fontSize: 12 }}>
+        Sessions: <strong>{sessions.length}</strong>
       </span>
     </div>
+  );
+
+  const filterBar = (
+    <>
+      <input
+        placeholder="Filter by email / user_id / customer_id / prompt…"
+        value={userFilter}
+        onChange={(e) => setUserFilter(e.target.value)}
+        style={{ minWidth: 340 }}
+      />
+      <button className="admin-button ghost" type="button" onClick={applyFilter}>
+        Apply filter
+      </button>
+      <button
+        className="admin-button ghost"
+        type="button"
+        onClick={() => {
+          setUserFilter("");
+          setTimeout(() => applyFilter(), 0);
+        }}
+      >
+        Clear
+      </button>
+    </>
   );
 
   return (
@@ -1301,35 +1439,74 @@ export default function AdminDashboard() {
         {tab === "ai" && <AISettingsTab config={draft} setConfig={setConfig} />}
         {tab === "pricing" && <PricingTab config={draft} setConfig={setConfig} />}
         {tab === "styles" && <StylesTab config={draft} setConfig={setConfig} />}
+        {tab === "assets" && <AssetsTab config={draft} setConfig={setConfig} />}
+        {tab === "architecture" && <ArchitectureTab config={draft} setConfig={setConfig} />}
 
-        {tab === "generations" && (
-          <GenerationsTab
-            records={generations}
-            loading={gensLoading}
-            error={gensError}
-            onRefresh={() => void refreshGenerations()}
+        {tab === "customers" && (
+          <CustomersTab
+            customers={customers}
+            loading={customersLoading}
+            error={customersError}
+            onRefresh={() => void refreshCustomers()}
+            customersTable={customersTable}
           />
         )}
 
-        {tab === "clients" && (
-          <ClientsTab
-            clients={clients}
-            loading={clientsLoading}
-            error={clientsError}
-            onRefresh={() => void refreshClients()}
+        {tab === "generations" && (
+          <LiveTableTab
+            title="Generations"
+            description="Shows ALL stored columns. If you want GPT input/output + seedream input visible, your backend must store it in this row (columns or JSON)."
+            rows={generations}
+            loading={generationsLoading}
+            error={generationsError}
+            onRefresh={() => void refreshGenerations()}
+            filterLabel={filterBar}
+          />
+        )}
+
+        {tab === "transactions" && (
+          <LiveTableTab
+            title="Credit transactions"
+            description="Your Stripe/webhook should write here. Dashboard shows everything stored."
+            rows={transactions}
+            loading={transactionsLoading}
+            error={transactionsError}
+            onRefresh={() => void refreshTransactions()}
+            filterLabel={filterBar}
+          />
+        )}
+
+        {tab === "sessions" && (
+          <LiveTableTab
+            title="Sessions"
+            description="Track session start / usage. Shows everything stored."
+            rows={sessions}
+            loading={sessionsLoading}
+            error={sessionsError}
+            onRefresh={() => void refreshSessions()}
+            filterLabel={filterBar}
+          />
+        )}
+
+        {tab === "feedback" && (
+          <LiveTableTab
+            title="Feedback"
+            description="Likes / feedback rows."
+            rows={feedback}
+            loading={feedbackLoading}
+            error={feedbackError}
+            onRefresh={() => void refreshFeedback()}
+            filterLabel={filterBar}
           />
         )}
 
         {tab === "logs" && <LogsTab config={draft} />}
-
-        {tab === "architecture" && <ArchitectureTab config={draft} setConfig={setConfig} />}
-        {tab === "assets" && <AssetsTab config={draft} setConfig={setConfig} />}
       </div>
 
       <div className="admin-footer">
-        Saved in Supabase: mina_admin_config + mina_admin_secrets
+        Config saved in Supabase: mina_admin_config + mina_admin_secrets
         <span className="admin-muted" style={{ marginLeft: 10 }}>
-          (live data not saved)
+          Live tables are read/update directly.
         </span>
       </div>
     </div>
