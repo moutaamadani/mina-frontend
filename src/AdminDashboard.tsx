@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
-import RuntimeConfigEditor from "../components/RuntimeConfigEditor";
+import RuntimeConfigEditor from "./components/RuntimeConfigEditor";
 import {
   AdminConfig,
   AdminStyleAsset,
