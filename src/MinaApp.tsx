@@ -2364,9 +2364,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       <React.Suspense
         fallback={
           <div className="studio-right">
-            <div className="studio-right-surface">
-              <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
-            </div>
+            
           </div>
         }
       >
