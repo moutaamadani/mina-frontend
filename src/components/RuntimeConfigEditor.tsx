@@ -5,24 +5,23 @@ type Props = { apiBase?: string };
 
 function normalizeBase(input: string) {
   const raw = (input || "").trim();
+  if (!raw) return { base: window.location.origin, error: null as string | null };
 
-  // Empty means "same domain"
-  if (!raw) {
-    return { base: window.location.origin, error: null as string | null };
-  }
-
-  // Allow user to paste "mina-editorial-ai-api.onrender.com"
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
-
   try {
     const u = new URL(withProto);
     return { base: `${u.protocol}//${u.host}`, error: null as string | null };
   } catch {
-    return {
-      base: "",
-      error: 'Invalid URL. Example: "https://mina-editorial-ai-api.onrender.com"',
-    };
+    return { base: "", error: "Invalid URL. Example: https://mina-editorial-ai-api.onrender.com" };
   }
+}
+
+function joinUrl(base: string, pathOrFullUrl: string) {
+  const p = (pathOrFullUrl || "").trim();
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p;
+  const path = p.startsWith("/") ? p : `/${p}`;
+  return `${base}${path}`;
 }
 
 async function getAuthHeaders() {
@@ -41,57 +40,58 @@ async function fetchJson(url: string, init?: RequestInit) {
   const ct = res.headers.get("content-type") || "";
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} ${res.statusText}\n${text.slice(0, 1500)}`);
+    throw new Error(`HTTP ${res.status} ${res.statusText}\n${text.slice(0, 2000)}`);
   }
-
   if (!ct.toLowerCase().includes("application/json")) {
-    throw new Error(`Expected JSON but got "${ct || "unknown"}"\n${text.slice(0, 1500)}`);
+    throw new Error(`Expected JSON but got "${ct || "unknown"}"\n${text.slice(0, 2000)}`);
   }
-
   return JSON.parse(text);
-}
-
-function shortErr(e: any) {
-  const msg = String(e?.message || e || "");
-  return msg.length > 600 ? msg.slice(0, 600) + "…" : msg;
 }
 
 export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
   const [baseInput, setBaseInput] = useState(apiBase);
+  // IMPORTANT: you must set this to the REAL backend path
+  const [endpointPath, setEndpointPath] = useState("/runtime-config"); // change this after you find the correct route
+
   const [jsonText, setJsonText] = useState("{}");
   const [activeEndpoint, setActiveEndpoint] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Optional legacy fallback (OFF by default)
-  const [tryLegacy, setTryLegacy] = useState(false);
-
   const normalized = useMemo(() => normalizeBase(baseInput), [baseInput]);
 
-  const candidates = useMemo(() => {
-    if (!normalized.base) return [];
-    const list = [
-      `${normalized.base}/api/admin/runtime-config`,
-      `${normalized.base}/api/runtime-config`,
-    ];
-    if (tryLegacy) list.push(`${normalized.base}/runtime-config`);
-    return list;
-  }, [normalized.base, tryLegacy]);
+  const commonPaths = useMemo(
+    () => [
+      "/runtime-config",
+      "/admin/runtime-config",
+      "/api/runtime-config",
+      "/api/admin/runtime-config",
+      "/api/admin/runtime_config",
+      "/api/runtime_config",
+      "/api/config/runtime",
+      "/api/admin/config/runtime",
+    ],
+    []
+  );
+
+  const endpointUrl = useMemo(() => {
+    if (!normalized.base) return "";
+    return joinUrl(normalized.base, endpointPath);
+  }, [normalized.base, endpointPath]);
 
   const testApi = async () => {
     setError(null);
     setLoading(true);
     try {
       if (normalized.error) throw new Error(normalized.error);
-
       const data = await fetchJson(`${normalized.base}/`, {
         method: "GET",
         headers: { accept: "application/json" },
         credentials: "omit",
       });
-
-      alert(`Health OK ✅\n${JSON.stringify(data, null, 2).slice(0, 1200)}`);
+      alert(`Health OK ✅\n${JSON.stringify(data, null, 2).slice(0, 1500)}`);
     } catch (e: any) {
       setError(e?.message ?? "Health check failed");
     } finally {
@@ -102,40 +102,20 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
   const load = async () => {
     setError(null);
     setLoading(true);
-
     try {
       if (normalized.error) throw new Error(normalized.error);
-      if (!candidates.length) throw new Error("No candidates to try (bad base URL).");
+      if (!endpointUrl) throw new Error("Missing endpoint URL.");
 
       const auth = await getAuthHeaders();
 
-      const tried: { url: string; err?: string }[] = [];
-      let lastErr: any = null;
+      const data = await fetchJson(endpointUrl, {
+        method: "GET",
+        headers: { accept: "application/json", ...auth },
+        credentials: "omit",
+      });
 
-      for (const url of candidates) {
-        try {
-          const data = await fetchJson(url, {
-            method: "GET",
-            headers: { accept: "application/json", ...auth },
-            credentials: "omit",
-          });
-
-          setActiveEndpoint(url);
-          setJsonText(JSON.stringify(data ?? {}, null, 2));
-          return;
-        } catch (e: any) {
-          lastErr = e;
-          tried.push({ url, err: shortErr(e) });
-        }
-      }
-
-      const lines = tried
-        .map((t) => `- ${t.url}\n  ${t.err || ""}`)
-        .join("\n");
-
-      throw new Error(
-        `Failed to load runtime config.\n\nTried:\n${lines}\n\nLast error:\n${String(lastErr?.message || lastErr)}`
-      );
+      setActiveEndpoint(endpointUrl);
+      setJsonText(JSON.stringify(data ?? {}, null, 2));
     } catch (e: any) {
       setActiveEndpoint("");
       setError(e?.message ?? "Load failed");
@@ -147,9 +127,9 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
   const save = async () => {
     setError(null);
     setSaving(true);
-
     try {
-      if (!activeEndpoint) throw new Error("Click Retry first (load config before saving).");
+      const target = activeEndpoint || endpointUrl;
+      if (!target) throw new Error("Missing endpoint URL.");
 
       let parsed: any;
       try {
@@ -160,15 +140,10 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
 
       const auth = await getAuthHeaders();
 
-      // Try PUT then fallback to POST if server says 405
       const attempt = async (method: "PUT" | "POST") => {
-        return fetchJson(activeEndpoint, {
+        return fetchJson(target, {
           method,
-          headers: {
-            "content-type": "application/json",
-            accept: "application/json",
-            ...auth,
-          },
+          headers: { "content-type": "application/json", accept: "application/json", ...auth },
           body: JSON.stringify(parsed),
           credentials: "omit",
         });
@@ -194,8 +169,9 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
   };
 
   useEffect(() => {
-    // Auto-load once on mount
-    void load();
+    // Don’t auto-load until user sets correct path
+    // If you want auto-load, uncomment:
+    // void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -205,17 +181,17 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
         <header>
           <div className="admin-section-title">Runtime Config (Live backend)</div>
           <p className="admin-section-desc">
-            Loads/saves backend runtime config. If endpoints don’t match, it shows exactly what was tried.
+            Your backend must expose a GET endpoint for runtime config. Right now it returns 404, so you need the correct route path.
           </p>
         </header>
 
         <div className="admin-inline" style={{ alignItems: "flex-end" }}>
           <label style={{ flex: 1 }}>
-            <strong>API Base URL (optional)</strong>
+            <strong>API Base URL</strong>
             <input
               value={baseInput}
               onChange={(e) => setBaseInput(e.target.value)}
-              placeholder='https://mina-editorial-ai-api.onrender.com (leave empty = same domain)'
+              placeholder="https://mina-editorial-ai-api.onrender.com"
             />
           </label>
 
@@ -226,6 +202,28 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
           <button className="admin-button ghost" type="button" onClick={() => void testApi()} disabled={loading}>
             Test API
           </button>
+        </div>
+
+        <div className="admin-inline" style={{ marginTop: 10, alignItems: "flex-end" }}>
+          <label style={{ flex: 1 }}>
+            <strong>Runtime Config Endpoint Path</strong>
+            <input
+              value={endpointPath}
+              onChange={(e) => setEndpointPath(e.target.value)}
+              placeholder="/runtime-config (or /api/admin/runtime-config etc)"
+            />
+          </label>
+
+          <label>
+            <strong>Common paths</strong>
+            <select value={endpointPath} onChange={(e) => setEndpointPath(e.target.value)}>
+              {commonPaths.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <button className="admin-button ghost" type="button" onClick={() => void load()} disabled={loading}>
             {loading ? "Loading..." : "Retry"}
@@ -236,27 +234,19 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
           </button>
         </div>
 
-        <div className="admin-inline" style={{ marginTop: 10 }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <input type="checkbox" checked={tryLegacy} onChange={(e) => setTryLegacy(e.target.checked)} />
-            Try legacy <code>/runtime-config</code> (OFF by default)
-          </label>
-
-          <div className="admin-muted" style={{ fontSize: 12 }}>
-            Candidates:{" "}
-            {candidates.length ? candidates.map((c) => <span key={c} style={{ marginRight: 10 }}>{c}</span>) : "—"}
-          </div>
+        <div className="admin-muted" style={{ fontSize: 12, marginTop: 8 }}>
+          Full endpoint URL: <strong>{endpointUrl || "—"}</strong>
         </div>
+
+        {activeEndpoint && (
+          <div className="admin-muted" style={{ fontSize: 12, marginTop: 6 }}>
+            Loaded from: <strong>{activeEndpoint}</strong>
+          </div>
+        )}
 
         {normalized.error && (
           <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
             {normalized.error}
-          </div>
-        )}
-
-        {activeEndpoint && (
-          <div className="admin-muted" style={{ fontSize: 12, marginTop: 8 }}>
-            Using endpoint: <strong>{activeEndpoint}</strong>
           </div>
         )}
 
@@ -276,7 +266,7 @@ export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
         )}
 
         <div style={{ marginTop: 12 }}>
-          <strong>AI Runtime Config</strong>
+          <strong>AI Runtime Config JSON</strong>
           <textarea
             className="admin-textarea"
             style={{ minHeight: 320 }}
