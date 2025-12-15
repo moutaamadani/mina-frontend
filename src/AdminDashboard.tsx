@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
+import RuntimeConfigEditor from "../components/RuntimeConfigEditor";
 import {
   AdminConfig,
   AdminStyleAsset,
@@ -25,6 +26,7 @@ import "./admin.css";
  */
 
 type TabKey =
+  | "runtime"
   | "ai"
   | "pricing"
   | "styles"
@@ -37,11 +39,13 @@ type TabKey =
   | "feedback"
   | "logs";
 
+
 const TAB_LABELS: Record<TabKey, string> = {
+  runtime: "Runtime Config",
   ai: "AI Settings",
   pricing: "Credits & Pricing",
   styles: "Styles",
-  assets: "Assets",
+  assets:  "Assets",
   architecture: "Architecture",
   customers: "Customers",
   generations: "Generations",
@@ -1200,6 +1204,15 @@ export default function AdminDashboard() {
   const { config, updateConfig, loading, error } = useAdminConfigState();
   const [draft, setDraft] = useState<AdminConfig | null>(null);
   const [tab, setTab] = useState<TabKey>("customers");
+  // ✅ API base for backend calls (stored in this browser)
+  // Leave empty "" if admin frontend and backend are on same domain.
+  const [apiBase, setApiBase] = useState<string>(() => {
+    try {
+      return localStorage.getItem("MINA_API_BASE") || "";
+    } catch {
+      return "";
+    }
+  });
 
   // live state
   const [customersTable] = useState("customers");
@@ -1436,6 +1449,49 @@ export default function AdminDashboard() {
       {error && <div style={{ padding: 12, color: "crimson" }}>{error}</div>}
 
       <div className="admin-content">
+                {tab === "runtime" && (
+          <div className="admin-grid">
+            <Section
+              title="Runtime Config (Live backend)"
+              description="Edit the live backend runtime config (models, replicate params, GPT temp/tokens, system/user append)."
+            >
+              <div className="admin-inline">
+                <label style={{ minWidth: 420 }}>
+                  <strong>API Base URL (optional)</strong>
+                  <input
+                    value={apiBase}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setApiBase(v);
+                      try {
+                        localStorage.setItem("MINA_API_BASE", v);
+                      } catch {}
+                    }}
+                    placeholder='Example: https://your-api.onrender.com  (leave empty if same domain)'
+                  />
+                </label>
+
+                <button
+                  className="admin-button ghost"
+                  type="button"
+                  onClick={() => {
+                    setApiBase("");
+                    try {
+                      localStorage.removeItem("MINA_API_BASE");
+                    } catch {}
+                  }}
+                >
+                  Use same domain
+                </button>
+              </div>
+
+              <div style={{ marginTop: 12 }}>
+                <RuntimeConfigEditor apiBase={apiBase} />
+              </div>
+            </Section>
+          </div>
+        )}
+
         {tab === "ai" && <AISettingsTab config={draft} setConfig={setConfig} />}
         {tab === "pricing" && <PricingTab config={draft} setConfig={setConfig} />}
         {tab === "styles" && <StylesTab config={draft} setConfig={setConfig} />}
