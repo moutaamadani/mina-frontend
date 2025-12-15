@@ -1,18 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-type Props = { apiBase: string };
+type Props = { apiBase?: string };
 
 function normalizeBase(input: string) {
   const raw = (input || "").trim();
-  if (!raw) return { base: window.location.origin, error: null as string | null };
 
+  // Empty means "same domain"
+  if (!raw) {
+    return { base: window.location.origin, error: null as string | null };
+  }
+
+  // Allow user to paste "mina-editorial-ai-api.onrender.com"
   const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+
   try {
     const u = new URL(withProto);
     return { base: `${u.protocol}//${u.host}`, error: null as string | null };
   } catch {
-    return { base: "", error: "Invalid URL. Example: https://mina-editorial-ai-api.onrender.com" };
+    return {
+      base: "",
+      error: 'Invalid URL. Example: "https://mina-editorial-ai-api.onrender.com"',
+    };
   }
 }
 
@@ -34,38 +43,54 @@ async function fetchJson(url: string, init?: RequestInit) {
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} ${res.statusText}\n${text.slice(0, 1500)}`);
   }
+
   if (!ct.toLowerCase().includes("application/json")) {
     throw new Error(`Expected JSON but got "${ct || "unknown"}"\n${text.slice(0, 1500)}`);
   }
+
   return JSON.parse(text);
 }
 
-export default function RuntimeConfigEditor({ apiBase }: Props) {
-  const [baseInput, setBaseInput] = useState(apiBase || "");
+function shortErr(e: any) {
+  const msg = String(e?.message || e || "");
+  return msg.length > 600 ? msg.slice(0, 600) + "…" : msg;
+}
+
+export default function RuntimeConfigEditor({ apiBase = "" }: Props) {
+  const [baseInput, setBaseInput] = useState(apiBase);
   const [jsonText, setJsonText] = useState("{}");
   const [activeEndpoint, setActiveEndpoint] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Optional legacy fallback (OFF by default)
+  const [tryLegacy, setTryLegacy] = useState(false);
+
   const normalized = useMemo(() => normalizeBase(baseInput), [baseInput]);
 
-   const candidates = useMemo(() => {
+  const candidates = useMemo(() => {
     if (!normalized.base) return [];
-    return [
+    const list = [
       `${normalized.base}/api/admin/runtime-config`,
       `${normalized.base}/api/runtime-config`,
-      // DO NOT try /runtime-config (your backend returns 404 for it)
     ];
-  }, [normalized.base]);
+    if (tryLegacy) list.push(`${normalized.base}/runtime-config`);
+    return list;
+  }, [normalized.base, tryLegacy]);
 
-
-  const testHealth = async () => {
+  const testApi = async () => {
     setError(null);
     setLoading(true);
     try {
       if (normalized.error) throw new Error(normalized.error);
-      const data = await fetchJson(`${normalized.base}/`, { method: "GET" });
+
+      const data = await fetchJson(`${normalized.base}/`, {
+        method: "GET",
+        headers: { accept: "application/json" },
+        credentials: "omit",
+      });
+
       alert(`Health OK ✅\n${JSON.stringify(data, null, 2).slice(0, 1200)}`);
     } catch (e: any) {
       setError(e?.message ?? "Health check failed");
@@ -77,29 +102,42 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
   const load = async () => {
     setError(null);
     setLoading(true);
+
     try {
       if (normalized.error) throw new Error(normalized.error);
+      if (!candidates.length) throw new Error("No candidates to try (bad base URL).");
 
       const auth = await getAuthHeaders();
 
+      const tried: { url: string; err?: string }[] = [];
       let lastErr: any = null;
+
       for (const url of candidates) {
         try {
           const data = await fetchJson(url, {
             method: "GET",
-            headers: { ...auth },
-            // important: cross-domain usually works better without cookies
+            headers: { accept: "application/json", ...auth },
             credentials: "omit",
           });
+
           setActiveEndpoint(url);
-          setJsonText(JSON.stringify(data, null, 2));
+          setJsonText(JSON.stringify(data ?? {}, null, 2));
           return;
-        } catch (e) {
+        } catch (e: any) {
           lastErr = e;
+          tried.push({ url, err: shortErr(e) });
         }
       }
-      throw lastErr || new Error("Failed to load runtime config (no endpoint matched).");
+
+      const lines = tried
+        .map((t) => `- ${t.url}\n  ${t.err || ""}`)
+        .join("\n");
+
+      throw new Error(
+        `Failed to load runtime config.\n\nTried:\n${lines}\n\nLast error:\n${String(lastErr?.message || lastErr)}`
+      );
     } catch (e: any) {
+      setActiveEndpoint("");
       setError(e?.message ?? "Load failed");
     } finally {
       setLoading(false);
@@ -109,6 +147,7 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
   const save = async () => {
     setError(null);
     setSaving(true);
+
     try {
       if (!activeEndpoint) throw new Error("Click Retry first (load config before saving).");
 
@@ -121,12 +160,30 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
 
       const auth = await getAuthHeaders();
 
-      await fetchJson(activeEndpoint, {
-        method: "PUT",
-        headers: { "content-type": "application/json", ...auth },
-        body: JSON.stringify(parsed),
-        credentials: "omit",
-      });
+      // Try PUT then fallback to POST if server says 405
+      const attempt = async (method: "PUT" | "POST") => {
+        return fetchJson(activeEndpoint, {
+          method,
+          headers: {
+            "content-type": "application/json",
+            accept: "application/json",
+            ...auth,
+          },
+          body: JSON.stringify(parsed),
+          credentials: "omit",
+        });
+      };
+
+      try {
+        await attempt("PUT");
+      } catch (e: any) {
+        const msg = String(e?.message || "");
+        if (msg.includes("HTTP 405")) {
+          await attempt("POST");
+        } else {
+          throw e;
+        }
+      }
 
       alert("Runtime config saved ✅");
     } catch (e: any) {
@@ -137,6 +194,7 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
   };
 
   useEffect(() => {
+    // Auto-load once on mount
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -147,17 +205,17 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
         <header>
           <div className="admin-section-title">Runtime Config (Live backend)</div>
           <p className="admin-section-desc">
-            Loads/saves backend runtime config. Shows full errors (HTTP status/body) if something is wrong.
+            Loads/saves backend runtime config. If endpoints don’t match, it shows exactly what was tried.
           </p>
         </header>
 
-        <div className="admin-inline">
+        <div className="admin-inline" style={{ alignItems: "flex-end" }}>
           <label style={{ flex: 1 }}>
             <strong>API Base URL (optional)</strong>
             <input
               value={baseInput}
               onChange={(e) => setBaseInput(e.target.value)}
-              placeholder="https://mina-editorial-ai-api.onrender.com (leave empty if same domain)"
+              placeholder='https://mina-editorial-ai-api.onrender.com (leave empty = same domain)'
             />
           </label>
 
@@ -165,7 +223,7 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
             Use same domain
           </button>
 
-          <button className="admin-button ghost" type="button" onClick={() => void testHealth()} disabled={loading}>
+          <button className="admin-button ghost" type="button" onClick={() => void testApi()} disabled={loading}>
             Test API
           </button>
 
@@ -176,6 +234,18 @@ export default function RuntimeConfigEditor({ apiBase }: Props) {
           <button className="admin-button" type="button" onClick={() => void save()} disabled={saving || loading}>
             {saving ? "Saving..." : "Save"}
           </button>
+        </div>
+
+        <div className="admin-inline" style={{ marginTop: 10 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input type="checkbox" checked={tryLegacy} onChange={(e) => setTryLegacy(e.target.checked)} />
+            Try legacy <code>/runtime-config</code> (OFF by default)
+          </label>
+
+          <div className="admin-muted" style={{ fontSize: 12 }}>
+            Candidates:{" "}
+            {candidates.length ? candidates.map((c) => <span key={c} style={{ marginRight: 10 }}>{c}</span>) : "—"}
+          </div>
         </div>
 
         {normalized.error && (
