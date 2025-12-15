@@ -737,7 +737,14 @@ function RawViewer({ row }: { row: any }) {
    Live Data Tabs
 ------------------------------ */
 
-type LiveRow = { id: string; label: string; createdAt?: string; raw: any };
+
+type LiveRow = {
+  rowKey: string; // always unique (used for React key + selection)
+  id: string;
+  label: string;
+  createdAt?: string;
+  raw: any;
+};
 
 async function loadTable(table: string, limit = 500, orderCol = "created_at") {
   // order may fail if column doesn't exist; we fallback to no ordering
@@ -765,9 +772,13 @@ function makeRowsFromAny(table: string, rows: any[]): LiveRow[] {
       pickString(r, ["status"], "") ||
       id;
 
-    return { id, label, createdAt: createdAt || undefined, raw: r };
+    // IMPORTANT: rowKey must be unique even if id repeats
+    const rowKey = `${table}:${id}:${createdAt || "no-time"}:${idx}`;
+
+    return { rowKey, id, label, createdAt: createdAt || undefined, raw: r };
   });
 }
+
 
 function LiveTableTab({
   title,
@@ -786,11 +797,19 @@ function LiveTableTab({
   onRefresh: () => void;
   filterLabel?: React.ReactNode;
 }) {
-  const [selected, setSelected] = useState<LiveRow | null>(null);
+ const [selected, setSelected] = useState<LiveRow | null>(null);
+const [failedPreview, setFailedPreview] = useState<Record<string, boolean>>({});
+const [visibleCount, setVisibleCount] = useState(250);
 
-  useEffect(() => {
-    if (selected && !rows.find((x) => x.id === selected.id)) setSelected(null);
-  }, [rows, selected]);
+useEffect(() => {
+  setVisibleCount(250);
+  setFailedPreview({});
+}, [rows]);
+
+useEffect(() => {
+  if (selected && !rows.find((x) => x.rowKey === selected.rowKey)) setSelected(null);
+}, [rows, selected]);
+
 
   return (
     <div className="admin-grid admin-split">
@@ -837,6 +856,7 @@ function LiveTableTab({
               </button>
             );
           })}
+
         </div>
       </Section>
 
