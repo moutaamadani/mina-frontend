@@ -15,6 +15,11 @@ function normalizeBase(input: string) {
     return { base: "", error: "Invalid URL. Example: https://mina-editorial-ai-api.onrender.com" };
   }
 }
+// GET
+fetch(`${base}/api/runtime-config`)
+
+// PUT/PATCH/POST
+fetch(`${base}/api/runtime-config`, { method: "PUT", ... })
 
 async function getAuthHeaders() {
   try {
