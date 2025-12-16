@@ -17,11 +17,10 @@ const storage =
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     // ✅ keeps user logged in
-    persistSession: true,
-
-    // ✅ where it’s stored in localStorage
-    storageKey: "mina-auth",
-
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: "mina.supabase.auth", // optional but recommended
     // ✅ important for OAuth + magic-link redirects (PKCE flow is recommended)
     flowType: "pkce",
     detectSessionInUrl: true,
