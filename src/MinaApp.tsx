@@ -474,7 +474,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   // 4.1 Global tab + customer
   // -------------------------
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
-  const passId = ensurePassId();
+  const passId = usePassId();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
