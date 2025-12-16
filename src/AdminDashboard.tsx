@@ -1,68 +1,47 @@
+// AdminDashboard.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
+import { isAdmin } from "./lib/adminConfig";
 import RuntimeConfigEditor from "./components/RuntimeConfigEditor";
 import RuntimeConfigFlatEditor from "./components/RuntimeConfigFlatEditor";
-
-import {
-  AdminConfig,
-  AdminStyleAsset,
-  isAdmin,
-  upsertAdminSecret,
-  useAdminConfigState,
-} from "./lib/adminConfig";
 import "./admin.css";
 
 /**
- * What this dashboard does:
- * - Config: stored in mina_admin_config + mina_admin_secrets (same as before)
- * - Live data: reads from Supabase tables:
- *   - customers
- *   - generations
- *   - credit_transactions
- *   - sessions
- *   - feedback
- *
- * IMPORTANT SECURITY:
- * - If RLS is enabled, your admin user must have policies allowing select/update.
- * - Do NOT put Supabase service_role key in frontend.
+ * Tabs kept:
+ * - Runtime Config
+ * - AI Config (reads/writes a flat Supabase table)
+ * - Customers
+ * - Generations (can delete)
+ * - Feedback (can delete)
+ * - Logs (realtime, fullscreen lines)
  */
 
-type TabKey =
-  | "runtime"
-  | "ai"
-  | "pricing"
-  | "styles"
-  | "assets"
-  | "architecture"
-  | "customers"
-  | "generations"
-  | "transactions"
-  | "sessions"
-  | "feedback"
-  | "logs";
-
+type TabKey = "runtime" | "ai" | "customers" | "generations" | "feedback" | "logs";
 
 const TAB_LABELS: Record<TabKey, string> = {
   runtime: "Runtime Config",
-  ai: "AI Settings",
-  pricing: "Credits & Pricing",
-  styles: "Styles",
-  assets:  "Assets",
-  architecture: "Architecture",
+  ai: "AI Config (Flat table)",
   customers: "Customers",
   generations: "Generations",
-  transactions: "Credit Transactions",
-  sessions: "Sessions",
   feedback: "Feedback",
-  logs: "Logs",
+  logs: "Logs (Realtime)",
 };
 
+// ✅ CHANGE THIS if your table name is different
+const AI_FLAT_TABLE = "flat_ai_config";
+// ✅ CHANGE THIS if your logs table name is different
+const LOGS_TABLE = "logs";
+
+/* -----------------------------
+   UI bits
+------------------------------ */
+
 function AdminHeader({
-  onSave,
   rightStatus,
+  rightActions,
 }: {
-  onSave: () => Promise<void>;
   rightStatus?: React.ReactNode;
+  rightActions?: React.ReactNode;
 }) {
   return (
     <header className="admin-header">
@@ -72,9 +51,7 @@ function AdminHeader({
       </div>
       <div className="admin-actions">
         {rightStatus}
-        <button className="admin-button" onClick={() => void onSave()}>
-          Save
-        </button>
+        {rightActions}
       </div>
     </header>
   );
@@ -165,10 +142,6 @@ function useAdminGuard() {
    Helpers
 ------------------------------ */
 
-function isUuid(s: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
 function pickFirstKey(row: any, keys: string[]) {
   for (const k of keys) {
     if (row && Object.prototype.hasOwnProperty.call(row, k)) return k;
@@ -193,18 +166,6 @@ function pickNumber(row: any, keys: string[], fallback = 0): number {
   return fallback;
 }
 
-function formatMoneyMaybeCents(amount: number, currency = "usd") {
-  if (!Number.isFinite(amount)) return "—";
-  // heuristics: if it's very large assume cents
-  const isCents = Math.abs(amount) >= 1000 && Math.abs(amount) % 1 === 0;
-  const value = isCents ? amount / 100 : amount;
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency.toUpperCase() }).format(value);
-  } catch {
-    return `${value.toFixed(2)} ${currency.toUpperCase()}`;
-  }
-}
-
 function safeJson(obj: any) {
   try {
     return JSON.stringify(obj ?? {}, null, 2);
@@ -225,7 +186,6 @@ function extractLikelyImageUrl(row: any): string | null {
 function highlightTraceFields(row: any) {
   const keys = Object.keys(row || {});
   const candidates = [
-    // GPT / LLM
     "gpt_input",
     "gpt_prompt",
     "llm_input",
@@ -236,7 +196,6 @@ function highlightTraceFields(row: any) {
     "llm_output",
     "caption",
     "text_output",
-    // seedream / image gen
     "seedream_prompt",
     "image_prompt",
     "seedream_input",
@@ -244,7 +203,6 @@ function highlightTraceFields(row: any) {
     "image_url",
     "output_url",
     "url",
-    // generic params
     "params",
     "meta",
     "metadata",
@@ -259,7 +217,6 @@ function highlightTraceFields(row: any) {
     })
     .filter(Boolean) as string[];
 
-  // Also add any key containing these substrings
   for (const k of keys) {
     if (/gpt|llm|seedream|prompt|output|trace|debug/i.test(k) && !present.includes(k)) {
       present.push(k);
@@ -269,429 +226,12 @@ function highlightTraceFields(row: any) {
   return present.slice(0, 18);
 }
 
-/* -----------------------------
-   Config Tabs (same idea as before)
------------------------------- */
-
-function EditableKeyValue({
-  params,
-  onChange,
-}: {
-  params: { key: string; value: string }[];
-  onChange: (next: { key: string; value: string }[]) => void;
-}) {
-  return (
-    <div className="admin-kv-list">
-      {params.map((row, idx) => (
-        <div className="admin-kv-row" key={`${row.key}-${idx}`}>
-          <input
-            value={row.key}
-            onChange={(e) => {
-              const next = [...params];
-              next[idx] = { ...row, key: e.target.value };
-              onChange(next);
-            }}
-            placeholder="key"
-          />
-          <input
-            value={row.value}
-            onChange={(e) => {
-              const next = [...params];
-              next[idx] = { ...row, value: e.target.value };
-              onChange(next);
-            }}
-            placeholder="value"
-          />
-          <button
-            className="admin-button ghost"
-            type="button"
-            onClick={() => onChange(params.filter((_, i) => i !== idx))}
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-      <button className="admin-button ghost" type="button" onClick={() => onChange([...params, { key: "", value: "" }])}>
-        Add param
-      </button>
-    </div>
-  );
-}
-
-function AISettingsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  const ai = config.ai;
-
-  return (
-    <div className="admin-grid">
-      <Section title="Providers" description="Keys stored in Supabase (mina_admin_secrets).">
-        <Table headers={["Provider", "Model", "Key", "Actions"]}>
-          {ai.providerKeys.map((row, idx) => (
-            <div className="admin-table-row" key={`${row.provider}-${idx}`}>
-              <div>
-                <input
-                  value={row.provider}
-                  onChange={(e) => {
-                    const next = [...ai.providerKeys];
-                    next[idx] = { ...row, provider: e.target.value };
-                    setConfig({ ...config, ai: { ...ai, providerKeys: next } });
-                  }}
-                />
-              </div>
-
-              <div>
-                <input
-                  value={ai.defaultModel}
-                  onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultModel: e.target.value } })}
-                  placeholder="model"
-                />
-              </div>
-
-              <div className="admin-masked">{row.masked ? row.masked : <span className="admin-muted">not set</span>}</div>
-
-              <div className="admin-row-actions">
-                <button
-                  className="admin-button ghost"
-                  type="button"
-                  onClick={() => {
-                    const next = [...ai.providerKeys];
-                    next.splice(idx, 1);
-                    setConfig({ ...config, ai: { ...ai, providerKeys: next } });
-                  }}
-                >
-                  Remove
-                </button>
-
-                <button
-                  className="admin-button ghost"
-                  type="button"
-                  onClick={async () => {
-                    const replacement = window.prompt(`Paste new secret for "${row.provider}"`);
-                    if (replacement === null) return;
-
-                    try {
-                      const masked = await upsertAdminSecret(row.provider, replacement);
-                      const next = [...ai.providerKeys];
-                      next[idx] = { ...row, masked, secret: undefined };
-                      setConfig({ ...config, ai: { ...ai, providerKeys: next } });
-                      alert(`Saved secret for ${row.provider}: ${masked}`);
-                    } catch (e: any) {
-                      alert(e?.message ?? "Failed to save secret");
-                    }
-                  }}
-                >
-                  Replace
-                </button>
-              </div>
-            </div>
-          ))}
-        </Table>
-
-        <div className="admin-inline">
-          <label>
-            <strong>Default provider</strong>
-            <input value={ai.defaultProvider} onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultProvider: e.target.value } })} />
-          </label>
-          <label>
-            <strong>Default model</strong>
-            <input value={ai.defaultModel} onChange={(e) => setConfig({ ...config, ai: { ...ai, defaultModel: e.target.value } })} />
-          </label>
-          <label>
-            <strong>Temperature</strong>
-            <input type="number" step="0.1" value={ai.temperature} onChange={(e) => setConfig({ ...config, ai: { ...ai, temperature: parseFloat(e.target.value) || 0 } })} />
-          </label>
-          <label>
-            <strong>top_p</strong>
-            <input type="number" step="0.05" value={ai.topP} onChange={(e) => setConfig({ ...config, ai: { ...ai, topP: parseFloat(e.target.value) || 0 } })} />
-          </label>
-          <label>
-            <strong>Max tokens</strong>
-            <input type="number" value={ai.maxTokens} onChange={(e) => setConfig({ ...config, ai: { ...ai, maxTokens: Number(e.target.value) || 0 } })} />
-          </label>
-        </div>
-      </Section>
-
-      <Section title="Context" description="Overrides the baked system prompt across pipelines.">
-        <textarea className="admin-textarea" value={ai.context} onChange={(e) => setConfig({ ...config, ai: { ...ai, context: e.target.value } })} />
-      </Section>
-
-      <Section title="Provider parameters" description="Expose low-level flags (e.g. seedream params)">
-        <EditableKeyValue params={ai.providerParams} onChange={(next) => setConfig({ ...config, ai: { ...ai, providerParams: next } })} />
-      </Section>
-
-      <Section title="Future models" description="Drop replicate snippets for SVG/audio ahead of time.">
-        <textarea className="admin-textarea" value={ai.futureReplicateNotes} onChange={(e) => setConfig({ ...config, ai: { ...ai, futureReplicateNotes: e.target.value } })} placeholder="Copy/paste replicate code blocks" />
-      </Section>
-    </div>
-  );
-}
-
-function PricingTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  const pricing = config.pricing;
-  return (
-    <div className="admin-grid">
-      <Section title="Credits" description="Free credits, expiry and unit cost">
-        <div className="admin-inline">
-          <label>
-            <strong>Default free credits</strong>
-            <input type="number" value={pricing.defaultCredits} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, defaultCredits: Number(e.target.value) || 0 } })} />
-          </label>
-          <label>
-            <strong>Expiration (days)</strong>
-            <input type="number" value={pricing.expirationDays} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, expirationDays: Number(e.target.value) || 0 } })} />
-          </label>
-          <label>
-            <strong>Still cost</strong>
-            <input type="number" value={pricing.imageCost} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, imageCost: Number(e.target.value) || 0 } })} />
-          </label>
-          <label>
-            <strong>Motion cost</strong>
-            <input type="number" value={pricing.motionCost} onChange={(e) => setConfig({ ...config, pricing: { ...pricing, motionCost: Number(e.target.value) || 0 } })} />
-          </label>
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function StylesTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  const [draftStyle, setDraftStyle] = useState<AdminStyleAsset>({
-    id: String(Date.now()),
-    name: "Untitled",
-    images: [],
-    trainingText: "",
-    status: "draft",
-  });
-
-  const styles = config.styles;
-
-  const updatePreset = (index: number, next: AdminStyleAsset) => {
-    const presets = [...styles.presets];
-    presets[index] = next;
-    setConfig({ ...config, styles: { ...styles, presets } });
-  };
-
-  const handleUpload = (files: FileList | null, cb: (url: string) => void) => {
-    if (!files?.length) return;
-    const file = files[0];
-    const maxSize = 3 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("File too large (max 3MB)");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => cb(String(reader.result));
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="admin-grid">
-      <Section title="Predefined styles" description="Draft/publish presets shown to users.">
-        <Table headers={["Name", "Training text", "Hero", "Images", "Status", "Actions"]}>
-          {styles.presets.map((preset, idx) => (
-            <div className="admin-table-row" key={preset.id}>
-              <div>
-                <input value={preset.name} onChange={(e) => updatePreset(idx, { ...preset, name: e.target.value })} />
-              </div>
-              <div>
-                <textarea className="admin-textarea" value={preset.trainingText} onChange={(e) => updatePreset(idx, { ...preset, trainingText: e.target.value })} />
-              </div>
-              <div className="admin-thumb-col">
-                {preset.heroImage ? <img src={preset.heroImage} alt="hero" /> : <span>—</span>}
-                <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => updatePreset(idx, { ...preset, heroImage: url }))} />
-              </div>
-              <div>
-                <div className="admin-image-grid">
-                  {preset.images.slice(0, 10).map((img, i) => (
-                    <img key={`${preset.id}-${i}`} src={img} alt="style" />
-                  ))}
-                </div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) =>
-                    handleUpload(e.target.files, (url) => {
-                      const merged = [...preset.images, url].slice(-10);
-                      updatePreset(idx, { ...preset, images: merged });
-                    })
-                  }
-                />
-              </div>
-              <div>
-                <select value={preset.status} onChange={(e) => updatePreset(idx, { ...preset, status: e.target.value as AdminStyleAsset["status"] })}>
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                </select>
-              </div>
-              <div className="admin-row-actions">
-                <button
-                  className="admin-button ghost"
-                  onClick={() => {
-                    const presets = styles.presets.filter((_, i) => i !== idx);
-                    setConfig({ ...config, styles: { ...styles, presets } });
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </Table>
-
-        <div className="admin-inline">
-          <label>
-            <strong>Movement keywords</strong>
-            <input
-              value={styles.movementKeywords.join(", ")}
-              onChange={(e) =>
-                setConfig({
-                  ...config,
-                  styles: {
-                    ...styles,
-                    movementKeywords: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                  },
-                })
-              }
-            />
-          </label>
-        </div>
-
-        <div className="admin-card">
-          <div className="admin-card-title">Add style</div>
-          <div className="admin-inline">
-            <label>
-              <strong>Name</strong>
-              <input value={draftStyle.name} onChange={(e) => setDraftStyle({ ...draftStyle, name: e.target.value })} />
-            </label>
-            <label>
-              <strong>Status</strong>
-              <select value={draftStyle.status} onChange={(e) => setDraftStyle({ ...draftStyle, status: e.target.value as AdminStyleAsset["status"] })}>
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
-            </label>
-          </div>
-
-          <label>
-            <strong>Training text</strong>
-            <textarea className="admin-textarea" value={draftStyle.trainingText} onChange={(e) => setDraftStyle({ ...draftStyle, trainingText: e.target.value })} />
-          </label>
-
-          <div className="admin-inline">
-            <div>
-              <strong>Hero image</strong>
-              <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => setDraftStyle({ ...draftStyle, heroImage: url }))} />
-            </div>
-            <div>
-              <strong>Gallery</strong>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) =>
-                  handleUpload(e.target.files, (url) => setDraftStyle({ ...draftStyle, images: [...draftStyle.images, url].slice(-10) }))
-                }
-              />
-            </div>
-          </div>
-
-          <button
-            className="admin-button"
-            type="button"
-            onClick={() => {
-              setConfig({ ...config, styles: { ...styles, presets: [draftStyle, ...styles.presets].slice(0, 20) } });
-              setDraftStyle({ id: String(Date.now()), name: "Untitled", images: [], trainingText: "", status: "draft" });
-            }}
-          >
-            Add style
-          </button>
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function ArchitectureTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  return (
-    <div className="admin-grid">
-      <Section title="Architecture map" description="Editable description of the pipeline">
-        <textarea className="admin-textarea" value={config.architecture} onChange={(e) => setConfig({ ...config, architecture: e.target.value })} />
-      </Section>
-    </div>
-  );
-}
-
-function AssetsTab({ config, setConfig }: { config: AdminConfig; setConfig: (next: AdminConfig) => void }) {
-  const assets = config.assets;
-
-  const handleUpload = (files: FileList | null, cb: (url: string) => void) => {
-    if (!files?.length) return;
-    const file = files[0];
-    const maxSize = 2 * 1024 * 1024;
-    if (file.size > maxSize) {
-      alert("Too large (2MB max)");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => cb(String(reader.result));
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="admin-grid">
-      <Section title="Brand assets" description="Colors, fonts, logo and misc images">
-        <div className="admin-inline">
-          <label>
-            <strong>Primary color</strong>
-            <input value={assets.primaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, primaryColor: e.target.value } })} />
-          </label>
-          <label>
-            <strong>Secondary color</strong>
-            <input value={assets.secondaryColor} onChange={(e) => setConfig({ ...config, assets: { ...assets, secondaryColor: e.target.value } })} />
-          </label>
-          <label>
-            <strong>Font</strong>
-            <input value={assets.fontFamily} onChange={(e) => setConfig({ ...config, assets: { ...assets, fontFamily: e.target.value } })} />
-          </label>
-        </div>
-
-        <div className="admin-inline">
-          <div>
-            <strong>Logo</strong>
-            {assets.logo && <img className="admin-logo" src={assets.logo} alt="logo" />}
-            <input type="file" accept="image/*" onChange={(e) => handleUpload(e.target.files, (url) => setConfig({ ...config, assets: { ...assets, logo: url } }))} />
-          </div>
-
-          <div>
-            <strong>Other assets</strong>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) =>
-                handleUpload(e.target.files, (url) =>
-                  setConfig({
-                    ...config,
-                    assets: {
-                      ...assets,
-                      otherAssets: [...assets.otherAssets, { id: String(Date.now()), name: `asset-${assets.otherAssets.length + 1}`, url }],
-                    },
-                  })
-                )
-              }
-            />
-            <div className="admin-image-grid">
-              {assets.otherAssets.map((a) => (
-                <div key={a.id} className="admin-thumb-col">
-                  <img src={a.url} alt={a.name} />
-                  <div className="admin-grid-sub">{a.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </Section>
-    </div>
-  );
+function truncateId(s: string, max = 22) {
+  if (!s) return "";
+  if (s.length <= max) return s;
+  const head = Math.max(8, Math.floor(max / 2));
+  const tail = Math.max(6, max - head - 1);
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
 }
 
 /* -----------------------------
@@ -736,12 +276,11 @@ function RawViewer({ row }: { row: any }) {
 }
 
 /* -----------------------------
-   Live Data Tabs
+   Live Data helpers
 ------------------------------ */
 
-
 type LiveRow = {
-  rowKey: string; // always unique (used for React key + selection)
+  rowKey: string;
   id: string;
   label: string;
   createdAt?: string;
@@ -749,7 +288,6 @@ type LiveRow = {
 };
 
 async function loadTable(table: string, limit = 500, orderCol = "created_at") {
-  // order may fail if column doesn't exist; we fallback to no ordering
   const attempt = await supabase.from(table).select("*").order(orderCol, { ascending: false }).limit(limit);
   if (!attempt.error) return attempt.data ?? [];
 
@@ -768,21 +306,40 @@ function makeRowsFromAny(table: string, rows: any[]): LiveRow[] {
     const createdAt = pickString(r, ["created_at", "inserted_at", "at", "timestamp"], "");
 
     const label =
+      pickString(r, ["prompt", "input_prompt", "caption", "text"], "") ||
       pickString(r, ["email", "user_email"], "") ||
       pickString(r, ["shopify_customer_id", "customer_id"], "") ||
       pickString(r, ["user_id"], "") ||
       pickString(r, ["status"], "") ||
       id;
 
-    // IMPORTANT: rowKey must be unique even if id repeats
     const rowKey = `${table}:${id}:${createdAt || "no-time"}:${idx}`;
-
     return { rowKey, id, label, createdAt: createdAt || undefined, raw: r };
   });
 }
 
+async function deleteRowByBestPk(table: string, raw: any) {
+  const pk = pickFirstKey(raw, [
+    "id",
+    "uuid",
+    "generation_id",
+    "gen_id",
+    "feedback_id",
+    "session_id",
+    "tx_id",
+  ]);
+  if (!pk) throw new Error("No obvious primary key field found to delete this row.");
+  const pkVal = raw?.[pk];
+  const { error } = await supabase.from(table).delete().eq(pk, pkVal);
+  if (error) throw new Error(error.message);
+}
+
+/* -----------------------------
+   LiveTableTab (Generations / Feedback) + delete
+------------------------------ */
 
 function LiveTableTab({
+  tableName,
   title,
   description,
   rows,
@@ -790,7 +347,9 @@ function LiveTableTab({
   error,
   onRefresh,
   filterLabel,
+  allowDelete,
 }: {
+  tableName: string;
   title: string;
   description: string;
   rows: LiveRow[];
@@ -798,20 +357,31 @@ function LiveTableTab({
   error: string | null;
   onRefresh: () => void;
   filterLabel?: React.ReactNode;
+  allowDelete?: boolean;
 }) {
- const [selected, setSelected] = useState<LiveRow | null>(null);
-const [failedPreview, setFailedPreview] = useState<Record<string, boolean>>({});
-const [visibleCount, setVisibleCount] = useState(250);
+  const [selected, setSelected] = useState<LiveRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-useEffect(() => {
-  setVisibleCount(250);
-  setFailedPreview({});
-}, [rows]);
+  useEffect(() => {
+    if (selected && !rows.find((x) => x.rowKey === selected.rowKey)) setSelected(null);
+  }, [rows, selected]);
 
-useEffect(() => {
-  if (selected && !rows.find((x) => x.rowKey === selected.rowKey)) setSelected(null);
-}, [rows, selected]);
+  const doDelete = async () => {
+    if (!selected) return;
+    const ok = window.confirm(`Delete this row from "${tableName}"?\n\nID: ${selected.id}`);
+    if (!ok) return;
 
+    setDeleting(true);
+    try {
+      await deleteRowByBestPk(tableName, selected.raw);
+      setSelected(null);
+      onRefresh();
+    } catch (e: any) {
+      alert(e?.message ?? "Delete failed");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="admin-grid admin-split">
@@ -828,6 +398,17 @@ useEffect(() => {
           >
             Copy JSON
           </button>
+          {allowDelete && (
+            <button
+              className="admin-button"
+              type="button"
+              onClick={doDelete}
+              disabled={!selected || deleting}
+              title={!selected ? "Select a row first" : "Delete selected"}
+            >
+              {deleting ? "Deleting..." : "Delete selected"}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -839,26 +420,31 @@ useEffect(() => {
           </div>
         )}
 
-        {!error && !loading && rows.length === 0 && <div className="admin-muted" style={{ padding: 12 }}>No rows found.</div>}
+        {!error && !loading && rows.length === 0 && (
+          <div className="admin-muted" style={{ padding: 12 }}>
+            No rows found.
+          </div>
+        )}
 
         <div className="admin-grid-gallery">
           {rows.slice(0, 250).map((r) => {
             const url = extractLikelyImageUrl(r.raw);
             return (
               <button
-                key={r.id}
-                className={`admin-grid-card ${selected?.id === r.id ? "active" : ""}`}
+                key={r.rowKey}
+                className={`admin-grid-card ${selected?.rowKey === r.rowKey ? "active" : ""}`}
                 onClick={() => setSelected(r)}
               >
                 {url ? <img src={url} alt={r.label} loading="lazy" /> : <div className="admin-placeholder">no preview</div>}
                 <div className="admin-grid-meta">
                   <div className="admin-grid-prompt">{r.label || <span className="admin-muted">—</span>}</div>
-                  <div className="admin-grid-sub">{r.createdAt || "—"}</div>
+                  <div className="admin-grid-sub">
+                    {truncateId(r.id)} • {r.createdAt || "—"}
+                  </div>
                 </div>
               </button>
             );
           })}
-
         </div>
       </Section>
 
@@ -870,7 +456,7 @@ useEffect(() => {
 }
 
 /* -----------------------------
-   Customers (editable credits + show payments)
+   Customers (editable credits)
 ------------------------------ */
 
 type CustomerRow = {
@@ -895,7 +481,6 @@ function normalizeCustomers(rows: any[]): CustomerRow[] {
     const expiresAt = pickString(r, ["expires_at", "expiresAt"], "") || null;
     const lastActive = pickString(r, ["last_active", "lastActive", "updated_at"], "") || null;
 
-    // pick best PK
     let pkCol = "shopify_customer_id";
     let pkVal = shopifyCustomerId || email;
 
@@ -922,71 +507,19 @@ async function updateCustomerCreditsAndExpiry(opts: {
   customer: CustomerRow;
   nextCredits: number;
   nextExpiresAt: string | null;
-  note?: string;
 }) {
-  const { table, customer, nextCredits, nextExpiresAt, note } = opts;
+  const { table, customer, nextCredits, nextExpiresAt } = opts;
 
-  // build update patch only for existing cols
   const patch: any = {};
   const creditCol = pickFirstKey(customer.raw, ["credits", "credit", "balance"]) || "credits";
   patch[creditCol] = nextCredits;
 
-  if (pickFirstKey(customer.raw, ["expires_at", "expiresAt"])) {
-    patch[pickFirstKey(customer.raw, ["expires_at", "expiresAt"]) as string] = nextExpiresAt;
-  } else if (nextExpiresAt !== null) {
-    // optional: only set if exists
-  }
+  const expCol = pickFirstKey(customer.raw, ["expires_at", "expiresAt"]);
+  if (expCol) patch[expCol] = nextExpiresAt;
 
-  // update customer
   const q = supabase.from(table).update(patch).eq(customer.pkCol, customer.pkVal);
   const { error } = await q;
   if (error) throw new Error(error.message);
-
-  // OPTIONAL audit in credit_transactions if table/cols exist
-  // (best effort — it’s okay if it fails)
-  try {
-    const delta = nextCredits - customer.credits;
-    if (delta !== 0) {
-      const { data: u } = await supabase.auth.getUser();
-      const adminUid = u.user?.id ?? null;
-
-      const tx: any = {
-        created_at: new Date().toISOString(),
-        type: "admin_adjust",
-        delta,
-        note: note || "admin adjust",
-      };
-
-      // attach identifiers if present
-      if (customer.userId) tx.user_id = customer.userId;
-      if (customer.shopifyCustomerId) tx.shopify_customer_id = customer.shopifyCustomerId;
-      if (customer.email && customer.email.includes("@")) tx.email = customer.email;
-      if (adminUid) tx.created_by = adminUid;
-
-      await supabase.from("credit_transactions").insert(tx);
-    }
-  } catch {
-    // ignore audit failure
-  }
-}
-
-async function loadTransactionsForCustomer(customer: CustomerRow) {
-  // Fetch latest 300 transactions then filter in JS (works across schema differences)
-  const rows = await loadTable("credit_transactions", 300, "created_at");
-  const raw = rows as any[];
-
-  const match = (r: any) => {
-    const email = pickString(r, ["email", "user_email"], "");
-    const userId = pickString(r, ["user_id", "uid"], "");
-    const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "");
-    return (
-      (customer.userId && userId === customer.userId) ||
-      (customer.shopifyCustomerId && shopify === customer.shopifyCustomerId) ||
-      (customer.email && email && email.toLowerCase() === customer.email.toLowerCase())
-    );
-  };
-
-  return raw.filter(match);
 }
 
 function CustomersTab({
@@ -1002,33 +535,14 @@ function CustomersTab({
   onRefresh: () => void;
   customersTable: string;
 }) {
-  const [selected, setSelected] = useState<CustomerRow | null>(null);
   const [local, setLocal] = useState<CustomerRow[]>([]);
   const [dirtyMap, setDirtyMap] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
-  const [txRows, setTxRows] = useState<any[] | null>(null);
-  const [txLoading, setTxLoading] = useState(false);
 
   useEffect(() => {
     setLocal(customers);
     setDirtyMap({});
   }, [customers]);
-
-  useEffect(() => {
-    setTxRows(null);
-    if (!selected) return;
-    setTxLoading(true);
-    void (async () => {
-      try {
-        const rows = await loadTransactionsForCustomer(selected);
-        setTxRows(rows);
-      } catch {
-        setTxRows([]);
-      } finally {
-        setTxLoading(false);
-      }
-    })();
-  }, [selected?.pkCol, selected?.pkVal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateRow = (idx: number, next: CustomerRow) => {
     const copy = [...local];
@@ -1051,7 +565,6 @@ function CustomersTab({
           customer: customers.find((x) => x.pkCol === c.pkCol && x.pkVal === c.pkVal) || c,
           nextCredits: c.credits,
           nextExpiresAt: c.expiresAt,
-          note: "admin dashboard edit",
         });
       }
       alert("Customers saved ✅");
@@ -1064,25 +577,8 @@ function CustomersTab({
     }
   };
 
-  const totalPaid = useMemo(() => {
-    if (!txRows) return null;
-
-    // Heuristic: try multiple columns
-    const sum = txRows.reduce((acc, r) => {
-      const amt =
-        pickNumber(r, ["amount_cents", "amount", "paid_amount", "price_cents", "usd_cents"], 0) || 0;
-      // only count purchases if we can detect
-      const type = pickString(r, ["type", "kind", "source"], "").toLowerCase();
-      const isPurchase = !type || type.includes("purchase") || type.includes("stripe") || type.includes("payment");
-      return acc + (isPurchase ? amt : 0);
-    }, 0);
-
-    const currency = pickString(txRows[0], ["currency"], "usd") || "usd";
-    return formatMoneyMaybeCents(sum, currency);
-  }, [txRows]);
-
   return (
-    <div className="admin-grid admin-split">
+    <div className="admin-grid">
       <Section title="Customers" description={`Live data from Supabase table "${customersTable}" (edit credits).`}>
         <div className="admin-inline">
           <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading}>
@@ -1100,22 +596,18 @@ function CustomersTab({
           </div>
         )}
 
-        <Table headers={["Email / ID", "Credits", "Expires", "Last active", "Pick"]}>
+        <Table headers={["Email / ID", "Credits", "Expires", "Last active"]}>
           {local.map((c, idx) => (
             <div className="admin-table-row" key={`${c.pkCol}:${c.pkVal}`}>
               <div style={{ display: "grid" }}>
                 <div style={{ fontWeight: 700 }}>{c.email}</div>
                 <div className="admin-muted" style={{ fontSize: 12 }}>
-                  {c.userId ? `user_id: ${c.userId}` : c.shopifyCustomerId ? `shopify: ${c.shopifyCustomerId}` : `${c.pkCol}: ${c.pkVal}`}
+                  {c.userId ? `user_id: ${truncateId(c.userId)}` : c.shopifyCustomerId ? `shopify: ${truncateId(c.shopifyCustomerId)}` : `${c.pkCol}: ${truncateId(c.pkVal)}`}
                 </div>
               </div>
 
               <div>
-                <input
-                  type="number"
-                  value={c.credits}
-                  onChange={(e) => updateRow(idx, { ...c, credits: Number(e.target.value) || 0 })}
-                />
+                <input type="number" value={c.credits} onChange={(e) => updateRow(idx, { ...c, credits: Number(e.target.value) || 0 })} />
               </div>
 
               <div>
@@ -1127,90 +619,400 @@ function CustomersTab({
               </div>
 
               <div>{c.lastActive || "—"}</div>
-
-              <div>
-                <button className="admin-button ghost" type="button" onClick={() => setSelected(c)}>
-                  View
-                </button>
-              </div>
             </div>
           ))}
         </Table>
-      </Section>
-
-      <Section title="Customer details" description="Raw data + recent transactions">
-        {selected ? (
-          <>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 800 }}>{selected.email}</div>
-              <div className="admin-muted" style={{ fontSize: 12 }}>
-                {selected.userId ? `user_id: ${selected.userId}` : `${selected.pkCol}: ${selected.pkVal}`}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 12, border: "1px solid #eee", borderRadius: 12, padding: 12 }}>
-              <strong>Payments / Purchases (heuristic)</strong>
-              <div style={{ marginTop: 8 }}>
-                {txLoading ? "Loading..." : txRows ? <>Total paid (from latest 300 tx): <strong>{totalPaid ?? "—"}</strong></> : "—"}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 12 }}>
-              <strong>Recent credit transactions</strong>
-              {txLoading ? (
-                <div className="admin-muted" style={{ marginTop: 8 }}>Loading...</div>
-              ) : (
-                <pre style={{ whiteSpace: "pre-wrap" }}>{safeJson(txRows ?? [])}</pre>
-              )}
-            </div>
-
-            <RawViewer row={selected.raw} />
-          </>
-        ) : (
-          <p className="admin-muted">Select a customer.</p>
-        )}
       </Section>
     </div>
   );
 }
 
 /* -----------------------------
-   Logs tab (same idea)
+   AI Flat Config tab
 ------------------------------ */
 
-function LogsTab({ config }: { config: AdminConfig }) {
-  const [filter, setFilter] = useState<string>("");
+type FlatAiDraft = {
+  defaultProvider: string;
+  defaultModel: string;
+  temperature: number;
+  topP: number;
+  maxTokens: number;
+  context: string;
+  providerParamsJson: string; // JSON string (pre-filled)
+};
+
+function normalizeFlatAiRow(row: any): FlatAiDraft {
+  const providerParams =
+    row?.provider_params ??
+    row?.providerParams ??
+    row?.provider_parameters ??
+    row?.providerParameters ??
+    {};
+
+  return {
+    defaultProvider: pickString(row, ["default_provider", "defaultProvider", "provider", "default_provider_name"], ""),
+    defaultModel: pickString(row, ["default_model", "defaultModel", "model", "default_model_name"], ""),
+    temperature: pickNumber(row, ["temperature", "temp"], 0.7),
+    topP: pickNumber(row, ["top_p", "topP"], 1),
+    maxTokens: pickNumber(row, ["max_tokens", "maxTokens"], 1024),
+    context: pickString(row, ["context", "system_prompt", "systemPrompt", "prompt"], ""),
+    providerParamsJson: safeJson(providerParams),
+  };
+}
+
+async function loadFlatAiConfig() {
+  const { data, error } = await supabase.from(AI_FLAT_TABLE).select("*").limit(1).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
+async function saveFlatAiConfig(existingRow: any | null, draft: FlatAiDraft) {
+  let providerParams: any = {};
+  try {
+    providerParams = draft.providerParamsJson?.trim() ? JSON.parse(draft.providerParamsJson) : {};
+  } catch {
+    throw new Error("Provider params JSON is invalid. Fix it before saving.");
+  }
+
+  const patch: any = {};
+  const cols = {
+    defaultProvider: pickFirstKey(existingRow ?? {}, ["default_provider", "defaultProvider"]) || "default_provider",
+    defaultModel: pickFirstKey(existingRow ?? {}, ["default_model", "defaultModel"]) || "default_model",
+    temperature: pickFirstKey(existingRow ?? {}, ["temperature", "temp"]) || "temperature",
+    topP: pickFirstKey(existingRow ?? {}, ["top_p", "topP"]) || "top_p",
+    maxTokens: pickFirstKey(existingRow ?? {}, ["max_tokens", "maxTokens"]) || "max_tokens",
+    context: pickFirstKey(existingRow ?? {}, ["context", "system_prompt", "systemPrompt", "prompt"]) || "context",
+    providerParams: pickFirstKey(existingRow ?? {}, ["provider_params", "providerParams"]) || "provider_params",
+  };
+
+  patch[cols.defaultProvider] = draft.defaultProvider;
+  patch[cols.defaultModel] = draft.defaultModel;
+  patch[cols.temperature] = draft.temperature;
+  patch[cols.topP] = draft.topP;
+  patch[cols.maxTokens] = draft.maxTokens;
+  patch[cols.context] = draft.context;
+  patch[cols.providerParams] = providerParams;
+
+  // update existing row if possible
+  if (existingRow) {
+    const pkCol = pickFirstKey(existingRow, ["id", "key", "name"]);
+    if (!pkCol) {
+      // fallback: update first row by upsert with id=default
+      patch.id = "default";
+      const { error } = await supabase.from(AI_FLAT_TABLE).upsert(patch);
+      if (error) throw new Error(error.message);
+      return;
+    }
+
+    const pkVal = existingRow[pkCol];
+    const { error } = await supabase.from(AI_FLAT_TABLE).update(patch).eq(pkCol, pkVal);
+    if (error) throw new Error(error.message);
+    return;
+  }
+
+  // no row exists -> create singleton row
+  patch.id = "default";
+  const { error } = await supabase.from(AI_FLAT_TABLE).insert(patch);
+  if (error) throw new Error(error.message);
+}
+
+function FlatAiConfigTab({
+  row,
+  draft,
+  setDraft,
+  loading,
+  error,
+  onRefresh,
+  onSave,
+  saving,
+  dirty,
+}: {
+  row: any | null;
+  draft: FlatAiDraft | null;
+  setDraft: (next: FlatAiDraft) => void;
+  loading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+  onSave: () => void;
+  saving: boolean;
+  dirty: boolean;
+}) {
+  if (loading || !draft) {
+    return (
+      <div className="admin-grid">
+        <Section title="AI Config" description={`Loading from Supabase table "${AI_FLAT_TABLE}"…`}>
+          <div style={{ padding: 12 }}>Loading…</div>
+        </Section>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-grid">
-      <Section title="Logs (local)" description="Local logs stored in config (if you keep them).">
+      <Section title="AI Config (Flat)" description={`Edit the existing row in "${AI_FLAT_TABLE}" then hit Save.`}>
         <div className="admin-inline">
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">All</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
+          <button className="admin-button ghost" type="button" onClick={onRefresh} disabled={loading || saving}>
+            Refresh
+          </button>
+          <button className="admin-button" type="button" onClick={onSave} disabled={saving || !dirty}>
+            {saving ? "Saving..." : "Save"}
+          </button>
+          {!dirty ? <span className="admin-muted">No changes.</span> : <span className="admin-muted">Unsaved changes.</span>}
+        </div>
+
+        {error && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>AI config error:</strong> {error}
+          </div>
+        )}
+
+        <div className="admin-inline" style={{ marginTop: 12 }}>
+          <label>
+            <strong>Default provider</strong>
+            <input
+              value={draft.defaultProvider}
+              onChange={(e) => setDraft({ ...draft, defaultProvider: e.target.value })}
+            />
+          </label>
+
+          <label>
+            <strong>Default model</strong>
+            <input
+              value={draft.defaultModel}
+              onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })}
+            />
+          </label>
+
+          <label>
+            <strong>Temperature</strong>
+            <input
+              type="number"
+              step="0.1"
+              value={draft.temperature}
+              onChange={(e) => setDraft({ ...draft, temperature: Number(e.target.value) || 0 })}
+            />
+          </label>
+
+          <label>
+            <strong>top_p</strong>
+            <input
+              type="number"
+              step="0.05"
+              value={draft.topP}
+              onChange={(e) => setDraft({ ...draft, topP: Number(e.target.value) || 0 })}
+            />
+          </label>
+
+          <label>
+            <strong>Max tokens</strong>
+            <input
+              type="number"
+              value={draft.maxTokens}
+              onChange={(e) => setDraft({ ...draft, maxTokens: Number(e.target.value) || 0 })}
+            />
+          </label>
+        </div>
+
+        <label style={{ display: "block", marginTop: 12 }}>
+          <strong>Context (system prompt override)</strong>
+          <textarea
+            className="admin-textarea"
+            value={draft.context}
+            onChange={(e) => setDraft({ ...draft, context: e.target.value })}
+          />
+        </label>
+
+        <label style={{ display: "block", marginTop: 12 }}>
+          <strong>Provider params (JSON)</strong>
+          <textarea
+            className="admin-textarea"
+            value={draft.providerParamsJson}
+            onChange={(e) => setDraft({ ...draft, providerParamsJson: e.target.value })}
+            style={{ minHeight: 220, fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" }}
+          />
+        </label>
+
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: "pointer", fontWeight: 700 }}>Raw row (from DB)</summary>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{safeJson(row)}</pre>
+        </details>
+      </Section>
+    </div>
+  );
+}
+
+/* -----------------------------
+   Logs (realtime, fullscreen lines)
+------------------------------ */
+
+type LogLine = {
+  at: string;
+  level: string;
+  source: string;
+  message: string;
+  raw: any;
+};
+
+function normalizeLog(r: any): LogLine {
+  const at = pickString(r, ["at", "created_at", "timestamp", "time"], "") || new Date().toISOString();
+  const level = pickString(r, ["level", "severity"], "info");
+  const source = pickString(r, ["source", "svc", "service", "origin"], "logs");
+  const message = pickString(r, ["message", "msg", "text"], safeJson(r));
+  return { at, level, source, message, raw: r };
+}
+
+function emojiForSource(source: string) {
+  const s = (source || "").toLowerCase();
+  if (s.includes("server")) return "🖥️";
+  if (s.includes("api")) return "🧩";
+  if (s.includes("ai")) return "🧠";
+  if (s.includes("front") || s.includes("web") || s.includes("ui")) return "🧑‍💻";
+  return "📜";
+}
+
+function emojiForLevel(level: string) {
+  const l = (level || "").toLowerCase();
+  if (l.includes("error") || l === "err") return "❌";
+  if (l.includes("warn")) return "⚠️";
+  if (l.includes("debug")) return "🪲";
+  return "ℹ️";
+}
+
+function RealtimeLogsTab() {
+  const [rows, setRows] = useState<LogLine[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<string>("");
+
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const sources = useMemo(() => {
+    const uniq = new Set<string>();
+    rows.forEach((r) => uniq.add(r.source));
+    return Array.from(uniq).sort();
+  }, [rows]);
+
+  const visible = useMemo(() => {
+    if (!sourceFilter) return rows;
+    return rows.filter((r) => r.source === sourceFilter);
+  }, [rows, sourceFilter]);
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  const loadInitial = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const data = await loadTable(LOGS_TABLE, 600, "created_at");
+      setRows((data as any[]).reverse().map(normalizeLog)); // oldest -> newest
+      setTimeout(scrollToBottom, 50);
+    } catch (e: any) {
+      setErr(e?.message ?? "Failed to load logs");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadInitial();
+
+    const channel = supabase
+      .channel(`realtime:${LOGS_TABLE}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: LOGS_TABLE },
+        (payload: any) => {
+          if (paused) return;
+          const next = normalizeLog(payload.new);
+          setRows((prev) => {
+            const merged = [...prev, next].slice(-2000);
+            return merged;
+          });
+          setTimeout(scrollToBottom, 0);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paused]);
+
+  return (
+    <div className="admin-grid">
+      <Section title="Logs (Realtime)" description={`Streaming from Supabase "${LOGS_TABLE}" as fullscreen lines.`}>
+        <div className="admin-inline">
+          <button className="admin-button ghost" type="button" onClick={() => void loadInitial()} disabled={loading}>
+            {loading ? "Loading..." : "Reload"}
+          </button>
+
+          <button className="admin-button ghost" type="button" onClick={() => setPaused((p) => !p)}>
+            {paused ? "Resume" : "Pause"}
+          </button>
+
+          <button className="admin-button ghost" type="button" onClick={() => setRows([])}>
+            Clear (local)
+          </button>
+
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}>
+            <option value="">All sources</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
           </select>
-          <button className="admin-button ghost" onClick={() => navigator.clipboard?.writeText(JSON.stringify(config.logs, null, 2))}>
-            Copy JSON
+
+          <button
+            className="admin-button ghost"
+            type="button"
+            onClick={() => navigator.clipboard?.writeText(visible.map((l) => `${l.at} ${l.source} ${l.level} ${l.message}`).join("\n"))}
+          >
+            Copy lines
           </button>
         </div>
 
-        <div className="admin-log-shell">
-          {config.logs
-            .filter((l) => !filter || l.level === filter)
-            .slice(-300)
-            .reverse()
-            .map((log) => (
-              <div key={log.id} className={`admin-log-row level-${log.level}`}>
-                <div className="admin-log-meta">
-                  <span>{log.level.toUpperCase()}</span>
-                  <span>{log.at}</span>
-                  <span>{log.source}</span>
-                </div>
-                <div>{log.message}</div>
+        {err && (
+          <div style={{ padding: 12, marginTop: 10, border: "1px solid crimson", color: "crimson", borderRadius: 8 }}>
+            <strong>Logs error:</strong> {err}
+          </div>
+        )}
+
+        <div
+          ref={scrollRef}
+          style={{
+            marginTop: 12,
+            height: "calc(100vh - 260px)",
+            border: "1px solid #eee",
+            borderRadius: 12,
+            padding: 10,
+            overflow: "auto",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+            fontSize: 12,
+            lineHeight: 1.4,
+            background: "white",
+          }}
+        >
+          {visible.length === 0 ? (
+            <div className="admin-muted">{loading ? "Loading…" : "No logs yet."}</div>
+          ) : (
+            visible.map((l, i) => (
+              <div key={`${l.at}-${i}`} style={{ whiteSpace: "pre-wrap" }}>
+                {emojiForSource(l.source)} {emojiForLevel(l.level)}{" "}
+                <span style={{ opacity: 0.75 }}>[{l.at}]</span>{" "}
+                <span style={{ fontWeight: 700 }}>{l.source}</span>{" "}
+                <span style={{ opacity: 0.8 }}>{l.level}</span>{" "}
+                {l.message}
               </div>
-            ))}
+            ))
+          )}
         </div>
       </Section>
     </div>
@@ -1223,11 +1025,10 @@ function LogsTab({ config }: { config: AdminConfig }) {
 
 export default function AdminDashboard() {
   const allowed = useAdminGuard();
-  const { config, updateConfig, loading, error } = useAdminConfigState();
-  const [draft, setDraft] = useState<AdminConfig | null>(null);
+
   const [tab, setTab] = useState<TabKey>("customers");
-  // ✅ API base for backend calls (stored in this browser)
-  // Leave empty "" if admin frontend and backend are on same domain.
+
+  // runtime api base
   const [apiBase, setApiBase] = useState<string>(() => {
     try {
       return localStorage.getItem("MINA_API_BASE") || "";
@@ -1236,24 +1037,18 @@ export default function AdminDashboard() {
     }
   });
 
-  // live state
+  // customers
   const [customersTable] = useState("customers");
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [customersLoading, setCustomersLoading] = useState(false);
   const [customersError, setCustomersError] = useState<string | null>(null);
 
+  // generations
   const [generations, setGenerations] = useState<LiveRow[]>([]);
   const [generationsLoading, setGenerationsLoading] = useState(false);
   const [generationsError, setGenerationsError] = useState<string | null>(null);
 
-  const [transactions, setTransactions] = useState<LiveRow[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [transactionsError, setTransactionsError] = useState<string | null>(null);
-
-  const [sessions, setSessions] = useState<LiveRow[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [sessionsError, setSessionsError] = useState<string | null>(null);
-
+  // feedback
   const [feedback, setFeedback] = useState<LiveRow[]>([]);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
@@ -1261,18 +1056,21 @@ export default function AdminDashboard() {
   // filters
   const [userFilter, setUserFilter] = useState<string>("");
 
-  const firstLoadRef = useRef(false);
+  // AI flat config
+  const [aiRow, setAiRow] = useState<any | null>(null);
+  const [aiDraft, setAiDraft] = useState<FlatAiDraft | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiDirty, setAiDirty] = useState(false);
 
-  useEffect(() => {
-    if (!loading) setDraft(config);
-  }, [loading, config]);
+  const firstLoadRef = useRef(false);
 
   const refreshCustomers = async () => {
     setCustomersLoading(true);
     setCustomersError(null);
     try {
       let rows = await loadTable("customers", 800, "updated_at");
-      // filter client-side (works even if schema is inconsistent)
       const f = userFilter.trim().toLowerCase();
       if (f) {
         rows = (rows as any[]).filter((r) => {
@@ -1315,53 +1113,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const refreshTransactions = async () => {
-    setTransactionsLoading(true);
-    setTransactionsError(null);
-    try {
-      let rows = await loadTable("credit_transactions", 900, "created_at");
-      const f = userFilter.trim().toLowerCase();
-      if (f) {
-        rows = (rows as any[]).filter((r) => {
-          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
-          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
-          const shopify = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
-          const type = pickString(r, ["type", "kind", "source"], "").toLowerCase();
-          return email.includes(f) || userId === f || shopify.includes(f) || type.includes(f);
-        });
-      }
-      setTransactions(makeRowsFromAny("credit_transactions", rows as any[]));
-    } catch (e: any) {
-      setTransactionsError(e?.message ?? "Failed to load credit_transactions");
-      setTransactions([]);
-    } finally {
-      setTransactionsLoading(false);
-    }
-  };
-
-  const refreshSessions = async () => {
-    setSessionsLoading(true);
-    setSessionsError(null);
-    try {
-      let rows = await loadTable("sessions", 800, "created_at");
-      const f = userFilter.trim().toLowerCase();
-      if (f) {
-        rows = (rows as any[]).filter((r) => {
-          const email = pickString(r, ["email", "user_email"], "").toLowerCase();
-          const userId = pickString(r, ["user_id", "uid"], "").toLowerCase();
-          const customer = pickString(r, ["shopify_customer_id", "customer_id"], "").toLowerCase();
-          return email.includes(f) || userId === f || customer.includes(f);
-        });
-      }
-      setSessions(makeRowsFromAny("sessions", rows as any[]));
-    } catch (e: any) {
-      setSessionsError(e?.message ?? "Failed to load sessions");
-      setSessions([]);
-    } finally {
-      setSessionsLoading(false);
-    }
-  };
-
   const refreshFeedback = async () => {
     setFeedbackLoading(true);
     setFeedbackError(null);
@@ -1385,6 +1136,48 @@ export default function AdminDashboard() {
     }
   };
 
+  const refreshAi = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const row = await loadFlatAiConfig();
+      setAiRow(row);
+      setAiDraft(normalizeFlatAiRow(row ?? {}));
+      setAiDirty(false);
+    } catch (e: any) {
+      setAiError(e?.message ?? "Failed to load AI config");
+      setAiRow(null);
+      setAiDraft({
+        defaultProvider: "",
+        defaultModel: "",
+        temperature: 0.7,
+        topP: 1,
+        maxTokens: 1024,
+        context: "",
+        providerParamsJson: "{}",
+      });
+      setAiDirty(false);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const saveAi = async () => {
+    if (!aiDraft) return;
+    setAiSaving(true);
+    setAiError(null);
+    try {
+      await saveFlatAiConfig(aiRow, aiDraft);
+      await refreshAi();
+      alert("AI config saved ✅");
+    } catch (e: any) {
+      setAiError(e?.message ?? "Save failed");
+      alert(e?.message ?? "Save failed");
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
   useEffect(() => {
     if (allowed !== true) return;
     if (firstLoadRef.current) return;
@@ -1392,35 +1185,19 @@ export default function AdminDashboard() {
 
     void refreshCustomers();
     void refreshGenerations();
-    void refreshTransactions();
-    void refreshSessions();
     void refreshFeedback();
+    void refreshAi();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allowed]);
 
-  // refresh on filter apply (manual button only; avoids spamming)
   const applyFilter = () => {
     void refreshCustomers();
     void refreshGenerations();
-    void refreshTransactions();
-    void refreshSessions();
     void refreshFeedback();
   };
 
-  if (allowed === null || loading || !draft) return <div style={{ padding: 24 }}>Loading admin…</div>;
+  if (allowed === null) return <div style={{ padding: 24 }}>Loading admin…</div>;
   if (allowed === false) return null;
-
-  const setConfig = (next: AdminConfig) => setDraft(next);
-
-  const handleSave = async () => {
-    try {
-      // Keep config clean (do not embed live tables)
-      await updateConfig(draft);
-      alert("Saved ✅");
-    } catch (e: any) {
-      alert(e?.message ?? "Save failed");
-    }
-  };
 
   const rightStatus = (
     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -1431,18 +1208,21 @@ export default function AdminDashboard() {
         Generations: <strong>{generations.length}</strong>
       </span>
       <span className="admin-muted" style={{ fontSize: 12 }}>
-        Tx: <strong>{transactions.length}</strong>
-      </span>
-      <span className="admin-muted" style={{ fontSize: 12 }}>
-        Sessions: <strong>{sessions.length}</strong>
+        Feedback: <strong>{feedback.length}</strong>
       </span>
     </div>
   );
 
+  const rightActions =
+    tab === "ai" ? (
+      <button className="admin-button" onClick={() => void saveAi()} disabled={aiSaving || !aiDirty}>
+        {aiSaving ? "Saving..." : "Save"}
+      </button>
+    ) : null;
+
   const filterBar = (
     <>
       <input
-        placeholder="Filter by email / user_id / customer_id / prompt…"
         value={userFilter}
         onChange={(e) => setUserFilter(e.target.value)}
         style={{ minWidth: 340 }}
@@ -1463,74 +1243,84 @@ export default function AdminDashboard() {
     </>
   );
 
+  // mark AI dirty on any draft change
+  const setAiDraftDirty = (next: FlatAiDraft) => {
+    setAiDraft(next);
+    setAiDirty(true);
+  };
+
   return (
     <div className="admin-shell">
-      <AdminHeader onSave={handleSave} rightStatus={rightStatus} />
+      <AdminHeader rightStatus={rightStatus} rightActions={rightActions} />
       <StickyTabs active={tab} onChange={setTab} />
 
-      {error && <div style={{ padding: 12, color: "crimson" }}>{error}</div>}
-
       <div className="admin-content">
-                {tab === "runtime" && (
-  <div className="admin-grid">
-    <Section
-      title="Runtime Config (Live backend)"
-      description="Edit the live backend runtime config (models, replicate params, GPT temp/tokens, system/user append)."
-    >
-      <div className="admin-inline">
-        <label style={{ minWidth: 420 }}>
-          <strong>API Base URL (optional)</strong>
-          <input
-            value={apiBase}
-            onChange={(e) => {
-              const v = e.target.value;
-              setApiBase(v);
-              try {
-                localStorage.setItem("MINA_API_BASE", v);
-              } catch {}
-            }}
-            placeholder="Example: https://your-api.onrender.com  (leave empty if same domain)"
-          />
-        </label>
+        {tab === "runtime" && (
+          <div className="admin-grid">
+            <Section
+              title="Runtime Config (Live backend)"
+              description="Edit the live backend runtime config (models, replicate params, GPT temp/tokens, system/user append)."
+            >
+              <div className="admin-inline">
+                <label style={{ minWidth: 420 }}>
+                  <strong>API Base URL (optional)</strong>
+                  <input
+                    value={apiBase}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setApiBase(v);
+                      try {
+                        localStorage.setItem("MINA_API_BASE", v);
+                      } catch {}
+                    }}
+                  />
+                </label>
 
-        <button
-          className="admin-button ghost"
-          type="button"
-          onClick={() => {
-            setApiBase("");
-            try {
-              localStorage.removeItem("MINA_API_BASE");
-            } catch {}
-          }}
-        >
-          Use same domain
-        </button>
-      </div>
+                <button
+                  className="admin-button ghost"
+                  type="button"
+                  onClick={() => {
+                    setApiBase("");
+                    try {
+                      localStorage.removeItem("MINA_API_BASE");
+                    } catch {}
+                  }}
+                >
+                  Use same domain
+                </button>
+              </div>
 
-      <div style={{ marginTop: 12 }}>
-        <RuntimeConfigFlatEditor />
+              <div style={{ marginTop: 12 }}>
+                <RuntimeConfigFlatEditor />
 
-        <div style={{ height: 18 }} />
+                <div style={{ height: 18 }} />
 
-        <details>
-          <summary style={{ cursor: "pointer", fontWeight: 800 }}>
-            Advanced: Raw runtime JSON editor (legacy)
-          </summary>
-          <div style={{ marginTop: 12 }}>
-            <RuntimeConfigEditor apiBase={apiBase} />
+                <details>
+                  <summary style={{ cursor: "pointer", fontWeight: 800 }}>
+                    Advanced: Raw runtime JSON editor (legacy)
+                  </summary>
+                  <div style={{ marginTop: 12 }}>
+                    <RuntimeConfigEditor apiBase={apiBase} />
+                  </div>
+                </details>
+              </div>
+            </Section>
           </div>
-        </details>
-      </div>
-    </Section>
-  </div>
-)}
+        )}
 
-
-        {tab === "ai" && <AISettingsTab config={draft} setConfig={setConfig} />}
-        {tab === "pricing" && <PricingTab config={draft} setConfig={setConfig} />}
-        {tab === "styles" && <StylesTab config={draft} setConfig={setConfig} />}
-        {tab === "assets" && <AssetsTab config={draft} setConfig={setConfig} />}
-        {tab === "architecture" && <ArchitectureTab config={draft} setConfig={setConfig} />}
+        {tab === "ai" && (
+          <FlatAiConfigTab
+            row={aiRow}
+            draft={aiDraft}
+            setDraft={setAiDraftDirty}
+            loading={aiLoading}
+            error={aiError}
+            onRefresh={() => void refreshAi()}
+            onSave={() => void saveAi()}
+            saving={aiSaving}
+            dirty={aiDirty}
+          />
+        )}
 
         {tab === "customers" && (
           <CustomersTab
@@ -1544,59 +1334,39 @@ export default function AdminDashboard() {
 
         {tab === "generations" && (
           <LiveTableTab
+            tableName="generations"
             title="Generations"
-            description="Shows ALL stored columns. If you want GPT input/output + seedream input visible, your backend must store it in this row (columns or JSON)."
+            description="Shows ALL stored columns. Select one to view raw fields. You can delete selected."
             rows={generations}
             loading={generationsLoading}
             error={generationsError}
             onRefresh={() => void refreshGenerations()}
             filterLabel={filterBar}
-          />
-        )}
-
-        {tab === "transactions" && (
-          <LiveTableTab
-            title="Credit transactions"
-            description="Your Stripe/webhook should write here. Dashboard shows everything stored."
-            rows={transactions}
-            loading={transactionsLoading}
-            error={transactionsError}
-            onRefresh={() => void refreshTransactions()}
-            filterLabel={filterBar}
-          />
-        )}
-
-        {tab === "sessions" && (
-          <LiveTableTab
-            title="Sessions"
-            description="Track session start / usage. Shows everything stored."
-            rows={sessions}
-            loading={sessionsLoading}
-            error={sessionsError}
-            onRefresh={() => void refreshSessions()}
-            filterLabel={filterBar}
+            allowDelete
           />
         )}
 
         {tab === "feedback" && (
           <LiveTableTab
+            tableName="feedback"
             title="Feedback"
-            description="Likes / feedback rows."
+            description="Likes / feedback rows. Select one to view raw fields. You can delete selected."
             rows={feedback}
             loading={feedbackLoading}
             error={feedbackError}
             onRefresh={() => void refreshFeedback()}
             filterLabel={filterBar}
+            allowDelete
           />
         )}
 
-        {tab === "logs" && <LogsTab config={draft} />}
+        {tab === "logs" && <RealtimeLogsTab />}
       </div>
 
       <div className="admin-footer">
-        Config saved in Supabase: mina_admin_config + mina_admin_secrets
+        Live tables are read/update directly.
         <span className="admin-muted" style={{ marginLeft: 10 }}>
-          Live tables are read/update directly.
+          AI config table: <strong>{AI_FLAT_TABLE}</strong> • Logs table: <strong>{LOGS_TABLE}</strong>
         </span>
       </div>
     </div>
