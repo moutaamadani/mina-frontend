@@ -12,6 +12,18 @@ const API_BASE_URL =
 // ✅ MEGA identity storage (single identity)
 const PASS_ID_STORAGE_KEY = "minaPassId";
 
+function normalizePassId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  // Only accept safe characters and a reasonable length to avoid persisting
+  // unexpected payloads from the network or localStorage tampering.
+  const isSafe = /^[A-Za-z0-9._-]{3,200}$/.test(trimmed);
+  return isSafe ? trimmed : null;
+}
+
 const PassIdContext = React.createContext<string | null>(null);
 
 export function usePassId(): string | null {
@@ -28,7 +40,7 @@ function safeLocalStorageGet(key: string): string | null {
   try {
     if (typeof window === "undefined") return null;
     const v = window.localStorage.getItem(key);
-    return v && v.trim() ? v.trim() : null;
+    return normalizePassId(v);
   } catch {
     return null;
   }
@@ -48,7 +60,10 @@ function readStoredPassId(): string | null {
 }
 
 function persistPassId(passId: string) {
-  safeLocalStorageSet(PASS_ID_STORAGE_KEY, passId);
+  const normalized = normalizePassId(passId);
+  if (!normalized) return;
+
+  safeLocalStorageSet(PASS_ID_STORAGE_KEY, normalized);
 }
 
 async function getSupabaseAccessToken(): Promise<string | null> {
@@ -86,7 +101,13 @@ async function ensurePassId(): Promise<string | null> {
     if (!res.ok) return existing;
 
     const json = (await res.json().catch(() => ({} as any))) as any;
-    const next = typeof json?.passId === "string" ? json.passId.trim() : null;
+    const nextRaw =
+      typeof json?.passId === "string"
+        ? json.passId
+        : typeof json?.pass_id === "string"
+          ? json.pass_id
+          : null;
+    const next = normalizePassId(nextRaw);
 
     if (next) {
       persistPassId(next);

@@ -769,6 +769,14 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
   const currentPassId = passId;
+  const passIdLabel = useMemo(() => {
+    if (!currentPassId) return "—";
+    if (currentPassId.length <= 16) return currentPassId;
+
+    const head = currentPassId.slice(0, 8);
+    const tail = currentPassId.slice(-6);
+    return `${head}…${tail}`;
+  }, [currentPassId]);
 
   // ✅ Always show newest first in Profile
   const sortedHistoryGenerations = useMemo(() => {
@@ -2783,6 +2791,17 @@ const renderProfileBody = () => {
                 Matchas remaining
               </span>
               <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
+            </div>
+            <div className="profile-meta-block">
+              <span
+                className="profile-meta-title"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+              >
+                Pass ID (MEGA)
+              </span>
+              <span className="profile-meta-value" title={currentPassId || ""}>
+                {passIdLabel}
+              </span>
             </div>
             <div className="profile-meta-block">
               <span
