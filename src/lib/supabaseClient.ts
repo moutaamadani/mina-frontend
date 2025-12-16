@@ -10,25 +10,28 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Safe storage (prevents crashes in non-browser builds)
 const storage =
-  typeof window !== "undefined" && window.localStorage
+  typeof window !== "undefined" && typeof window.localStorage !== "undefined"
     ? window.localStorage
     : undefined;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // ✅ keeps user logged in
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: "mina.supabase.auth", // optional but recommended
-    // ✅ important for OAuth + magic-link redirects (PKCE flow is recommended)
-    flowType: "pkce",
-    detectSessionInUrl: true,
+    // ✅ Keep users signed in between page reloads / browser restarts
+    persistSession: true,
 
-    // ✅ keeps JWT fresh
+    // ✅ Refresh tokens automatically when nearing expiry
     autoRefreshToken: true,
 
-    // ✅ custom storage (optional but safer)
+    // ✅ Needed for OAuth + magic link redirects
+    detectSessionInUrl: true,
+
+    // ✅ PKCE recommended for SPA apps
+    flowType: "pkce",
+
+    // ✅ Stable storage key (prevents collisions)
+    storageKey: "mina.supabase.auth",
+
+    // ✅ Use safe storage when available
     storage,
   },
 });
@@ -38,9 +41,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
  * Use this token as: Authorization: Bearer <token>
  */
 export async function getSupabaseJwt(): Promise<string | null> {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token ?? null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return null;
+    return data.session?.access_token ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
