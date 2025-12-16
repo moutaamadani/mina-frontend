@@ -8,6 +8,7 @@ import StudioLeft from "./StudioLeft";
 import { loadAdminConfig } from "./lib/adminConfig";
 import AdminLink from "./components/AdminLink";
 import { usePassId } from "./components/AuthGate";
+import Profile from "./Profile";
 
 
 const API_BASE_URL =
@@ -473,7 +474,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   // 4.1 Global tab + customer
   // -------------------------
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
-  const passId = usePassId();
+  const passId = ensurePassId();
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -610,35 +611,6 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   }, [adminConfig]);
 
   // -------------------------
-  // 4.4 History (profile)
-  // -------------------------
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<string | null>(null);
-  const [historyGenerations, setHistoryGenerations] = useState<GenerationRecord[]>([]);
-  const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>([]);
-  const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
-  const [numberMap, setNumberMap] = useState<Record<string, string>>(() => {
-    try {
-      const raw = typeof window !== "undefined" ? window.localStorage.getItem("minaProfileNumberMap") : null;
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
-      return {};
-    }
-  });
-  const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
-  const [editingNumberValue, setEditingNumberValue] = useState("");
-  const [brandingLeft, setBrandingLeft] = useState({
-    title: "MINA AI",
-    accent: "Taste",
-    handle: "@mina.editorial.ai",
-  });
-  const [brandingRight, setBrandingRight] = useState({
-    handle: "@madani_branding",
-    note: "Trained by Madani",
-  });
-  const [brandingEditing, setBrandingEditing] = useState<"left" | "right" | null>(null);
-
-  // -------------------------
   // 4.5 Upload refs / drag state
   // -------------------------
   const productInputRef = useRef<HTMLInputElement | null>(null);
@@ -769,28 +741,6 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
   const currentPassId = passId;
-
-  // ✅ Always show newest first in Profile
-  const sortedHistoryGenerations = useMemo(() => {
-    const copy = [...historyGenerations];
-    copy.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    return copy;
-  }, [historyGenerations]);
-
-  const historyIndexMap = useMemo(
-    () =>
-      sortedHistoryGenerations.reduce<Record<string, number>>((acc, item, idx) => {
-        acc[item.id] = idx;
-        return acc;
-      }, {}),
-    [sortedHistoryGenerations]
-  );
-
-  const visibleHistory = useMemo(
-    () =>
-      sortedHistoryGenerations.slice(0, Math.min(visibleHistoryCount, sortedHistoryGenerations.length)),
-    [sortedHistoryGenerations, visibleHistoryCount]
-  );
 
   // UI stages
   const stageHasPills = uiStage >= 1;
@@ -2602,295 +2552,6 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
 
   // ========================================================================
-// [PART 17 START] Profile body – editorial history (cleaned)
-// ========================================================================
-const renderProfileBody = () => {
-  // Show expiration date if provided
-  const expirationCandidate =
-    credits?.meta?.expiresAt ||
-    (credits?.meta as any)?.expiresAt ||
-    (credits?.meta as any)?.expirationDate ||
-    (credits?.meta as any)?.expiry ||
-    (credits?.meta as any)?.expiration;
-
-  const expirationLabel = formatDateOnly(expirationCandidate);
-
-  // Layout variants for grid sizing
-  const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
-
-  // Render generation number (edit on double-click for admins)
-  const renderNumberBadge = (g: GenerationRecord) => {
-    const idx = historyIndexMap[g.id] ?? 0;
-    const value = getEditorialNumber(g.id, idx);
-    const isEditing = editingNumberId === g.id;
-    return (
-      <div
-        className="profile-card-number"
-        style={{ textTransform: "none", letterSpacing: "normal" }}
-        onDoubleClick={() => handleBeginEditNumber(g.id, idx)}
-        title={isAdmin ? "Double-click to edit" : undefined}
-      >
-        {isEditing ? (
-          <input
-            autoFocus
-            className="profile-card-number-input"
-            value={editingNumberValue}
-            onChange={(e) => setEditingNumberValue(e.target.value)}
-            onBlur={handleCommitNumber}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCommitNumber();
-              if (e.key === "Escape") handleCancelNumberEdit();
-            }}
-          />
-        ) : (
-          <span>{value}</span>
-        )}
-      </div>
-    );
-  };
-
-  // Render a single history card
-  const renderCard = (g: GenerationRecord, i: number) => {
-    const variant = editorialVariants[i % editorialVariants.length];
-    const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
-    const numberLabel = getEditorialNumber(g.id, i);
-    return (
-      <article key={g.id} className={`profile-card profile-card--${variant}`}>
-        {renderNumberBadge(g)}
-        <div
-          className="profile-card-media"
-          style={{
-            aspectRatio: aspectStyle,
-            border: "1px solid rgba(8,10,0,0.08)",
-            background: "rgba(8, 10, 0, 0.05)",
-          }}
-          onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
-        >
-          <img
-            src={toPreviewUrl(g.outputUrl)}
-            loading="lazy"
-            decoding="async"
-            alt={g.prompt}
-            referrerPolicy="no-referrer"
-          />
-          <div
-            className="profile-card-actions"
-            style={{
-              backdropFilter: "blur(5px)",
-              WebkitBackdropFilter: "blur(5px)",
-              background: "rgba(0,0,0,0.3)",
-            }}
-          >
-            <button
-              type="button"
-              className="link-button subtle"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDownloadGeneration(g, numberLabel);
-              }}
-              style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
-            >
-              download
-            </button>
-          </div>
-        </div>
-        <div className="profile-card-meta">
-          <div
-            className="profile-card-prompt"
-            style={{
-              fontSize: "10pt",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              textTransform: "none",
-              letterSpacing: "normal",
-            }}
-          >
-            {g.prompt || "Untitled prompt"}
-            {g.prompt && g.prompt.length > 80 && (
-              <>
-                {" "}
-                <button
-                  type="button"
-                  className="link-button subtle"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    alert(g.prompt);
-                  }}
-                  style={{ fontSize: "10pt", textDecoration: "underline", padding: 0 }}
-                >
-                  view more
-                </button>
-              </>
-            )}
-          </div>
-          <div
-            className="profile-card-submeta"
-            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
-          >
-            <span>{formatDateOnly(g.createdAt)}</span>
-            <span
-              onClick={(e) => {
-                e.stopPropagation();
-                if (window.confirm("Delete this image?")) {
-                  setHistoryGenerations((prev) => prev.filter((item) => item.id !== g.id));
-                }
-              }}
-              style={{ cursor: "pointer", textDecoration: "underline" }}
-            >
-              delete image
-            </span>
-          </div>
-        </div>
-      </article>
-    );
-  };
-
-  // Sort visibleHistory to show newest first
-  const sortedVisibleHistory = [...visibleHistory].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
-  return (
-    <div className="profile-editorial-shell">
-      <header className="profile-header">
-        <div className="profile-header-left">
-          <div
-            className="profile-header-label"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
-          >
-            Profile
-          </div>
-          <div className="profile-meta-row">
-            <button
-              type="button"
-              className="profile-cta"
-              onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
-              style={{
-                textTransform: "none",
-                letterSpacing: "normal",
-                fontSize: "12px",
-                fontWeight: 500,
-              }}
-            >
-              Get more matchas
-            </button>
-            <div className="profile-meta-block">
-              <span
-                className="profile-meta-title"
-                style={{ textTransform: "none", letterSpacing: "normal" }}
-              >
-                Matchas remaining
-              </span>
-              <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
-            </div>
-            <div className="profile-meta-block">
-              <span
-                className="profile-meta-title"
-                style={{ textTransform: "none", letterSpacing: "normal" }}
-              >
-                Signed in as
-              </span>
-              <span className="profile-meta-value" title={currentUserEmail || ""}>
-                {currentUserEmail || "—"}
-              </span>
-            </div>
-            <div className="profile-meta-block">
-              <span
-                className="profile-meta-title"
-                style={{ textTransform: "none", letterSpacing: "normal" }}
-              >
-                Expiration date
-              </span>
-              <span className="profile-meta-value">{expirationLabel}</span>
-            </div>
-          </div>
-        </div>
-        <div className="profile-header-right">
-          {isAdmin && (
-            <button
-              type="button"
-              className="profile-cta ghost"
-              onClick={() => (window.location.href = "/admin")}
-              style={{
-                textTransform: "none",
-                letterSpacing: "normal",
-                fontSize: "12px",
-                fontWeight: 500,
-              }}
-            >
-              Admin
-            </button>
-          )}
-          <button
-            type="button"
-            className="profile-cta ghost"
-            onClick={handleSignOut}
-            style={{
-              textTransform: "none",
-              letterSpacing: "normal",
-              fontSize: "12px",
-              fontWeight: 500,
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      {/* gallery: no editorial block; renamed to Archive */}
-      <section className="profile-gallery">
-        <div className="profile-gallery-head">
-          <div
-            className="profile-gallery-title"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
-          >
-            Archive
-          </div>
-          <div
-            className="profile-gallery-sub"
-            style={{ textTransform: "none", letterSpacing: "normal" }}
-          >
-            {historyGenerations.length} pieces
-          </div>
-        </div>
-        {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
-        {historyError && (
-          <div className="profile-gallery-status error-text">{historyError}</div>
-        )}
-        {!historyLoading && !historyGenerations.length && (
-          <div className="profile-gallery-status">No archive yet.</div>
-        )}
-        <div className="profile-grid">
-          {sortedVisibleHistory.map((g, i) => renderCard(g, i))}
-        </div>
-        <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
-      </section>
-
-      <div className="profile-bottom-nav">
-        <button
-          type="button"
-          className="profile-cta"
-          onClick={() => setActiveTab("studio")}
-          style={{
-            textTransform: "none",
-            letterSpacing: "normal",
-            fontSize: "12px",
-            fontWeight: 500,
-          }}
-        >
-          Studio
-        </button>
-      </div>
-    </div>
-  );
-};
-// ========================================================================
-// [PART 17 END]
-// ========================================================================
-
-
-  // ========================================================================
   // [PART 18 START] Final layout
   // ========================================================================
   return (
@@ -3011,7 +2672,8 @@ const renderProfileBody = () => {
             {renderStudioRight()}
           </div>
         ) : (
-          renderProfileBody()
+            <Profile />
+
         )}
       </div>
 
