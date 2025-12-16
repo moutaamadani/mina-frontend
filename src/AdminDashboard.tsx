@@ -27,10 +27,16 @@ const TAB_LABELS: Record<TabKey, string> = {
   logs: "Logs (Realtime)",
 };
 
-// ✅ CHANGE THIS if your table name is different
-const AI_FLAT_TABLE = "runtime_config_flat;
-// ✅ CHANGE THIS if your logs table name is different
+// ✅ CHANGE THESE if your table names are different
+// (This block was causing the build error because of a missing quote)
+
+const AI_FLAT_TABLE = "runtime_config_flat";
 const LOGS_TABLE = "logs";
+
+// Optional tables your admin may use (safe to keep even if unused)
+const STYLES_TABLE = "style_presets";
+const ADMIN_ALLOWLIST_TABLE = "admin_allowlist";
+
 
 /* -----------------------------
    UI bits
