@@ -18,6 +18,27 @@ const TOPUP_URL =
   "https://www.faltastudio.com/checkouts/cn/hWN6EhbqQW5KrdIuBO3j5HKV/en-ae?_r=AQAB9NY_ccOV_da3y7VmTxJU-dDoLEOCdhP9sg2YlvDwLQQ";
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
+const LEGACY_CUSTOMER_STORAGE_KEY = "minaLegacyCustomerId";
+
+function readLegacyCustomerId(fallback: string): string {
+  try {
+    if (typeof window !== "undefined") {
+      const v = window.localStorage.getItem(LEGACY_CUSTOMER_STORAGE_KEY);
+      if (v && v.trim()) return v.trim();
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function persistLegacyCustomerId(id: string) {
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(LEGACY_CUSTOMER_STORAGE_KEY, id);
+  } catch {
+    // ignore
+  }
+}
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
@@ -503,6 +524,16 @@ const MinaApp: React.FC<MinaAppProps> = ({ initialCustomerId }) => {
   // Legacy fallback (anonymous / dev). In production, Supabase user id overrides this.
   const [customerId, setCustomerId] = useState<string>(() => getInitialCustomerId(initialCustomerId));
   const [customerIdInput, setCustomerIdInput] = useState<string>(customerId);
+
+  // Keep a stable “legacy” id around so Profile can still load older archives
+  const legacyCustomerIdRef = useRef<string>(customerId);
+
+  useEffect(() => {
+    const seeded = readLegacyCustomerId(customerId);
+    legacyCustomerIdRef.current = seeded;
+    if (seeded && seeded !== "anonymous") persistLegacyCustomerId(seeded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ✅ Supabase identity (production truth)
   const [authUserId, setAuthUserId] = useState<string | null>(null);
@@ -1199,7 +1230,14 @@ useEffect(() => {
 
         // ✅ Production: force customerId to Supabase user id when logged in
         if (!cancelled && uid) {
-          setCustomerId((prev) => (prev !== uid ? uid : prev));
+          setCustomerId((prev) => {
+            // Preserve any pre-login customerId as “legacy” for archive fallback
+            if (prev && prev !== uid && prev !== "anonymous") {
+              legacyCustomerIdRef.current = prev;
+              persistLegacyCustomerId(prev);
+            }
+            return prev !== uid ? uid : prev;
+          });
           setCustomerIdInput(uid);
         }
       } catch {
@@ -1240,7 +1278,13 @@ useEffect(() => {
 
       // ✅ Production: force customerId to Supabase user id when logged in
       if (uid) {
-        setCustomerId((prev) => (prev !== uid ? uid : prev));
+        setCustomerId((prev) => {
+          if (prev && prev !== uid && prev !== "anonymous") {
+            legacyCustomerIdRef.current = prev;
+            persistLegacyCustomerId(prev);
+          }
+          return prev !== uid ? uid : prev;
+        });
         setCustomerIdInput(uid);
       }
     });
@@ -1377,39 +1421,84 @@ const ensureSession = async (): Promise<string | null> => {
   return null;
 };
 
-// fetchHistory: always copy generation URLs into R2 before displaying
+const fetchHistoryForCustomer = async (cid: string): Promise<HistoryResponse> => {
+  const res = await apiFetch(`/history/customer/${encodeURIComponent(cid)}`);
+  if (!res.ok) throw new Error(`Status ${res.status}`);
+  const json = (await res.json().catch(() => ({}))) as HistoryResponse;
+  if (!json.ok) throw new Error("History error");
+  return json;
+};
+
+const mergeById = <T extends { id: string }>(a: T[], b: T[]) => {
+  const map = new Map<string, T>();
+  [...a, ...b].forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+};
+
+// fetchHistory: load primary + legacy archives (so Profile never looks empty after auth switch)
 const fetchHistory = async () => {
   if (!API_BASE_URL || !effectiveCustomerId) return;
+
+  const primaryId = effectiveCustomerId;
+  const legacyId =
+    legacyCustomerIdRef.current && legacyCustomerIdRef.current !== primaryId
+      ? legacyCustomerIdRef.current
+      : null;
 
   try {
     setHistoryLoading(true);
     setHistoryError(null);
 
-    const res = await apiFetch(`/history/customer/${encodeURIComponent(effectiveCustomerId)}`);
-    if (!res.ok) throw new Error(`Status ${res.status}`);
+    let primary: HistoryResponse | null = null;
+    let legacy: HistoryResponse | null = null;
+    let lastErr: any = null;
 
-    const json = (await res.json().catch(() => ({}))) as HistoryResponse;
-    if (!json.ok) throw new Error("History error");
+    try {
+      primary = await fetchHistoryForCustomer(primaryId);
+    } catch (e) {
+      lastErr = e;
+      primary = null;
+    }
 
-    // update credit balance + optional expiry
-    setCredits((prev) => ({
-      balance: json.credits.balance,
-      meta: {
-        imageCost: prev?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1,
-        motionCost: prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5,
-        expiresAt: json.credits.expiresAt ?? prev?.meta?.expiresAt ?? null,
-      },
-    }));
+    if (legacyId) {
+      try {
+        legacy = await fetchHistoryForCustomer(legacyId);
+      } catch (e) {
+        if (!lastErr) lastErr = e;
+        legacy = null;
+      }
+    }
 
-    const gens = json.generations || [];
+    if (!primary && !legacy) {
+      throw lastErr || new Error("Unable to load history.");
+    }
 
-    // ✅ Production behavior:
-    // - Try to normalize links into stable R2
-    // - BUT never drop items if that fails
+    // Prefer the credits source that has a higher balance (helps during migration)
+    const chosenCredits =
+      primary?.credits && legacy?.credits
+        ? (Number(legacy.credits.balance) > Number(primary.credits.balance) ? legacy.credits : primary.credits)
+        : primary?.credits || legacy?.credits;
+
+    if (chosenCredits) {
+      setCredits((prev) => ({
+        balance: chosenCredits.balance,
+        meta: {
+          imageCost: prev?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1,
+          motionCost: prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5,
+          expiresAt: chosenCredits.expiresAt ?? prev?.meta?.expiresAt ?? null,
+        },
+      }));
+    }
+
+    const gens = mergeById(primary?.generations || [], legacy?.generations || []);
+    const feedbacks = mergeById(primary?.feedbacks || [], legacy?.feedbacks || []);
+
+    // Normalize links into stable R2 (but never drop items if that fails)
     const updated = await Promise.all(
       gens.map(async (g) => {
         const original = g.outputUrl;
-
         try {
           const r2 = await storeRemoteToR2(original, "generations");
           const stable = stripSignedQuery(r2);
@@ -1421,7 +1510,7 @@ const fetchHistory = async () => {
     );
 
     setHistoryGenerations(updated);
-    setHistoryFeedbacks(json.feedbacks || []);
+    setHistoryFeedbacks(feedbacks);
   } catch (err: any) {
     setHistoryError(err?.message || "Unable to load history.");
   } finally {
