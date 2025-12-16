@@ -86,7 +86,13 @@ async function ensurePassId(): Promise<string | null> {
     if (!res.ok) return existing;
 
     const json = (await res.json().catch(() => ({} as any))) as any;
-    const next = typeof json?.passId === "string" ? json.passId.trim() : null;
+    const nextRaw =
+      typeof json?.passId === "string"
+        ? json.passId
+        : typeof json?.pass_id === "string"
+          ? json.pass_id
+          : null;
+    const next = nextRaw?.trim() || null;
 
     if (next) {
       persistPassId(next);
