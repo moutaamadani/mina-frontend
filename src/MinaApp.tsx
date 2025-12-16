@@ -34,11 +34,7 @@ type HealthState = {
 type CreditsMeta = {
   imageCost: number;
   motionCost: number;
-
-  // ✅ Profile reads this from Supabase customers.expires_at (optional)
-  expiresAt?: string | null;
 };
-
 
 type CreditsState = {
   balance: number;
@@ -291,39 +287,6 @@ const TEXTAREA_FLOAT_DISTANCE_PX = 12; // tiny translate to avoid layout jump
 
 function classNames(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
-}
-// ------------------------------------------
-// Small helpers used by Profile/Supabase code
-// ------------------------------------------
-function pickString(obj: any, keys: string[], fallback = ""): string {
-  if (!obj || typeof obj !== "object") return fallback;
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (typeof v === "string" && v.trim().length) return v;
-    if (typeof v === "number" && Number.isFinite(v)) return String(v);
-  }
-  return fallback;
-}
-
-function pickNumber(obj: any, keys: string[], fallback = 0): number {
-  if (!obj || typeof obj !== "object") return fallback;
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string") {
-      const n = Number(v);
-      if (Number.isFinite(n)) return n;
-    }
-  }
-  return fallback;
-}
-
-function truncateMiddle(value: string, max = 20): string {
-  const s = String(value || "");
-  if (s.length <= max) return s;
-  const left = Math.ceil(max * 0.6);
-  const right = Math.floor(max * 0.3);
-  return `${s.slice(0, left)}…${s.slice(Math.max(0, s.length - right))}`;
 }
 
 function getInitialCustomerId(initialCustomerId?: string): string {
@@ -1214,11 +1177,12 @@ useEffect(() => {
   // ========================================================================
 
   // ========================================================================
-// [PART 7 START] API helpers + PROFILE via SUPABASE (NO BLUE ?)
+// [PART 7 START] API helpers
 // ========================================================================
 
 // ------------------------------------------------------------------------
-// Supabase → API auth bridge (studio calls stay API-based)
+// Supabase → API auth bridge
+// Every Mina API call remains API-based, but gets Supabase JWT automatically.
 // ------------------------------------------------------------------------
 const getSupabaseAccessToken = async (): Promise<string | null> => {
   try {
@@ -1235,10 +1199,12 @@ const apiFetch = async (path: string, init: RequestInit = {}) => {
   const headers = new Headers(init.headers || {});
   const token = await getSupabaseAccessToken();
 
+  // Attach JWT for your backend to verify (safe even if backend ignores it)
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
+  // Ensure JSON content-type when body is present and caller didn't specify
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -1260,7 +1226,6 @@ const handleCheckHealth = async () => {
   }
 };
 
-// Keep studio credits (API). Profile credits will be overwritten from Supabase customers table.
 const fetchCredits = async () => {
   if (!API_BASE_URL || !customerId) return;
   try {
@@ -1304,266 +1269,41 @@ const ensureSession = async (): Promise<string | null> => {
   return null;
 };
 
-// ------------------------------------------------------------------------
-// Supabase loose loader (works even if order column doesn't exist)
-// ------------------------------------------------------------------------
-async function loadSupabaseTableLoose(table: string, limit = 600, orderCol = "created_at") {
-  const attempt = await supabase.from(table).select("*").order(orderCol, { ascending: false }).limit(limit);
-  if (!attempt.error) return attempt.data ?? [];
-
-  const fallback = await supabase.from(table).select("*").limit(limit);
-  if (fallback.error) throw new Error(fallback.error.message);
-  return fallback.data ?? [];
-}
-
-function normalizeMeta(anyMeta: any): any {
-  if (!anyMeta) return null;
-  if (typeof anyMeta === "object") return anyMeta;
-  if (typeof anyMeta === "string") {
-    try {
-      return JSON.parse(anyMeta);
-    } catch {
-      return { raw: anyMeta };
-    }
-  }
-  return { raw: anyMeta };
-}
-
-function matchRowToProfileIdentity(row: any, opts: { uid?: string | null; email?: string | null; customerId?: string }) {
-  const wantUid = (opts.uid || "").toLowerCase();
-  const wantEmail = (opts.email || "").toLowerCase();
-  const wantCustomer = (opts.customerId || "").toLowerCase();
-
-  const rowEmail = pickString(row, ["email", "user_email"], "").toLowerCase();
-  const rowUid = pickString(row, ["user_id", "uid"], "").toLowerCase();
-  const rowShopify = pickString(row, ["shopify_customer_id", "customer_id", "shopify_id"], "").toLowerCase();
-
-  return (
-    (!!wantUid && rowUid === wantUid) ||
-    (!!wantEmail && rowEmail === wantEmail) ||
-    (!!wantCustomer && (rowShopify === wantCustomer || rowUid === wantCustomer || rowEmail === wantCustomer))
-  );
-}
-
-function normalizeGenerationFromSupabase(row: any, idx: number): GenerationRecord | null {
-  const id =
-    pickString(row, ["id", "generation_id", "uuid"], "") ||
-    `${Date.now()}_${idx}`;
-
-  const outputUrl =
-    pickString(row, ["output_url", "outputUrl", "image_url", "imageUrl", "url", "result_url"], "");
-
-  // If no output url => don’t show it in Profile
-  if (!outputUrl) return null;
-
-  const createdAt = pickString(row, ["created_at", "inserted_at", "at", "timestamp"], new Date().toISOString());
-
-  const prompt =
-    pickString(row, ["prompt", "input_prompt", "caption", "text"], "") || "(no prompt)";
-
-  const platform = pickString(row, ["platform"], "") || "";
-  const type = pickString(row, ["type", "kind"], "") || "image";
-
-  const sessionId = pickString(row, ["session_id", "sessionId"], "") || "";
-  const customerId =
-    pickString(row, ["customer_id", "shopify_customer_id"], "") ||
-    pickString(row, ["user_id", "uid"], "") ||
-    "";
-
-  const meta = normalizeMeta(row?.meta ?? row?.metadata ?? row?.params ?? null);
-
-  return {
-    id: String(id),
-    type,
-    sessionId,
-    customerId,
-    platform,
-    prompt,
-    outputUrl,
-    createdAt,
-    meta,
-  };
-}
-
-function normalizeFeedbackFromSupabase(row: any, idx: number): FeedbackRecord | null {
-  const id =
-    pickString(row, ["id", "feedback_id", "uuid"], "") ||
-    `${Date.now()}_${idx}`;
-
-  const createdAt = pickString(row, ["created_at", "inserted_at", "at", "timestamp"], new Date().toISOString());
-
-  const customerId =
-    pickString(row, ["customer_id", "shopify_customer_id"], "") ||
-    pickString(row, ["user_id", "uid"], "") ||
-    "";
-
-  const platform = pickString(row, ["platform"], "") || "";
-  const prompt = pickString(row, ["prompt", "input_prompt", "caption", "text"], "") || "";
-
-  const comment = pickString(row, ["comment", "message", "text"], "") || "";
-
-  const imageUrl = pickString(row, ["image_url", "imageUrl", "output_url", "url"], "") || undefined;
-  const videoUrl = pickString(row, ["video_url", "videoUrl"], "") || undefined;
-
-  const resultType = pickString(row, ["resultType", "result_type", "type"], "") || (videoUrl ? "motion" : "image");
-
-  return {
-    id: String(id),
-    customerId,
-    resultType,
-    platform,
-    prompt,
-    comment,
-    imageUrl,
-    videoUrl,
-    createdAt,
-  };
-}
-
-// ------------------------------------------------------------------------
-// PROFILE: Load from Supabase (customers + generations + feedback)
-// ------------------------------------------------------------------------
-async function findCustomerRowForProfile(opts: { uid?: string | null; email?: string | null; customerId?: string }) {
-  const candidates: Array<{ col: string; val: string }> = [];
-
-  if (opts.uid) candidates.push({ col: "user_id", val: opts.uid });
-  if (opts.email) candidates.push({ col: "email", val: opts.email });
-
-  // customerId fallback (legacy)
-  if (opts.customerId && opts.customerId !== "anonymous") {
-    candidates.push({ col: "shopify_customer_id", val: opts.customerId });
-    candidates.push({ col: "customer_id", val: opts.customerId });
-    candidates.push({ col: "user_id", val: opts.customerId });
-    candidates.push({ col: "email", val: opts.customerId });
-  }
-
-  for (const c of candidates) {
-    try {
-      // some schemas won't have the column; just ignore that attempt
-      const { data, error } = await supabase.from("customers").select("*").eq(c.col, c.val).limit(1).maybeSingle();
-      if (!error && data) return data;
-    } catch {
-      // ignore
-    }
-  }
-
-  return null;
-}
-
+// fetchHistory: always copy generation URLs into R2 before displaying
 const fetchHistory = async () => {
-  if (!customerId) return;
-
+  if (!API_BASE_URL || !customerId) return;
   try {
     setHistoryLoading(true);
-    setHistoryError(null);
+    const res = await apiFetch(`/history/customer/${encodeURIComponent(customerId)}`);
+    if (!res.ok) throw new Error(`Status ${res.status}`);
+    const json = (await res.json()) as HistoryResponse;
+    if (!json.ok) throw new Error("History error");
 
-    const { data: sessionData } = await supabase.auth.getSession();
-    const uid = sessionData.session?.user?.id || null;
-    const email = (sessionData.session?.user?.email || "").toLowerCase() || null;
+    // update credit balance
+    setCredits((prev) => ({ balance: json.credits.balance, meta: prev?.meta }));
 
-    // 1) customer row => credits + expiry
-    const customerRow = await findCustomerRowForProfile({ uid, email, customerId });
+    // fetch and store each generation’s image in R2
+    const gens = json.generations || [];
+    const updated = await Promise.all(
+      gens.map(async (g) => {
+        try {
+          const remoteUrl = await storeRemoteToR2(g.outputUrl, "generations");
+          return { ...g, outputUrl: remoteUrl };
+        } catch {
+          return g;
+        }
+      })
+    );
+    setHistoryGenerations(updated);
 
-    const balance = customerRow ? pickNumber(customerRow, ["credits", "credit", "balance"], 0) : (credits?.balance ?? 0);
-    const expiresAt = customerRow ? (pickString(customerRow, ["expires_at", "expiresAt"], "") || null) : null;
-
-    // keep existing meta costs if already loaded (from adminConfig/API)
-    setCredits((prev) => ({
-      balance,
-      meta: {
-        imageCost: prev?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1,
-        motionCost: prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5,
-        expiresAt,
-      },
-    }));
-
-    // 2) generations
-    const genRows = await loadSupabaseTableLoose("generations", 900, "created_at");
-    const gens = (genRows as any[])
-      .filter((r) => matchRowToProfileIdentity(r, { uid, email, customerId }))
-      .map((r, idx) => normalizeGenerationFromSupabase(r, idx))
-      .filter(Boolean) as GenerationRecord[];
-
-    // newest first
-    gens.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setHistoryGenerations(gens);
-
-    // 3) feedback
-    const fbRows = await loadSupabaseTableLoose("feedback", 900, "created_at");
-    const fbs = (fbRows as any[])
-      .filter((r) => matchRowToProfileIdentity(r, { uid, email, customerId }))
-      .map((r, idx) => normalizeFeedbackFromSupabase(r, idx))
-      .filter(Boolean) as FeedbackRecord[];
-
-    fbs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    setHistoryFeedbacks(fbs);
+    setHistoryFeedbacks(json.feedbacks || []);
   } catch (err: any) {
-    setHistoryError(err?.message || "Unable to load profile from Supabase.");
+    setHistoryError(err?.message || "Unable to load history.");
   } finally {
     setHistoryLoading(false);
   }
 };
 
-// Auto load profile when you open it (and whenever customerId changes)
-useEffect(() => {
-  if (activeTab !== "profile") return;
-  void fetchHistory();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [activeTab, customerId]);
-
-// Optional realtime refresh while profile open
-useEffect(() => {
-  if (activeTab !== "profile") return;
-
-  const ch = supabase
-    .channel("profile-realtime")
-    .on("postgres_changes", { event: "*", schema: "public", table: "generations" }, () => void fetchHistory())
-    .on("postgres_changes", { event: "*", schema: "public", table: "feedback" }, () => void fetchHistory())
-    .on("postgres_changes", { event: "*", schema: "public", table: "customers" }, () => void fetchHistory())
-    .subscribe();
-
-  return () => {
-    void supabase.removeChannel(ch);
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [activeTab]);
-
-// ------------------------------------------------------------------------
-// Profile delete (REAL delete from Supabase)
-// ------------------------------------------------------------------------
-const deleteGenerationFromSupabase = async (g: GenerationRecord) => {
-  try {
-    // try common PK
-    let res = await supabase.from("generations").delete().eq("id", g.id);
-    if (res.error) {
-      // fallback if your schema uses generation_id
-      res = await supabase.from("generations").delete().eq("generation_id", g.id);
-    }
-    if (res.error) throw new Error(res.error.message);
-
-    setHistoryGenerations((prev) => prev.filter((x) => x.id !== g.id));
-  } catch (e: any) {
-    alert(e?.message || "Delete failed (RLS/permissions?)");
-  }
-};
-
-const deleteFeedbackFromSupabase = async (f: FeedbackRecord) => {
-  try {
-    let res = await supabase.from("feedback").delete().eq("id", f.id);
-    if (res.error) {
-      res = await supabase.from("feedback").delete().eq("feedback_id", f.id);
-    }
-    if (res.error) throw new Error(res.error.message);
-
-    setHistoryFeedbacks((prev) => prev.filter((x) => x.id !== f.id));
-  } catch (e: any) {
-    alert(e?.message || "Delete failed (RLS/permissions?)");
-  }
-};
-
-// ------------------------------------------------------------------------
-// Existing Profile helpers (keep)
-// ------------------------------------------------------------------------
 const getEditorialNumber = (id: string, index: number) => {
   const fallback = padEditorialNumber(index + 1);
   const custom = numberMap[id];
@@ -1609,11 +1349,9 @@ const handleBrandingChange = (side: "left" | "right", field: string, value: stri
 };
 
 const stopBrandingEdit = () => setBrandingEditing(null);
-
 // ========================================================================
 // [PART 7 END]
 // ========================================================================
-
 
 // ==============================
 // R2 helpers (upload + store)
@@ -2728,24 +2466,25 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
 
   // ========================================================================
-// [PART 17 START] Profile body – Supabase connected (no blue ?)
+// [PART 17 START] Profile body – editorial history (cleaned)
 // ========================================================================
 const renderProfileBody = () => {
+  // Show expiration date if provided
   const expirationCandidate =
     (credits?.meta as any)?.expiresAt ||
     (credits?.meta as any)?.expirationDate ||
     (credits?.meta as any)?.expiry ||
     (credits?.meta as any)?.expiration;
-
   const expirationLabel = formatDateOnly(expirationCandidate);
 
+  // Layout variants for grid sizing
   const editorialVariants = ["hero", "tall", "wide", "square", "mini", "wide", "tall"];
 
+  // Render generation number (edit on double-click for admins)
   const renderNumberBadge = (g: GenerationRecord) => {
     const idx = historyIndexMap[g.id] ?? 0;
     const value = getEditorialNumber(g.id, idx);
     const isEditing = editingNumberId === g.id;
-
     return (
       <div
         className="profile-card-number"
@@ -2772,57 +2511,30 @@ const renderProfileBody = () => {
     );
   };
 
+  // Render a single history card
   const renderCard = (g: GenerationRecord, i: number) => {
     const variant = editorialVariants[i % editorialVariants.length];
     const aspectStyle = g.meta?.aspectRatio ? g.meta.aspectRatio.replace(":", " / ") : undefined;
     const numberLabel = getEditorialNumber(g.id, i);
-
     return (
       <article key={g.id} className={`profile-card profile-card--${variant}`}>
         {renderNumberBadge(g)}
-
         <div
           className="profile-card-media"
           style={{
             aspectRatio: aspectStyle,
             border: "1px solid rgba(8,10,0,0.08)",
             background: "rgba(8, 10, 0, 0.05)",
-            position: "relative",
-            overflow: "hidden",
           }}
           onClick={() => window.open(g.outputUrl, "_blank", "noreferrer")}
         >
-          {/* ✅ FALLBACK that kills the blue ? (broken image) */}
-          <div
-            className="profile-img-fallback"
-            style={{
-              display: "none",
-              position: "absolute",
-              inset: 0,
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 12,
-              opacity: 0.8,
-            }}
-          >
-            Image unavailable
-          </div>
-
           <img
             src={toPreviewUrl(g.outputUrl)}
             loading="lazy"
             decoding="async"
             alt={g.prompt}
             referrerPolicy="no-referrer"
-            onError={(e) => {
-              // hide broken image and show fallback (no blue ?)
-              e.currentTarget.style.display = "none";
-              const parent = e.currentTarget.parentElement;
-              const fallback = parent?.querySelector(".profile-img-fallback") as HTMLElement | null;
-              if (fallback) fallback.style.display = "flex";
-            }}
           />
-
           <div
             className="profile-card-actions"
             style={{
@@ -2844,7 +2556,6 @@ const renderProfileBody = () => {
             </button>
           </div>
         </div>
-
         <div className="profile-card-meta">
           <div
             className="profile-card-prompt"
@@ -2875,16 +2586,17 @@ const renderProfileBody = () => {
               </>
             )}
           </div>
-
-          <div className="profile-card-submeta" style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}>
+          <div
+            className="profile-card-submeta"
+            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "10pt" }}
+          >
             <span>{formatDateOnly(g.createdAt)}</span>
-
             <span
               onClick={(e) => {
                 e.stopPropagation();
-                const ok = window.confirm("Delete this image from Supabase?");
-                if (!ok) return;
-                void deleteGenerationFromSupabase(g);
+                if (window.confirm("Delete this image?")) {
+                  setHistoryGenerations((prev) => prev.filter((item) => item.id !== g.id));
+                }
               }}
               style={{ cursor: "pointer", textDecoration: "underline" }}
             >
@@ -2896,6 +2608,7 @@ const renderProfileBody = () => {
     );
   };
 
+  // Sort visibleHistory to show newest first
   const sortedVisibleHistory = [...visibleHistory].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
@@ -2904,94 +2617,104 @@ const renderProfileBody = () => {
     <div className="profile-editorial-shell">
       <header className="profile-header">
         <div className="profile-header-left">
-          <div className="profile-header-label" style={{ textTransform: "none", letterSpacing: "normal" }}>
+          <div
+            className="profile-header-label"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
             Profile
           </div>
-
           <div className="profile-meta-row">
             <button
               type="button"
               className="profile-cta"
               onClick={() => window.open(TOPUP_URL, "_blank", "noreferrer")}
-              style={{ textTransform: "none", letterSpacing: "normal", fontSize: "12px", fontWeight: 500 }}
+              style={{
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
             >
               Get more matchas
             </button>
-
             <div className="profile-meta-block">
-              <span className="profile-meta-title" style={{ textTransform: "none", letterSpacing: "normal" }}>
+              <span
+                className="profile-meta-title"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+              >
                 Matchas remaining
               </span>
               <span className="profile-meta-value">{credits ? credits.balance : "—"}</span>
             </div>
-
             <div className="profile-meta-block">
-              <span className="profile-meta-title" style={{ textTransform: "none", letterSpacing: "normal" }}>
+              <span
+                className="profile-meta-title"
+                style={{ textTransform: "none", letterSpacing: "normal" }}
+              >
                 Expiration date
               </span>
               <span className="profile-meta-value">{expirationLabel}</span>
             </div>
-
-            {/* optional debug */}
-            <div className="profile-meta-block">
-              <span className="profile-meta-title" style={{ textTransform: "none", letterSpacing: "normal" }}>
-                Customer
-              </span>
-              <span className="profile-meta-value">{truncateMiddle(customerId, 20)}</span>
-            </div>
           </div>
         </div>
-
         <div className="profile-header-right">
           {isAdmin && (
             <button
               type="button"
               className="profile-cta ghost"
               onClick={() => (window.location.href = "/admin")}
-              style={{ textTransform: "none", letterSpacing: "normal", fontSize: "12px", fontWeight: 500 }}
+              style={{
+                textTransform: "none",
+                letterSpacing: "normal",
+                fontSize: "12px",
+                fontWeight: 500,
+              }}
             >
               Admin
             </button>
           )}
-
-          <button
-            type="button"
-            className="profile-cta ghost"
-            onClick={() => void fetchHistory()}
-            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "12px", fontWeight: 500 }}
-          >
-            Refresh
-          </button>
-
           <button
             type="button"
             className="profile-cta ghost"
             onClick={handleSignOut}
-            style={{ textTransform: "none", letterSpacing: "normal", fontSize: "12px", fontWeight: 500 }}
+            style={{
+              textTransform: "none",
+              letterSpacing: "normal",
+              fontSize: "12px",
+              fontWeight: 500,
+            }}
           >
             Sign out
           </button>
         </div>
       </header>
 
+      {/* gallery: no editorial block; renamed to Archive */}
       <section className="profile-gallery">
         <div className="profile-gallery-head">
-          <div className="profile-gallery-title" style={{ textTransform: "none", letterSpacing: "normal" }}>
+          <div
+            className="profile-gallery-title"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
             Archive
           </div>
-          <div className="profile-gallery-sub" style={{ textTransform: "none", letterSpacing: "normal" }}>
+          <div
+            className="profile-gallery-sub"
+            style={{ textTransform: "none", letterSpacing: "normal" }}
+          >
             {historyGenerations.length} pieces
           </div>
         </div>
-
-        {historyLoading && <div className="profile-gallery-status">Loading profile from Supabase…</div>}
-        {historyError && <div className="profile-gallery-status error-text">{historyError}</div>}
-        {!historyLoading && !historyGenerations.length && <div className="profile-gallery-status">No archive yet.</div>}
-
+        {historyLoading && <div className="profile-gallery-status">Loading history…</div>}
+        {historyError && (
+          <div className="profile-gallery-status error-text">{historyError}</div>
+        )}
+        {!historyLoading && !historyGenerations.length && (
+          <div className="profile-gallery-status">No archive yet.</div>
+        )}
         <div className="profile-grid">
           {sortedVisibleHistory.map((g, i) => renderCard(g, i))}
         </div>
-
         <div ref={loadMoreRef} className="profile-grid-sentinel" aria-hidden />
       </section>
 
@@ -3000,7 +2723,12 @@ const renderProfileBody = () => {
           type="button"
           className="profile-cta"
           onClick={() => setActiveTab("studio")}
-          style={{ textTransform: "none", letterSpacing: "normal", fontSize: "12px", fontWeight: 500 }}
+          style={{
+            textTransform: "none",
+            letterSpacing: "normal",
+            fontSize: "12px",
+            fontWeight: 500,
+          }}
         >
           Studio
         </button>
@@ -3011,7 +2739,6 @@ const renderProfileBody = () => {
 // ========================================================================
 // [PART 17 END]
 // ========================================================================
-
 
 
   // ========================================================================
