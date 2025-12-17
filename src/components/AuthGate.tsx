@@ -226,7 +226,7 @@ async function persistPassIdToMegaCustomers(opts: {
       const patch: any = { [COL_PASS_ID]: passId };
       if (email) patch[COL_EMAIL] = email;
 
-      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq(COL_PASS_ID, existing[COL_PASS_ID]);
+      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq(COL_USER_ID, userId);
       return;
     }
 
@@ -401,9 +401,12 @@ export function AuthGate({ children }: AuthGateProps) {
     [children, passId]
   );
 
-  // Mount app only when authenticated (as you requested)
+   // Mount app only when authenticated AND passId is ready
   const hasUserId = !!session?.user?.id;
-  const isAuthed = hasUserId;
+  const hasPassId = typeof passId === "string" && passId.trim().length > 0;
+  const isAuthed = hasUserId && hasPassId;
+
+
 
   // Init + auth listener
   useEffect(() => {
@@ -563,10 +566,35 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  // ✅ Mount app when authed
+  // ✅ If user is signed in but passId is still resolving, show a small loader
+  if (hasUserId && !hasPassId) {
+    return (
+      <div className="mina-auth-shell">
+        <div className="mina-auth-left">
+          <div className="mina-auth-brand">
+            <img
+              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+              alt="Mina"
+            />
+          </div>
+
+          <div className="mina-auth-card">
+            <p className="mina-auth-text">Finishing login…</p>
+          </div>
+
+          <div className="mina-auth-footer">{displayedUsersLabel}</div>
+        </div>
+
+        <div className="mina-auth-right" />
+      </div>
+    );
+  }
+
+  // ✅ Mount app when fully ready
   if (isAuthed) {
     return gatedChildren;
   }
+
 
   // Login UI
   const trimmed = email.trim();
