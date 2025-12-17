@@ -385,11 +385,6 @@ export function AuthGate({ children }: AuthGateProps) {
     // update state once (no stale comparisons)
     setPassId((prev) => (prev === finalPid ? prev : finalPid));
 
-    // 5) persist to mega_customers (non-blocking)
-    if (uid) {
-      void persistPassIdToMegaCustomers({ userId: uid, email: uemail, passId: finalPid });
-    }
-
     return finalPid;
   }, []);
 
