@@ -1,44 +1,20 @@
 import React from "react";
+import { supabase } from "../lib/supabaseClient"; // adjust path if needed
 
 export default function Profile() {
   const handleLogout = async () => {
     try {
-      // Best-effort server logout (safe to remove if you don't have this endpoint)
-      const token =
-        localStorage.getItem("token") || localStorage.getItem("accessToken");
-
-      if (token) {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          credentials: "include",
-        }).catch(() => {});
-      }
+      await supabase.auth.signOut();
     } finally {
-      // Client-side logout cleanup
-      ["token", "accessToken", "refreshToken", "user", "auth"].forEach((k) =>
-        localStorage.removeItem(k)
-      );
-      sessionStorage.clear();
-
-      // Redirect to login (change if your route is different)
-      window.location.href = "/login";
+      // clear your app-only state (optional)
+      localStorage.removeItem("minaPassId"); // optional: remove pass id if you want a fresh identity
+      window.location.href = "/"; // or wherever your AuthGate lives
     }
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
+    <div style={{ padding: 100 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <h1 style={{ margin: 0, fontSize: 20 }}>Profile</h1>
 
         <button
