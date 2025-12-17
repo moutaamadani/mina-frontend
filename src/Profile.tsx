@@ -1,20 +1,36 @@
 import React from "react";
 import { supabase } from "./lib/supabaseClient";
 
+const PASS_ID_STORAGE_KEY = "minaPassId";
+
 export default function Profile() {
   const handleLogout = async () => {
     try {
+      // ✅ Proper Supabase logout
       await supabase.auth.signOut();
-    } finally {
-      // clear your app-only state (optional)
-      localStorage.removeItem("minaPassId"); // optional: remove pass id if you want a fresh identity
-      window.location.href = "/"; // or wherever your AuthGate lives
+    } catch {
+      // ignore
     }
+
+    // Optional: clear your local passId too
+    try {
+      localStorage.removeItem(PASS_ID_STORAGE_KEY);
+    } catch {}
+
+    // Go back to AuthGate (login screen)
+    window.location.href = "/";
   };
 
   return (
-    <div style={{ padding: 100 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+    <div style={{ padding: 24 }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
         <h1 style={{ margin: 0, fontSize: 20 }}>Profile</h1>
 
         <button
