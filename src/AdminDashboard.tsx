@@ -21,11 +21,11 @@ const TAB_LABELS: Record<TabKey, string> = {
 
 /** Candidates (we auto-pick the first that works in YOUR DB) */
 const TABLE_CANDIDATES = {
-  CONFIG: ["mina_admin_config"],
-  SECRETS: ["mina_admin_secrets"],
+  CONFIG: ["mega_admin"],
+  SECRETS: ["mega_admin"],
   CUSTOMERS: ["mega_customers", "MEGA_CUSTOMERS"],
   LEDGER: ["mega_generations", "MEGA_GENERATIONS"],
-  LOGS: ["logs", "LOGS"],
+  LOGS: ["mega_admin"],
 } as const;
 
 /* ---------------------------------------------
@@ -269,6 +269,9 @@ function useAdminGuard() {
 
 type MinaConfig = any;
 
+const ADMIN_CONFIG_RECORD_TYPE = "admin_config";
+const PROVIDER_SECRET_RECORD_TYPE = "provider_secret";
+
 function scrubSecretsDeep(config: any) {
   // Frontend safety: never write raw `secret` keys if someone pasted them.
   const secretish = new Set([
@@ -300,23 +303,26 @@ function scrubSecretsDeep(config: any) {
 async function loadSingletonConfig(configTable: string) {
   const { data, error } = await supabase
     .from(configTable)
-    .select("config")
-    .eq("id", "singleton")
+    .select("mg_value, mg_updated_at, mg_created_at, mg_meta")
+    .eq("mg_record_type", ADMIN_CONFIG_RECORD_TYPE)
+    .eq("mg_key", "singleton")
     .maybeSingle();
 
   if (error) throw new Error(error.message);
-  return (data?.config ?? {}) as MinaConfig;
+  return (data?.mg_value ?? {}) as MinaConfig;
 }
 
 async function saveSingletonConfig(configTable: string, nextConfig: MinaConfig, updatedByEmail?: string | null) {
   const patch = {
-    id: "singleton",
-    config: scrubSecretsDeep(nextConfig),
-    updated_at: new Date().toISOString(),
-    updated_by: updatedByEmail ?? null,
+    mg_id: `${ADMIN_CONFIG_RECORD_TYPE}:singleton`,
+    mg_record_type: ADMIN_CONFIG_RECORD_TYPE,
+    mg_key: "singleton",
+    mg_value: scrubSecretsDeep(nextConfig),
+    mg_meta: { updated_by: updatedByEmail ?? null },
+    mg_updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase.from(configTable).upsert(patch, { onConflict: "id" });
+  const { error } = await supabase.from(configTable).upsert(patch, { onConflict: "mg_id" });
   if (error) throw new Error(error.message);
 }
 
@@ -342,18 +348,18 @@ type MegaCustomer = {
 function normalizeCustomers(rows: any[]): MegaCustomer[] {
   return rows
     .map((r) => {
-      const passId = pickString(r, ["mg_pass_id", "pass_id", "id"], "");
+      const passId = pickString(r, ["mg_pass_id"], "");
       if (!passId) return null;
 
       return {
         mg_pass_id: passId,
-        mg_email: pickString(r, ["mg_email", "email"], "") || null,
-        mg_user_id: pickString(r, ["mg_user_id", "user_id"], "") || null,
-        mg_shopify_customer_id: pickString(r, ["mg_shopify_customer_id", "shopify_customer_id", "customer_id"], "") || null,
-        mg_credits: pickNumber(r, ["mg_credits", "credits", "balance"], 0),
-        mg_expires_at: pickString(r, ["mg_expires_at", "expires_at"], "") || null,
-        mg_last_active: pickString(r, ["mg_last_active", "last_active", "updated_at"], "") || null,
-        mg_disabled: Boolean(r?.mg_disabled ?? r?.disabled ?? false),
+        mg_email: pickString(r, ["mg_email"], "") || null,
+        mg_user_id: pickString(r, ["mg_user_id"], "") || null,
+        mg_shopify_customer_id: pickString(r, ["mg_shopify_customer_id"], "") || null,
+        mg_credits: pickNumber(r, ["mg_credits"], 0),
+        mg_expires_at: pickString(r, ["mg_expires_at"], "") || null,
+        mg_last_active: pickString(r, ["mg_last_active", "mg_updated_at"], "") || null,
+        mg_disabled: Boolean(r?.mg_disabled ?? false),
         mg_verified_email: Boolean(r?.mg_verified_email ?? false),
         mg_verified_google: Boolean(r?.mg_verified_google ?? false),
         mg_verified_apple: Boolean(r?.mg_verified_apple ?? false),
@@ -385,10 +391,10 @@ type LedgerRow = {
 function normalizeLedger(rows: any[]): LedgerRow[] {
   return rows
     .map((r) => {
-      const id = pickString(r, ["mg_id", "id"], "");
-      const t = pickString(r, ["mg_record_type", "record_type", "type"], "");
-      const pass = pickString(r, ["mg_pass_id", "mg_actor_pass_id", "pass_id", "customer_id"], "");
-      const at = pickString(r, ["mg_created_at", "created_at", "at", "timestamp"], "") || new Date().toISOString();
+      const id = pickString(r, ["mg_id"], "");
+      const t = pickString(r, ["mg_record_type"], "");
+      const pass = pickString(r, ["mg_pass_id", "mg_actor_pass_id"], "");
+      const at = pickString(r, ["mg_event_at", "mg_created_at", "mg_updated_at"], "") || new Date().toISOString();
       if (!id) return null;
       return { mg_id: id, mg_record_type: t || "unknown", mg_pass_id: pass || "(no pass)", mg_created_at: at, raw: r };
     })
@@ -459,11 +465,11 @@ type LogLine = {
 
 function normalizeLog(r: any): LogLine {
   // logs table shape
-  const at = pickString(r, ["at", "created_at", "timestamp", "time", "mg_created_at"], "") || new Date().toISOString();
+  const at = pickString(r, ["mg_event_at", "mg_created_at", "mg_updated_at"], "") || new Date().toISOString();
 
-  const level = pickString(r, ["level", "severity"], "") || (pickNumber(r, ["mg_status"], 200) >= 400 ? "error" : "info");
+  const level = pickString(r, ["mg_record_type"], "") || (pickNumber(r, ["mg_status"], 200) >= 400 ? "error" : "info");
 
-  const source = pickString(r, ["source", "svc", "service", "origin"], "") || pickString(r, ["mg_record_type"], "admin");
+  const source = pickString(r, ["mg_route", "mg_action"], "") || pickString(r, ["mg_record_type"], "admin");
 
   const message =
     pickString(r, ["message", "msg", "text"], "") ||
@@ -623,10 +629,10 @@ export default function AdminDashboard() {
       const q = customerSearch.trim().toLowerCase();
       if (q) {
         rows = (rows as any[]).filter((r) => {
-          const passId = pickString(r, ["mg_pass_id", "id"], "").toLowerCase();
-          const email = pickString(r, ["mg_email", "email"], "").toLowerCase();
-          const uid = pickString(r, ["mg_user_id", "user_id"], "").toLowerCase();
-          const shop = pickString(r, ["mg_shopify_customer_id", "shopify_customer_id", "customer_id"], "").toLowerCase();
+          const passId = pickString(r, ["mg_pass_id"], "").toLowerCase();
+          const email = pickString(r, ["mg_email"], "").toLowerCase();
+          const uid = pickString(r, ["mg_user_id"], "").toLowerCase();
+          const shop = pickString(r, ["mg_shopify_customer_id"], "").toLowerCase();
           return passId.includes(q) || email.includes(q) || uid.includes(q) || shop.includes(q);
         });
       }
@@ -643,18 +649,18 @@ export default function AdminDashboard() {
     setLedgerLoading(true);
     setLedgerError(null);
     try {
-      let rows = await loadWithOrderFallback(ledgerTable, 950, ["mg_created_at", "created_at", "mg_updated_at"]);
+      let rows = await loadWithOrderFallback(ledgerTable, 950, ["mg_event_at", "mg_created_at", "mg_updated_at"]);
       const q = ledgerSearch.trim().toLowerCase();
       const t = ledgerType;
       const st = ledgerStatus;
 
       rows = (rows as any[]).filter((r) => {
-        const recordType = pickString(r, ["mg_record_type", "record_type"], "").toLowerCase();
-        const status = pickString(r, ["mg_status", "status"], "").toLowerCase();
-        const pass = pickString(r, ["mg_pass_id", "mg_actor_pass_id", "pass_id"], "").toLowerCase();
-        const email = pickString(r, ["mg_email", "email"], "").toLowerCase();
-        const provider = pickString(r, ["mg_provider", "provider"], "").toLowerCase();
-        const model = pickString(r, ["mg_model", "model"], "").toLowerCase();
+        const recordType = pickString(r, ["mg_record_type"], "").toLowerCase();
+        const status = pickString(r, ["mg_status"], "").toLowerCase();
+        const pass = pickString(r, ["mg_pass_id", "mg_actor_pass_id"], "").toLowerCase();
+        const email = pickString(r, ["mg_email"], "").toLowerCase();
+        const provider = pickString(r, ["mg_provider"], "").toLowerCase();
+        const model = pickString(r, ["mg_model"], "").toLowerCase();
         const err = pickString(r, ["mg_error", "error"], "").toLowerCase();
 
         if (t !== "all" && recordType !== t) return false;
@@ -693,7 +699,7 @@ export default function AdminDashboard() {
     setLogsError(null);
     try {
       if (logsTable) {
-        const rows = await loadWithOrderFallback(logsTable, 800, ["created_at", "at", "timestamp"]);
+        const rows = await loadWithOrderFallback(logsTable, 800, ["mg_event_at", "mg_created_at", "mg_updated_at"]);
         setLogs((rows as any[]).reverse().map(normalizeLog));
       } else {
         setLogs([]);
@@ -872,13 +878,14 @@ export default function AdminDashboard() {
               title="Provider Secrets (optional)"
               description={
                 tSecrets
-                  ? `Stores secrets in "${tSecrets}". Masked values should be referenced from config.ai.providerKeys.`
+                  ? `Stores secrets in "${tSecrets}" (mg_record_type=${PROVIDER_SECRET_RECORD_TYPE}). Masked values should be referenced from config.ai.providerKeys.`
                   : "Secrets table not found (optional)."
               }
             >
               {!tSecrets ? (
                 <div className="admin-muted" style={{ padding: 12 }}>
-                  If you want server-side secret storage, create `mina_admin_secrets` (provider, secret, masked, updated_at, updated_by).
+                  Secrets are stored inside <strong>mega_admin</strong> with mg_record_type=
+                  <strong>{PROVIDER_SECRET_RECORD_TYPE}</strong>. Ensure RLS only allows admins to write/read these rows.
                 </div>
               ) : (
                 <ProviderSecretSetter
@@ -1025,12 +1032,12 @@ export default function AdminDashboard() {
                 <div className="admin-grid-gallery">
                   {ledgerVisible.map((r) => {
                     const url = extractLikelyAssetUrl(r.raw);
-                    const recordType = pickString(r.raw, ["mg_record_type", "record_type"], r.mg_record_type);
-                    const passId = pickString(r.raw, ["mg_pass_id", "pass_id"], r.mg_pass_id);
-                    const provider = pickString(r.raw, ["mg_provider", "provider"], "");
-                    const model = pickString(r.raw, ["mg_model", "model"], "");
-                    const status = pickString(r.raw, ["mg_status", "status"], "");
-                    const err = pickString(r.raw, ["mg_error", "error"], "");
+                    const recordType = pickString(r.raw, ["mg_record_type"], r.mg_record_type);
+                    const passId = pickString(r.raw, ["mg_pass_id"], r.mg_pass_id);
+                    const provider = pickString(r.raw, ["mg_provider"], "");
+                    const model = pickString(r.raw, ["mg_model"], "");
+                    const status = pickString(r.raw, ["mg_status"], "");
+                    const err = pickString(r.raw, ["mg_error"], "");
                     const label =
                       pickString(r.raw, ["mg_title", "title"], "") ||
                       pickString(r.raw, ["mg_prompt", "prompt"], "") ||
@@ -1188,13 +1195,13 @@ export default function AdminDashboard() {
 
 function LedgerDetails({ row }: { row: any }) {
   const url = extractLikelyAssetUrl(row);
-  const recordType = pickString(row, ["mg_record_type", "record_type"], "unknown");
-  const passId = pickString(row, ["mg_pass_id", "pass_id", "mg_actor_pass_id"], "(no pass)");
-  const mgId = pickString(row, ["mg_id", "id"], "");
-  const status = pickString(row, ["mg_status", "status"], "");
-  const provider = pickString(row, ["mg_provider", "provider"], "");
-  const model = pickString(row, ["mg_model", "model"], "");
-  const err = pickString(row, ["mg_error", "error"], "");
+  const recordType = pickString(row, ["mg_record_type"], "unknown");
+  const passId = pickString(row, ["mg_pass_id", "mg_actor_pass_id"], "(no pass)");
+  const mgId = pickString(row, ["mg_id"], "");
+  const status = pickString(row, ["mg_status"], "");
+  const provider = pickString(row, ["mg_provider"], "");
+  const model = pickString(row, ["mg_model"], "");
+  const err = pickString(row, ["mg_error"], "");
 
   // These are the “every column matters” fields you asked for:
   const importantKeys = [
@@ -1473,16 +1480,19 @@ function ProviderSecretSetter({
     setSaving(true);
     try {
       const masked = maskSecret(s);
-      const { error } = await supabase.from(secretsTable).upsert(
-        {
-          provider: p,
-          secret: s,
-          masked,
-          updated_at: new Date().toISOString(),
-          updated_by: adminEmail ?? null,
-        } as any,
-        { onConflict: "provider" }
-      );
+      const { error } = await supabase
+        .from(secretsTable)
+        .upsert(
+          {
+            mg_id: `${PROVIDER_SECRET_RECORD_TYPE}:${p}`,
+            mg_record_type: PROVIDER_SECRET_RECORD_TYPE,
+            mg_key: p,
+            mg_value: { secret: s, masked },
+            mg_meta: { updated_by: adminEmail ?? null },
+            mg_updated_at: new Date().toISOString(),
+          } as any,
+          { onConflict: "mg_id" }
+        );
 
       if (error) throw new Error(error.message);
 

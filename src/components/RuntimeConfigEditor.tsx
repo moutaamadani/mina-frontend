@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-const TABLE = "mina_runtime_config";
+const ADMIN_TABLE = "mega_admin";
+const CONFIG_RECORD_TYPE = "runtime_config";
 
 type Props = {
   /** optional: default key to load (ex: "prod", "dev") */
@@ -46,20 +47,21 @@ export default function RuntimeConfigEditor({ defaultKey }: Props) {
     try {
       // maybeSingle: returns null if not found (no error)
       const { data, error } = await supabase
-        .from(TABLE)
-        .select("data, updated_at")
-        .eq("key", keyNormalized)
+        .from(ADMIN_TABLE)
+        .select("mg_value, mg_updated_at, mg_created_at, mg_key, mg_record_type, mg_meta")
+        .eq("mg_record_type", CONFIG_RECORD_TYPE)
+        .eq("mg_key", keyNormalized)
         .maybeSingle();
 
       if (error) throw new Error(error.message);
 
-      const payload = data?.data ?? {};
+      const payload = (data?.mg_value as any) ?? {};
       setJsonText(safePretty(payload));
-      setLastUpdated(data?.updated_at ?? null);
+      setLastUpdated((data?.mg_updated_at as string | null) ?? (data?.mg_created_at as string | null) ?? null);
     } catch (e: any) {
       setError(
         e?.message ||
-          `Failed to load from Supabase table "${TABLE}". Make sure the table exists and RLS allows your admin user.`
+          `Failed to load from Supabase table "${ADMIN_TABLE}" (mg_record_type=${CONFIG_RECORD_TYPE}). Make sure the table exists and RLS allows your admin user.`
       );
     } finally {
       setLoading(false);
@@ -77,14 +79,19 @@ export default function RuntimeConfigEditor({ defaultKey }: Props) {
         throw new Error("Invalid JSON:\n" + (e?.message || ""));
       }
 
+      const mgId = `${CONFIG_RECORD_TYPE}:${keyNormalized}`;
       const { error } = await supabase
-        .from(TABLE)
+        .from(ADMIN_TABLE)
         .upsert(
           {
-            key: keyNormalized,
-            data: parsed,
+            mg_id: mgId,
+            mg_record_type: CONFIG_RECORD_TYPE,
+            mg_key: keyNormalized,
+            mg_value: parsed,
+            mg_meta: {},
+            mg_updated_at: new Date().toISOString(),
           },
-          { onConflict: "key" }
+          { onConflict: "mg_id" }
         );
 
       if (error) throw new Error(error.message);
@@ -114,7 +121,8 @@ export default function RuntimeConfigEditor({ defaultKey }: Props) {
         <header>
           <div className="admin-section-title">Runtime Config (Supabase)</div>
           <p className="admin-section-desc">
-            This editor reads/writes JSON to Supabase table <strong>{TABLE}</strong>. No backend endpoint needed.
+            This editor reads/writes JSON to Supabase table <strong>{ADMIN_TABLE}</strong> using
+            mg_record_type=<strong>{CONFIG_RECORD_TYPE}</strong>. No backend endpoint needed.
           </p>
         </header>
 

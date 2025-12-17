@@ -2,6 +2,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
+const ADMIN_TABLE = "mega_admin";
+const FLAT_RECORD_TYPE = "runtime_config_flat";
+const EFFECTIVE_RECORD_TYPE = "runtime_config_effective";
+
 type FlatRow = {
   id: boolean;
 
@@ -70,14 +74,15 @@ export default function RuntimeConfigFlatEditor() {
     setLoading(true);
     try {
       const { data, error } = await supabase
-        .from("runtime_config_flat")
-        .select("*")
-        .eq("id", true)
+        .from(ADMIN_TABLE)
+        .select("mg_value, mg_updated_at, mg_meta")
+        .eq("mg_record_type", FLAT_RECORD_TYPE)
+        .eq("mg_key", "singleton")
         .maybeSingle();
 
       if (error) throw new Error(error.message);
 
-      const merged = { ...DEFAULT_ROW, ...(data ?? { id: true }) } as FlatRow;
+      const merged = { ...DEFAULT_ROW, ...((data?.mg_value as any) ?? { id: true }) } as FlatRow;
       setRow(merged);
       setBaseline(JSON.stringify(merged));
     } finally {
@@ -89,15 +94,16 @@ export default function RuntimeConfigFlatEditor() {
     setEffectiveLoading(true);
     try {
       const { data, error } = await supabase
-        .from("app_config")
-        .select("value, updated_at, updated_by")
-        .eq("key", "runtime")
+        .from(ADMIN_TABLE)
+        .select("mg_value, mg_updated_at, mg_meta")
+        .eq("mg_record_type", EFFECTIVE_RECORD_TYPE)
+        .eq("mg_key", "runtime")
         .maybeSingle();
 
       if (error) throw new Error(error.message);
 
-      setEffectiveJson(data?.value ?? null);
-      setEffectiveMeta({ updated_at: data?.updated_at, updated_by: data?.updated_by });
+      setEffectiveJson(data?.mg_value ?? null);
+      setEffectiveMeta({ updated_at: data?.mg_updated_at, updated_by: (data?.mg_meta as any)?.updated_by });
     } finally {
       setEffectiveLoading(false);
     }
@@ -113,11 +119,33 @@ export default function RuntimeConfigFlatEditor() {
     try {
       const payload: FlatRow = { ...row, id: true };
 
+      const mgId = `${FLAT_RECORD_TYPE}:singleton`;
       const { error } = await supabase
-        .from("runtime_config_flat")
-        .upsert(payload, { onConflict: "id" });
+        .from(ADMIN_TABLE)
+        .upsert({
+          mg_id: mgId,
+          mg_record_type: FLAT_RECORD_TYPE,
+          mg_key: "singleton",
+          mg_value: payload,
+          mg_meta: {},
+          mg_updated_at: new Date().toISOString(),
+        } as any, { onConflict: "mg_id" });
 
       if (error) throw new Error(error.message);
+
+      const effectiveId = `${EFFECTIVE_RECORD_TYPE}:runtime`;
+      const { error: effErr } = await supabase
+        .from(ADMIN_TABLE)
+        .upsert({
+          mg_id: effectiveId,
+          mg_record_type: EFFECTIVE_RECORD_TYPE,
+          mg_key: "runtime",
+          mg_value: payload,
+          mg_meta: {},
+          mg_updated_at: new Date().toISOString(),
+        } as any, { onConflict: "mg_id" });
+
+      if (effErr) throw new Error(effErr.message);
 
       setBaseline(JSON.stringify(payload));
       await loadEffective();

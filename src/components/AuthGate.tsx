@@ -217,16 +217,16 @@ async function persistPassIdToMegaCustomers(opts: {
   try {
     const { data: existing, error: selErr } = await supabase
       .from(MEGA_CUSTOMERS_TABLE)
-      .select("id")
+      .select(`${COL_PASS_ID}`)
       .eq(COL_USER_ID, userId)
       .limit(1)
       .maybeSingle();
 
-    if (!selErr && existing?.id) {
+    if (!selErr && existing?.[COL_PASS_ID]) {
       const patch: any = { [COL_PASS_ID]: passId };
       if (email) patch[COL_EMAIL] = email;
 
-      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq("id", existing.id);
+      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq(COL_PASS_ID, existing[COL_PASS_ID]);
       return;
     }
 
