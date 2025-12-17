@@ -23,27 +23,6 @@ const LIKE_STORAGE_KEY = "minaLikedMap";
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
-// =====================
-// [NUMBER MAP START]
-// =====================
-const [numberMap, setNumberMap] = useState<Record<string, string>>(() => {
-  try {
-    const raw =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("minaProfileNumberMap")
-        : null;
-    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-  } catch {
-    return {};
-  }
-});
-
-const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
-const [editingNumberValue, setEditingNumberValue] = useState<string>("");
-// =====================
-// [NUMBER MAP END]
-// =====================
-
 
 // ============================================================================
 // [PART 2 START] Types
@@ -488,6 +467,26 @@ function pickNearestAspectOption(ratio: number, options: AspectOption[]): Aspect
 // [PART 4 START] Component
 // ============================================================================
 const MinaApp: React.FC<MinaAppProps> = () => {
+  // =====================
+// [NUMBER MAP START]
+// =====================
+const [numberMap, setNumberMap] = useState<Record<string, string>>(() => {
+  try {
+    const raw =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("minaProfileNumberMap")
+        : null;
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+});
+
+const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
+const [editingNumberValue, setEditingNumberValue] = useState<string>("");
+// =====================
+// [NUMBER MAP END]
+// =====================
   // -------------------------
   // 4.1 Global tab + customer
   // -------------------------
