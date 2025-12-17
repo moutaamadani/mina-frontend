@@ -5,8 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
-import { isAdmin, loadAdminConfig } from "./lib/adminConfig";
-import AdminLink from "./components/AdminLink";
+import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
 
@@ -14,10 +13,6 @@ import Profile from "./Profile";
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL ||
   "https://mina-editorial-ai-api.onrender.com";
-
-const TOPUP_URL =
-  import.meta.env.VITE_MINA_TOPUP_URL ||
-  "https://www.faltastudio.com/checkouts/cn/hWN6EhbqQW5KrdIuBO3j5HKV/en-ae?_r=AQAB9NY_ccOV_da3y7VmTxJU-dDoLEOCdhP9sg2YlvDwLQQ";
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
 // ============================================================================
@@ -500,9 +495,9 @@ const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
   // 4.1 Global tab + customer
   // -------------------------
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
-  const passId =  usePassId();
+  const passId = usePassId();
 
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [adminConfig, setAdminConfig] = useState(loadAdminConfig());
   const [computedStylePresets, setComputedStylePresets] = useState(STYLE_PRESETS);
@@ -764,7 +759,6 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   // [PART 5 START] Derived values (the “rules” you requested)
   // ========================================================================
   const briefLength = brief.trim().length;
-  const stillBriefLength = stillBrief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
   const currentPassId = passId;
 
@@ -1117,12 +1111,12 @@ useEffect(() => {
         const email = (data.session?.user?.email || "").toLowerCase() || null;
         setCurrentUserEmail(email);
 
-        const ok = await isAdmin();
-        if (!cancelled) setIsAdmin(ok);
+        const ok = await checkIsAdmin();
+        if (!cancelled) setIsAdminUser(ok);
       } catch {
         if (!cancelled) {
           setCurrentUserEmail(null);
-          setIsAdmin(false);
+          setIsAdminUser(false);
         }
       }
     };
@@ -1135,10 +1129,10 @@ useEffect(() => {
       const email = (session?.user?.email || "").toLowerCase() || null;
       setCurrentUserEmail(email);
       try {
-        const ok = await isAdmin();
-        if (!cancelled) setIsAdmin(ok);
+        const ok = await checkIsAdmin();
+        if (!cancelled) setIsAdminUser(ok);
       } catch {
-        if (!cancelled) setIsAdmin(false);
+        if (!cancelled) setIsAdminUser(false);
       }
 
     });
@@ -1352,7 +1346,7 @@ const getEditorialNumber = (id: string, index: number) => {
 };
 
 const handleBeginEditNumber = (id: string, index: number) => {
-  if (!isAdmin) return;
+  if (!isAdminUser) return;
   setEditingNumberId(id);
   setEditingNumberValue(getEditorialNumber(id, index));
 };
@@ -1360,7 +1354,8 @@ const handleBeginEditNumber = (id: string, index: number) => {
 const handleCommitNumber = () => {
   if (!editingNumberId) return;
   const cleaned = editingNumberValue.trim();
-  setNumberMap((prev) => ({ ...prev, [editingNumberId]: cleaned || padEditorialNumber(cleaned) }));
+  const normalized = padEditorialNumber(cleaned);
+  setNumberMap((prev) => ({ ...prev, [editingNumberId]: normalized }));
   setEditingNumberId(null);
   setEditingNumberValue("");
 };

@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from "react";
-import { isAdmin } from "../lib/adminConfig";
+import { isAdmin as checkIsAdmin } from "../lib/adminConfig";
 
 export default function AdminLink() {
   const [ready, setReady] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
-        const ok = await isAdmin();
+        const ok = await checkIsAdmin();
         if (!alive) return;
 
-        setIsAdmin(ok);
+        setIsAdminUser(ok);
         setReady(true);
       } catch {
         if (!alive) return;
-        setIsAdmin(false);
+        setIsAdminUser(false);
         setReady(true);
       }
     })();
@@ -27,7 +27,7 @@ export default function AdminLink() {
     };
   }, []);
 
-  if (!ready || !isAdmin) return null;
+  if (!ready || !isAdminUser) return null;
 
   // Your app uses pathname switching, so a normal <a href="/admin"> works.
   return (

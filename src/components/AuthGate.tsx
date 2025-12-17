@@ -364,39 +364,34 @@ export function AuthGate({ children }: AuthGateProps) {
     const uemail = normalizeEmail(userEmail);
 
     // 1) local
-    let local = readStoredPassId();
-    if (local && local !== passId) {
-      setPassId(local);
-    }
+    let candidate = readStoredPassId();
 
     // 2) restore from mega_customers if authed + no local
-    if (!local && uid) {
+    if (!candidate && uid) {
       const restored = await tryRestorePassIdFromMegaCustomers({ userId: uid, email: uemail });
-      if (restored) {
-        persistPassIdLocal(restored);
-        local = restored;
-        if (restored !== passId) setPassId(restored);
-      }
+      if (restored) candidate = restored.trim();
     }
 
     // 3) backend canonicalize/link
-    const fromBackend = await ensurePassIdViaBackend(local);
-    let finalPid = (fromBackend || local || "").trim() || null;
+    const canonical = await ensurePassIdViaBackend(candidate);
+    candidate = canonical?.trim() || candidate;
 
     // 4) guaranteed fallback
-    if (!finalPid) finalPid = generateLocalPassId();
+    const finalPid = candidate?.trim() ? candidate.trim() : generateLocalPassId();
 
-    // persist local state/storage
+    // persist localStorage
     persistPassIdLocal(finalPid);
-    if (finalPid !== passId) setPassId(finalPid);
 
-    // 5) persist to mega_customers
+    // update state once (no stale comparisons)
+    setPassId((prev) => (prev === finalPid ? prev : finalPid));
+
+    // 5) persist to mega_customers (non-blocking)
     if (uid) {
       void persistPassIdToMegaCustomers({ userId: uid, email: uemail, passId: finalPid });
     }
 
     return finalPid;
-  }, [passId]);
+  }, []);
 
   // PassId context wrapper
   const gatedChildren = useMemo(
@@ -404,7 +399,7 @@ export function AuthGate({ children }: AuthGateProps) {
     [children, passId]
   );
 
-   // Mount app only when authenticated AND passId is ready
+  // Mount app only when authenticated AND passId is ready
   const hasUserId = !!session?.user?.id;
   const hasPassId = typeof passId === "string" && passId.trim().length > 0;
   const isAuthed = hasUserId && hasPassId;
@@ -422,8 +417,17 @@ export function AuthGate({ children }: AuthGateProps) {
 
         const s = data.session ?? null;
         setSession(s);
+        const pidPromise = refreshPassId(s?.user?.id ?? null, s?.user?.email ?? null);
 
-        await refreshPassId(s?.user?.id ?? null, s?.user?.email ?? null);
+        const pid = await Promise.race([
+          pidPromise,
+          new Promise<string>((resolve) => {
+            window.setTimeout(() => resolve(generateLocalPassId()), 4000);
+          }),
+        ]);
+
+        persistPassIdLocal(pid);
+        setPassId((prev) => (prev === pid ? prev : pid));
       } finally {
         if (mounted) setInitializing(false);
       }
@@ -505,8 +509,10 @@ export function AuthGate({ children }: AuthGateProps) {
     setError(null);
     setLoading(true);
 
-    // ensure anon passId + lead capture
-    const pid = await refreshPassId(null, trimmed);
+    const pid = passId ?? readStoredPassId() ?? generateLocalPassId();
+    persistPassIdLocal(pid);
+    setPassId((prev) => (prev === pid ? prev : pid));
+
     void syncShopifyWelcome(trimmed, undefined, pid);
 
     try {
@@ -529,9 +535,6 @@ export function AuthGate({ children }: AuthGateProps) {
   const handleGoogleLogin = async () => {
     setError(null);
     setGoogleOpening(true);
-
-    // ensure passId exists before redirect
-    void refreshPassId(session?.user?.id ?? null, session?.user?.email ?? null);
 
     try {
       const { error: supaError } = await supabase.auth.signInWithOAuth({
