@@ -111,11 +111,14 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
   if (existing) headers["X-Mina-Pass-Id"] = existing;
 
   try {
-    const res = await fetch(`${API_BASE_URL}/me`, {
-      method: "GET",
-      headers,
-      credentials: "include",
-    });
+  const res = await fetch(`${API_BASE_URL}/me`, {
+  method: "GET",
+  headers,
+  // ✅ IMPORTANT: do NOT send cookies for cross-origin API calls
+  // You are using Authorization Bearer token, so credentials are not needed.
+  credentials: "omit",
+});
+
     if (!res.ok) return existing;
 
     const json = (await res.json().catch(() => ({} as any))) as any;
