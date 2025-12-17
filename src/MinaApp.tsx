@@ -665,18 +665,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     if (typeof window === "undefined") return [];
     return loadCustomStyles();
   });
-  const [numberMap, setNumberMap] = useState<Record<string, string>>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const raw = window.localStorage.getItem("minaProfileNumberMap");
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    } catch {
-      return {};
-    }
-  });
 
-  const [editingNumberId, setEditingNumberId] = useState<string | null>(null);
-  const [editingNumberValue, setEditingNumberValue] = useState("");
   // -------------------------
   // 4.9 Stable refs for unmount cleanup (avoid undefined productItems/etc)
   // -------------------------
