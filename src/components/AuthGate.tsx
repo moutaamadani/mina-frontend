@@ -191,7 +191,7 @@ function getInboxHref(email: string | null): string {
   const domain = parts[1].toLowerCase();
 
   if (domain === "gmail.com") return "https://mail.google.com/mail/u/0/#inbox";
-  if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) return "https://outlook.live.com/mail/0/inbox";
+  if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) return "https://outlook.live.com/mail/0/";
   if (domain === "yahoo.com") return "https://mail.yahoo.com/d/folders/1";
   if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) return "https://www.icloud.com/mail";
 
