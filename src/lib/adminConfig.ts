@@ -83,7 +83,7 @@ export function saveAdminConfig(next: AdminConfig) {
 /* =============================================================================
    ADMIN LOGIC (MEGA)
    ✅ Source of truth: mega_customers.mg_admin_allowlist = true
-   Optional fallback: mega_customers.mg_source_system contains "minadmin" or "mina-admin"
+   (Only this flag determines admin access.)
 ============================================================================= */
 
 const MEGA_CUSTOMERS = "mega_customers";
@@ -93,9 +93,6 @@ const COL_EMAIL = "mg_email";
 
 // ✅ you added this column in mega_customers
 const COL_ADMIN_ALLOWLIST = "mg_admin_allowlist";
-
-// Optional fallback key (if you also want “system key” admins)
-const COL_SOURCE_SYSTEM = "mg_source_system";
 
 function normalizeEmail(email?: string | null) {
   const e = (email || "").trim().toLowerCase();
@@ -109,20 +106,11 @@ function truthy(v: any): boolean {
   return false;
 }
 
-function isSourceSystemAdmin(row: any): boolean {
-  const v = row?.[COL_SOURCE_SYSTEM];
-  if (typeof v !== "string") return false;
-  const s = v.toLowerCase();
-  // accept both styles you mentioned
-  return s.includes("minadmin") || s.includes("mina-admin");
-}
-
 /**
  * ✅ isAdmin():
  * - Reads current Supabase user
  * - Loads mega_customers row by mg_user_id first, then mg_email
  * - Admin if: mg_admin_allowlist === true
- * - Optional fallback: mg_source_system contains "minadmin" / "mina-admin"
  * - NEVER throws
  */
 export async function isAdmin(): Promise<boolean> {
@@ -165,9 +153,6 @@ export async function isAdmin(): Promise<boolean> {
 
     // ✅ primary admin flag
     if (truthy(row?.[COL_ADMIN_ALLOWLIST])) return true;
-
-    // ✅ optional fallback (your “mg_source_system{minadmin key}” idea)
-    if (isSourceSystemAdmin(row)) return true;
 
     return false;
   } catch {

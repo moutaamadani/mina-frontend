@@ -28,6 +28,12 @@ It consists of:
   - upload UI files (product / logo / inspiration): `POST /api/r2/upload-signed`
   - store remote outputs into R2: `POST /api/r2/store-remote-signed`
 
+### Admin access (frontend)
+
+- Admin UI/actions are shown **only** when `mega_customers.mg_admin_allowlist === true` for the current user.
+- No other heuristics are used (credits thresholds, roles, email allowlists, or legacy admin tables).
+- If the user is missing or the lookup fails, admin resolves to `false` without throwing.
+
 ---
 
 ## Architecture

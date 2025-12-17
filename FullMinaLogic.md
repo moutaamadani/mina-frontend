@@ -252,58 +252,6 @@ create index if not exists mega_generations_session_idx
 on public.mega_generations(mg_session_id)
 where mg_session_id is not null and mg_deleted_at is null;
 
--- ----------------------------------------------------------------------------
--- MEGA_ADMIN
--- ----------------------------------------------------------------------------
-create table if not exists public.mega_admin (
-  mg_id text primary key,
-  mg_record_type text not null check (mg_record_type in (
-    'admin_session','admin_audit','profile','runtime_config','app_config'
-  )),
-
-  mg_actor_pass_id text references public.mega_customers(mg_pass_id),
-  mg_session_hash text,
-
-  mg_user_id uuid,
-  mg_email text,
-
-  mg_ip text,
-  mg_user_agent text,
-
-  mg_first_seen_at timestamptz,
-  mg_last_seen_at timestamptz,
-
-  mg_profile_id uuid,
-  mg_shopify_customer_id text,
-
-  mg_action text,
-  mg_route text,
-  mg_method text,
-  mg_status int,
-  mg_detail jsonb,
-
-  mg_runtime_id int,
-  mg_runtime_flat jsonb,
-
-  mg_key text,
-  mg_value jsonb,
-
-  mg_meta jsonb not null default '{}'::jsonb,
-  mg_source_system text,
-  mg_deleted_at timestamptz,
-  mg_created_at timestamptz not null default now(),
-  mg_updated_at timestamptz not null default now()
-);
-
-drop trigger if exists tr_mega_admin_updated_at on public.mega_admin;
-create trigger tr_mega_admin_updated_at
-before update on public.mega_admin
-for each row execute function public.mega_set_updated_at();
-
-create index if not exists mega_admin_record_type_idx
-on public.mega_admin(mg_record_type, mg_created_at desc)
-where mg_deleted_at is null;
-
 Part B — Backend API contract needed for “NO DUAL anything”
 1) /me is mandatory
 

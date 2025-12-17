@@ -3,7 +3,7 @@
 // - Config: mina_admin_config (singleton JSON)  ✅ ONE config table
 // - Customers: mega_customers                  ✅ Pass ID = mg_pass_id
 // - Activity: mega_generations (ledger)        ✅ all AI fields available in details
-// - Logs/Errors: logs (if exists) else mega_admin (admin_audit)
+// - Logs/Errors: logs table (if present)
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
@@ -25,7 +25,6 @@ const TABLE_CANDIDATES = {
   SECRETS: ["mina_admin_secrets"],
   CUSTOMERS: ["mega_customers", "MEGA_CUSTOMERS"],
   LEDGER: ["mega_generations", "MEGA_GENERATIONS"],
-  ADMIN: ["mega_admin", "MEGA_ADMIN"],
   LOGS: ["logs", "LOGS"],
 } as const;
 
@@ -447,7 +446,7 @@ async function addCreditsWithLedger(opts: {
 }
 
 /* ---------------------------------------------
-   LOGS: logs table OR mega_admin admin_audit
+   LOGS: logs table (if present)
 ---------------------------------------------- */
 
 type LogLine = {
@@ -462,14 +461,9 @@ function normalizeLog(r: any): LogLine {
   // logs table shape
   const at = pickString(r, ["at", "created_at", "timestamp", "time", "mg_created_at"], "") || new Date().toISOString();
 
-  // mega_admin audit shape fallback
-  const level =
-    pickString(r, ["level", "severity"], "") ||
-    (pickNumber(r, ["mg_status"], 200) >= 400 ? "error" : "info");
+  const level = pickString(r, ["level", "severity"], "") || (pickNumber(r, ["mg_status"], 200) >= 400 ? "error" : "info");
 
-  const source =
-    pickString(r, ["source", "svc", "service", "origin"], "") ||
-    pickString(r, ["mg_record_type"], "admin");
+  const source = pickString(r, ["source", "svc", "service", "origin"], "") || pickString(r, ["mg_record_type"], "admin");
 
   const message =
     pickString(r, ["message", "msg", "text"], "") ||
@@ -502,7 +496,6 @@ export default function AdminDashboard() {
   const [tSecrets, setTSecrets] = useState<string | null>(null);
   const [tCustomers, setTCustomers] = useState<string | null>(null);
   const [tLedger, setTLedger] = useState<string | null>(null);
-  const [tAdmin, setTAdmin] = useState<string | null>(null);
   const [tLogs, setTLogs] = useState<string | null>(null);
 
   // config
@@ -560,21 +553,19 @@ export default function AdminDashboard() {
       const resolvedSecrets = await resolveFirstWorkingTable(TABLE_CANDIDATES.SECRETS);
       const resolvedCustomers = await resolveFirstWorkingTable(TABLE_CANDIDATES.CUSTOMERS);
       const resolvedLedger = await resolveFirstWorkingTable(TABLE_CANDIDATES.LEDGER);
-      const resolvedAdmin = await resolveFirstWorkingTable(TABLE_CANDIDATES.ADMIN);
       const resolvedLogs = await resolveFirstWorkingTable(TABLE_CANDIDATES.LOGS);
 
       setTConfig(resolvedConfig);
       setTSecrets(resolvedSecrets);
       setTCustomers(resolvedCustomers);
       setTLedger(resolvedLedger);
-      setTAdmin(resolvedAdmin);
       setTLogs(resolvedLogs);
 
       // Load initial data
       if (resolvedConfig) void refreshConfig(resolvedConfig);
       if (resolvedCustomers) void refreshCustomers(resolvedCustomers);
       if (resolvedLedger) void refreshLedger(resolvedLedger);
-      void refreshLogs(resolvedLogs, resolvedAdmin);
+      void refreshLogs(resolvedLogs);
     };
 
     void init();
@@ -697,25 +688,16 @@ export default function AdminDashboard() {
     }
   };
 
-  const refreshLogs = async (logsTable: string | null, adminTable: string | null) => {
+  const refreshLogs = async (logsTable: string | null) => {
     setLogsLoading(true);
     setLogsError(null);
     try {
-      // Prefer logs table if it exists; otherwise use mega_admin as "logs" view
       if (logsTable) {
         const rows = await loadWithOrderFallback(logsTable, 800, ["created_at", "at", "timestamp"]);
         setLogs((rows as any[]).reverse().map(normalizeLog));
-      } else if (adminTable) {
-        const rows = await loadWithOrderFallback(adminTable, 800, ["mg_created_at", "created_at"]);
-        // only audit-ish records in admin table
-        const filtered = (rows as any[]).filter((r) => {
-          const rt = pickString(r, ["mg_record_type"], "").toLowerCase();
-          return rt.includes("admin") || rt.includes("audit") || rt.includes("runtime") || rt.includes("app");
-        });
-        setLogs(filtered.reverse().map(normalizeLog));
       } else {
         setLogs([]);
-        setLogsError("No logs table found, and mega_admin not found.");
+        setLogsError("No logs table found.");
       }
     } catch (e: any) {
       setLogsError(e?.message ?? "Failed to load logs");
@@ -734,7 +716,7 @@ export default function AdminDashboard() {
     if (allowed !== true) return;
     if (logsPaused) return;
 
-    const table = tLogs || tAdmin; // prefer logs; fallback admin
+    const table = tLogs;
     if (!table) return;
 
     // Subscribe to inserts (best effort)
@@ -753,7 +735,7 @@ export default function AdminDashboard() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [allowed, logsPaused, tLogs, tAdmin]);
+  }, [allowed, logsPaused, tLogs]);
 
   const rightStatus = (
     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -1113,19 +1095,13 @@ export default function AdminDashboard() {
           <div className="admin-grid">
             <Section
               title="Logs / Errors (Realtime)"
-              description={
-                tLogs
-                  ? `Streaming INSERTs from "${tLogs}".`
-                  : tAdmin
-                  ? `No "logs" table found; streaming from "${tAdmin}" (audit-ish records).`
-                  : "No logs table found."
-              }
+              description={tLogs ? `Streaming INSERTs from "${tLogs}".` : "No logs table found."}
               right={
                 <div className="admin-inline" style={{ flexWrap: "wrap" }}>
                   <button
                     className="admin-button ghost"
                     type="button"
-                    onClick={() => void refreshLogs(tLogs, tAdmin)}
+                    onClick={() => void refreshLogs(tLogs)}
                     disabled={logsLoading}
                   >
                     {logsLoading ? "Loading..." : "Reload"}
@@ -1199,7 +1175,7 @@ export default function AdminDashboard() {
       <div className="admin-footer">
         MEGA-first admin. Tables:{" "}
         <span className="admin-muted">
-          config=<strong>{tConfig || "?"}</strong> • customers=<strong>{tCustomers || "?"}</strong> • ledger=<strong>{tLedger || "?"}</strong> • logs=<strong>{tLogs || tAdmin || "?"}</strong>
+          config=<strong>{tConfig || "?"}</strong> • customers=<strong>{tCustomers || "?"}</strong> • ledger=<strong>{tLedger || "?"}</strong> • logs=<strong>{tLogs || "?"}</strong>
         </span>
       </div>
     </div>

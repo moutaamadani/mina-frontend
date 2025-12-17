@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-
-/**
- * Shows an "Admin" link only if the current user is in the allowlist table.
- *
- * IMPORTANT:
- * - Table name assumed: public.admin_allowlist
- * - Column assumed: email (text) UNIQUE
- * If your table is named differently, change TABLE below.
- */
-const TABLE = "admin_allowlist";
+import { isAdmin } from "../lib/adminConfig";
 
 export default function AdminLink() {
   const [ready, setReady] = useState(false);
@@ -20,30 +10,10 @@ export default function AdminLink() {
 
     (async () => {
       try {
-        const { data } = await supabase.auth.getUser();
-        const email = (data.user?.email || "").toLowerCase();
-        if (!email) {
-          if (!alive) return;
-          setIsAdmin(false);
-          setReady(true);
-          return;
-        }
-
-        // If user is not admin, RLS might block read — treat as not admin.
-        const { data: row, error } = await supabase
-          .from(TABLE)
-          .select("email")
-          .eq("email", email)
-          .maybeSingle();
-
+        const ok = await isAdmin();
         if (!alive) return;
 
-        if (error) {
-          setIsAdmin(false);
-        } else {
-          setIsAdmin(!!row?.email);
-        }
-
+        setIsAdmin(ok);
         setReady(true);
       } catch {
         if (!alive) return;

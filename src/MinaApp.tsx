@@ -5,7 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
-import { loadAdminConfig } from "./lib/adminConfig";
+import { isAdmin, loadAdminConfig } from "./lib/adminConfig";
 import AdminLink from "./components/AdminLink";
 import { usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
@@ -253,8 +253,6 @@ const MINA_THINKING_DEFAULT = [
 ];
 
 const MINA_FILLER_DEFAULT = ["typing…", "breathing…", "thinking aloud…", "refining…"];
-
-const ADMIN_ALLOWLIST_TABLE = "admin_allowlist";
 
 const STYLE_PRESETS = [
   {
@@ -1091,21 +1089,8 @@ useEffect(() => {
         const email = (data.session?.user?.email || "").toLowerCase() || null;
         setCurrentUserEmail(email);
 
-        // Keep legacy fallback: ADMIN_EMAILS
-        setIsAdmin(email ? ADMIN_EMAILS.includes(email) : false);
-
-        // Optional: also allow Supabase table allowlist to grant admin
-        if (email) {
-          const { data: row, error } = await supabase
-            .from(ADMIN_ALLOWLIST_TABLE)
-            .select("email")
-            .eq("email", email)
-            .limit(1)
-            .maybeSingle();
-
-          if (!cancelled && !error && row?.email) setIsAdmin(true);
-        }
-
+        const ok = await isAdmin();
+        if (!cancelled) setIsAdmin(ok);
       } catch {
         if (!cancelled) {
           setCurrentUserEmail(null);
@@ -1121,22 +1106,11 @@ useEffect(() => {
 
       const email = (session?.user?.email || "").toLowerCase() || null;
       setCurrentUserEmail(email);
-      setIsAdmin(email ? ADMIN_EMAILS.includes(email) : false);
-
-      // Optional: allowlist table can grant admin even if not in ADMIN_EMAILS
-      if (email) {
-        try {
-          const { data: row, error } = await supabase
-            .from(ADMIN_ALLOWLIST_TABLE)
-            .select("email")
-            .eq("email", email)
-            .limit(1)
-            .maybeSingle();
-
-          if (!cancelled && !error && row?.email) setIsAdmin(true);
-        } catch {
-          // ignore
-        }
+      try {
+        const ok = await isAdmin();
+        if (!cancelled) setIsAdmin(ok);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
       }
 
     });
