@@ -13,11 +13,6 @@ const API_BASE_URL =
 // MEGA identity storage (single identity)
 const PASS_ID_STORAGE_KEY = "minaPassId";
 
-// MEGA table/columns (adjust ONLY if your schema differs)
-const MEGA_CUSTOMERS_TABLE = "mega_customers";
-const COL_USER_ID = "mg_user_id";
-const COL_PASS_ID = "mg_pass_id";
-const COL_EMAIL = "mg_email";
 
 // baseline users label (optional)
 const BASELINE_USERS = 0;
@@ -136,114 +131,6 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
   }
 }
 
-// --------------------
-// MEGA customers restore/persist
-// --------------------
-async function tryRestorePassIdFromMegaCustomers(opts: {
-  userId?: string | null;
-  email?: string | null;
-}): Promise<string | null> {
-  const userId = (opts.userId || "").trim() || null;
-  const email = normalizeEmail(opts.email);
-
-  try {
-    // 1) best: by auth user id
-    if (userId) {
-      const { data, error } = await supabase
-        .from(MEGA_CUSTOMERS_TABLE)
-        .select(`${COL_PASS_ID}`)
-        .eq(COL_USER_ID, userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (!error) {
-        const pid = (data as any)?.[COL_PASS_ID];
-        if (typeof pid === "string" && pid.trim()) return pid.trim();
-      }
-    }
-
-    // 2) fallback: by email
-    if (email) {
-      const { data, error } = await supabase
-        .from(MEGA_CUSTOMERS_TABLE)
-        .select(`${COL_PASS_ID}`)
-        .eq(COL_EMAIL, email)
-        .limit(1)
-        .maybeSingle();
-
-      if (!error) {
-        const pid = (data as any)?.[COL_PASS_ID];
-        if (typeof pid === "string" && pid.trim()) return pid.trim();
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return null;
-}
-
-/**
- * Persist passId into mega_customers for THIS user.
- * IMPORTANT: We only write mg_user_id, mg_pass_id, mg_email.
- * We do NOT touch mg_admin_allowlist (your manual true stays true).
- */
-async function persistPassIdToMegaCustomers(opts: {
-  userId: string;
-  email?: string | null;
-  passId: string;
-}) {
-  const userId = (opts.userId || "").trim();
-  const passId = (opts.passId || "").trim();
-  const email = normalizeEmail(opts.email);
-
-  if (!userId || !passId) return;
-
-  // Try upsert by mg_user_id (best if you have UNIQUE(mg_user_id))
-  try {
-    const payload: any = {
-      [COL_USER_ID]: userId,
-      [COL_PASS_ID]: passId,
-    };
-    if (email) payload[COL_EMAIL] = email;
-
-    const { error } = await supabase
-      .from(MEGA_CUSTOMERS_TABLE)
-      .upsert(payload, { onConflict: COL_USER_ID });
-
-    if (!error) return;
-  } catch {
-    // fallthrough
-  }
-
-  // Fallback: update existing row else insert
-  try {
-    const { data: existing, error: selErr } = await supabase
-      .from(MEGA_CUSTOMERS_TABLE)
-      .select(`${COL_PASS_ID}`)
-      .eq(COL_USER_ID, userId)
-      .limit(1)
-      .maybeSingle();
-
-    if (!selErr && existing?.[COL_PASS_ID]) {
-      const patch: any = { [COL_PASS_ID]: passId };
-      if (email) patch[COL_EMAIL] = email;
-
-      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq(COL_USER_ID, userId);
-      return;
-    }
-
-    const insertPayload: any = {
-      [COL_USER_ID]: userId,
-      [COL_PASS_ID]: passId,
-    };
-    if (email) insertPayload[COL_EMAIL] = email;
-
-    await supabase.from(MEGA_CUSTOMERS_TABLE).insert(insertPayload);
-  } catch {
-    // ignore
-  }
-}
 
 /**
  * Lead capture (non-blocking). Optional.
@@ -366,12 +253,6 @@ export function AuthGate({ children }: AuthGateProps) {
     // 1) local
     let candidate = readStoredPassId();
 
-    // 2) restore from mega_customers if authed + no local
-    if (!candidate && uid) {
-      const restored = await tryRestorePassIdFromMegaCustomers({ userId: uid, email: uemail });
-      if (restored) candidate = restored.trim();
-    }
-
     // 3) backend canonicalize/link
     const canonical = await ensurePassIdViaBackend(candidate);
     candidate = canonical?.trim() || candidate;
@@ -384,11 +265,6 @@ export function AuthGate({ children }: AuthGateProps) {
 
     // update state once (no stale comparisons)
     setPassId((prev) => (prev === finalPid ? prev : finalPid));
-
-    // 5) persist to mega_customers (non-blocking)
-    if (uid) {
-      void persistPassIdToMegaCustomers({ userId: uid, email: uemail, passId: finalPid });
-    }
 
     return finalPid;
   }, []);
