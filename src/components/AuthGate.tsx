@@ -10,29 +10,31 @@ type AuthGateProps = {
 const API_BASE_URL =
   import.meta.env.VITE_MINA_API_BASE_URL || "https://mina-editorial-ai-api.onrender.com";
 
-// ✅ MEGA identity storage (single identity)
+// MEGA identity storage (single identity)
 const PASS_ID_STORAGE_KEY = "minaPassId";
 
-// ✅ MEGA table where you want Pass ID persisted (frontend read/write)
-// ⚠️ Adjust these to match your actual schema!
+// MEGA table/columns (adjust ONLY if your schema differs)
 const MEGA_CUSTOMERS_TABLE = "mega_customers";
-const MEGA_COL_USER_ID = "mg_user_id";
-const MEGA_COL_PASS_ID = "mg_pass_id";
-const MEGA_COL_EMAIL = "mg_email";
+const COL_USER_ID = "mg_user_id";
+const COL_PASS_ID = "mg_pass_id";
+const COL_EMAIL = "mg_email";
 
-// ✅ baseline: your “3,7k” starting point (set to what you want)
+// baseline users label (optional)
 const BASELINE_USERS = 0;
 
+// --------------------
+// PassId context
+// --------------------
 const PassIdContext = React.createContext<string | null>(null);
 
 export function usePassId(): string | null {
   return React.useContext(PassIdContext);
 }
 
-// ----------------------------------------------------------------------------
-// Storage helpers
-// ----------------------------------------------------------------------------
-function safeLocalStorageGet(key: string): string | null {
+// --------------------
+// Local storage helpers
+// --------------------
+function lsGet(key: string): string | null {
   try {
     if (typeof window === "undefined") return null;
     const v = window.localStorage.getItem(key);
@@ -42,7 +44,7 @@ function safeLocalStorageGet(key: string): string | null {
   }
 }
 
-function safeLocalStorageSet(key: string, value: string) {
+function lsSet(key: string, value: string) {
   try {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(key, value);
@@ -52,32 +54,37 @@ function safeLocalStorageSet(key: string, value: string) {
 }
 
 function readStoredPassId(): string | null {
-  return safeLocalStorageGet(PASS_ID_STORAGE_KEY);
+  return lsGet(PASS_ID_STORAGE_KEY);
 }
 
-function persistPassId(passId: string) {
-  safeLocalStorageSet(PASS_ID_STORAGE_KEY, passId);
+function persistPassIdLocal(passId: string) {
+  lsSet(PASS_ID_STORAGE_KEY, passId);
 }
 
-// ----------------------------------------------------------------------------
-// ID generation fallback (if backend /me is unavailable)
-// ----------------------------------------------------------------------------
+function normalizeEmail(email?: string | null) {
+  const e = (email || "").trim().toLowerCase();
+  return e || null;
+}
+
+// --------------------
+// PassId generation fallback
+// --------------------
 function generateLocalPassId(): string {
   try {
-    // modern browsers
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
       return crypto.randomUUID();
     }
   } catch {
     // ignore
   }
-  // fallback
-  return `pass_${Date.now()}_${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
+  return `pass_${Date.now()}_${Math.random().toString(16).slice(2)}${Math.random()
+    .toString(16)
+    .slice(2)}`;
 }
 
-// ----------------------------------------------------------------------------
-// Auth token helper
-// ----------------------------------------------------------------------------
+// --------------------
+// Supabase token helper
+// --------------------
 async function getSupabaseAccessToken(): Promise<string | null> {
   try {
     const { data } = await supabase.auth.getSession();
@@ -88,18 +95,20 @@ async function getSupabaseAccessToken(): Promise<string | null> {
 }
 
 /**
- * ✅ MEGA canonical identity resolution (backend)
- * - If anonymous: backend issues/returns passId
- * - If logged in (JWT): backend links that auth user to the SAME passId
- * - We persist passId locally to keep continuity across reloads
+ * Ask backend to canonicalize/link passId.
+ * Backend should:
+ * - if anonymous: issue a passId
+ * - if logged in: link auth.uid to the same passId
+ * Expected response: { ok: true, passId: "pass:..." } (or pass_id)
  */
 async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<string | null> {
-  if (!API_BASE_URL) return existingPassId ?? null;
+  const existing = existingPassId?.trim() || null;
+  if (!API_BASE_URL) return existing;
 
   const token = await getSupabaseAccessToken();
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (existingPassId) headers["X-Mina-Pass-Id"] = existingPassId;
+  if (existing) headers["X-Mina-Pass-Id"] = existing;
 
   try {
     const res = await fetch(`${API_BASE_URL}/me`, {
@@ -107,61 +116,60 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
       headers,
       credentials: "include",
     });
-
-    if (!res.ok) return existingPassId ?? null;
+    if (!res.ok) return existing;
 
     const json = (await res.json().catch(() => ({} as any))) as any;
     const nextRaw =
       typeof json?.passId === "string"
         ? json.passId
         : typeof json?.pass_id === "string"
-          ? json.pass_id
-          : null;
+        ? json.pass_id
+        : null;
 
     const next = nextRaw?.trim() || null;
-    return next || (existingPassId ?? null);
+    return next || existing;
   } catch {
-    return existingPassId ?? null;
+    return existing;
   }
 }
 
-// ----------------------------------------------------------------------------
-// MEGA customers helpers (frontend read/write)
-// ----------------------------------------------------------------------------
+// --------------------
+// MEGA customers restore/persist
+// --------------------
 async function tryRestorePassIdFromMegaCustomers(opts: {
   userId?: string | null;
   email?: string | null;
 }): Promise<string | null> {
-  const { userId, email } = opts;
+  const userId = (opts.userId || "").trim() || null;
+  const email = normalizeEmail(opts.email);
 
   try {
-    // 1) best: restore by auth user id
+    // 1) best: by auth user id
     if (userId) {
       const { data, error } = await supabase
         .from(MEGA_CUSTOMERS_TABLE)
-        .select(`${MEGA_COL_PASS_ID}`)
-        .eq(MEGA_COL_USER_ID, userId)
+        .select(`${COL_PASS_ID}`)
+        .eq(COL_USER_ID, userId)
         .limit(1)
         .maybeSingle();
 
       if (!error) {
-        const pid = (data as any)?.[MEGA_COL_PASS_ID];
+        const pid = (data as any)?.[COL_PASS_ID];
         if (typeof pid === "string" && pid.trim()) return pid.trim();
       }
     }
 
-    // 2) fallback: restore by email (for old users if you stored email before user id)
-    const cleanEmail = (email || "").trim().toLowerCase();
-    if (cleanEmail) {
+    // 2) fallback: by email
+    if (email) {
       const { data, error } = await supabase
         .from(MEGA_CUSTOMERS_TABLE)
-        .select(`${MEGA_COL_PASS_ID}`)
-        .eq(MEGA_COL_EMAIL, cleanEmail)
+        .select(`${COL_PASS_ID}`)
+        .eq(COL_EMAIL, email)
         .limit(1)
         .maybeSingle();
 
       if (!error) {
-        const pid = (data as any)?.[MEGA_COL_PASS_ID];
+        const pid = (data as any)?.[COL_PASS_ID];
         if (typeof pid === "string" && pid.trim()) return pid.trim();
       }
     }
@@ -173,76 +181,70 @@ async function tryRestorePassIdFromMegaCustomers(opts: {
 }
 
 /**
- * Store passId into mega_customers.
- * Works even if you DON'T have a unique constraint, by doing select -> update/insert fallback.
- * (Still recommended: UNIQUE(mg_user_id) for clean upserts.)
+ * Persist passId into mega_customers for THIS user.
+ * IMPORTANT: We only write mg_user_id, mg_pass_id, mg_email.
+ * We do NOT touch mg_admin_allowlist (your manual true stays true).
  */
 async function persistPassIdToMegaCustomers(opts: {
   userId: string;
   email?: string | null;
   passId: string;
 }) {
-  const { userId, email, passId } = opts;
-  const cleanEmail = (email || "").trim().toLowerCase();
+  const userId = (opts.userId || "").trim();
+  const passId = (opts.passId || "").trim();
+  const email = normalizeEmail(opts.email);
 
+  if (!userId || !passId) return;
+
+  // Try upsert by mg_user_id (best if you have UNIQUE(mg_user_id))
   try {
-    // Try clean upsert first (best if UNIQUE exists on mg_user_id)
-    const { error: upsertError } = await supabase
-      .from(MEGA_CUSTOMERS_TABLE)
-      .upsert(
-        {
-          [MEGA_COL_USER_ID]: userId,
-          [MEGA_COL_PASS_ID]: passId,
-          ...(cleanEmail ? { [MEGA_COL_EMAIL]: cleanEmail } : {}),
-        } as any,
-        { onConflict: MEGA_COL_USER_ID }
-      );
+    const payload: any = {
+      [COL_USER_ID]: userId,
+      [COL_PASS_ID]: passId,
+    };
+    if (email) payload[COL_EMAIL] = email;
 
-    if (!upsertError) return;
+    const { error } = await supabase
+      .from(MEGA_CUSTOMERS_TABLE)
+      .upsert(payload, { onConflict: COL_USER_ID });
+
+    if (!error) return;
   } catch {
-    // ignore and fallback
+    // fallthrough
   }
 
+  // Fallback: update existing row else insert
   try {
-    // Fallback: check existence -> update/insert
     const { data: existing, error: selErr } = await supabase
       .from(MEGA_CUSTOMERS_TABLE)
       .select("id")
-      .eq(MEGA_COL_USER_ID, userId)
+      .eq(COL_USER_ID, userId)
       .limit(1)
       .maybeSingle();
 
     if (!selErr && existing?.id) {
-      await supabase
-        .from(MEGA_CUSTOMERS_TABLE)
-        .update(
-          {
-            [MEGA_COL_PASS_ID]: passId,
-            ...(cleanEmail ? { [MEGA_COL_EMAIL]: cleanEmail } : {}),
-          } as any
-        )
-        .eq("id", existing.id);
+      const patch: any = { [COL_PASS_ID]: passId };
+      if (email) patch[COL_EMAIL] = email;
+
+      await supabase.from(MEGA_CUSTOMERS_TABLE).update(patch).eq("id", existing.id);
       return;
     }
 
-    // No existing row: insert
-    await supabase.from(MEGA_CUSTOMERS_TABLE).insert(
-      {
-        [MEGA_COL_USER_ID]: userId,
-        [MEGA_COL_PASS_ID]: passId,
-        ...(cleanEmail ? { [MEGA_COL_EMAIL]: cleanEmail } : {}),
-      } as any
-    );
+    const insertPayload: any = {
+      [COL_USER_ID]: userId,
+      [COL_PASS_ID]: passId,
+    };
+    if (email) insertPayload[COL_EMAIL] = email;
+
+    await supabase.from(MEGA_CUSTOMERS_TABLE).insert(insertPayload);
   } catch {
     // ignore
   }
 }
 
 /**
- * Create / upsert a Shopify customer (lead) for email marketing.
- * - Non-blocking by design (short timeout).
- * - ✅ IMPORTANT: does NOT set app identity
- * - Optional: includes passId so backend can link Shopify id to MEGA_CUSTOMERS row
+ * Lead capture (non-blocking). Optional.
+ * Includes passId so backend can link Shopify id to MEGA customer row if you want.
  */
 async function syncShopifyWelcome(
   email: string | null | undefined,
@@ -250,7 +252,7 @@ async function syncShopifyWelcome(
   passId?: string | null,
   timeoutMs: number = 3500
 ): Promise<string | null> {
-  const clean = (email || "").trim().toLowerCase();
+  const clean = normalizeEmail(email);
   if (!API_BASE_URL || !clean) return null;
   if (typeof window === "undefined") return null;
 
@@ -276,40 +278,32 @@ async function syncShopifyWelcome(
       typeof json.shopifyCustomerId === "string"
         ? json.shopifyCustomerId
         : typeof json.customerId === "string"
-          ? json.customerId
-          : typeof json.id === "string"
-            ? json.id
-            : null;
+        ? json.customerId
+        : typeof json.id === "string"
+        ? json.id
+        : null;
 
     return shopifyCustomerId;
   } catch {
-    return null; // non-blocking
+    return null;
   } finally {
     window.clearTimeout(timeout);
   }
 }
 
+// --------------------
+// UI helpers (optional label)
+/// --------------------
 function getInboxHref(email: string | null): string {
   if (!email) return "mailto:";
-
   const parts = email.split("@");
   if (parts.length !== 2) return "mailto:";
-
   const domain = parts[1].toLowerCase();
 
   if (domain === "gmail.com") return "https://mail.google.com/mail/u/0/#inbox";
-
-  if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) {
-    return "https://outlook.live.com/mail/0/inbox";
-  }
-
-  if (domain === "yahoo.com") {
-    return "https://mail.yahoo.com/d/folders/1";
-  }
-
-  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) {
-    return "https://www.icloud.com/mail";
-  }
+  if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) return "https://outlook.live.com/mail/0/inbox";
+  if (domain === "yahoo.com") return "https://mail.yahoo.com/d/folders/1";
+  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) return "https://www.icloud.com/mail";
 
   return `mailto:${email}`;
 }
@@ -317,25 +311,25 @@ function getInboxHref(email: string | null): string {
 function formatUserCount(n: number | null): string {
   if (!Number.isFinite(n as number) || n === null) return "";
   const value = Math.max(0, Math.round(n));
-
   if (value >= 1_000_000) {
     const m = value / 1_000_000;
     return `${m.toFixed(m >= 10 ? 0 : 1).replace(/\.0$/, "")}m`;
   }
-
   if (value >= 1_000) {
     const k = value / 1_000;
     return `${k.toFixed(k >= 10 ? 0 : 1).replace(/\.0$/, "")}k`;
   }
-
   return String(value);
 }
 
+// --------------------
+// AuthGate
+// --------------------
 export function AuthGate({ children }: AuthGateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Start from localStorage if it exists
+  // start from localStorage if exists
   const [passId, setPassId] = useState<string | null>(() => readStoredPassId());
 
   const [email, setEmail] = useState("");
@@ -348,78 +342,70 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [googleOpening, setGoogleOpening] = useState(false);
 
-  // ✅ this holds “new users count” coming from your API
+  // optional stats
   const [newUsers, setNewUsers] = useState<number | null>(null);
-
-  // Keep if you want emergency bypass (otherwise delete)
-  const [bypassForNow] = useState(false);
-
   const displayedUsers = BASELINE_USERS + (newUsers ?? 0);
   const displayedUsersLabel = `${formatUserCount(displayedUsers)} curators use Mina`;
 
   /**
-   * ✅ Single function that guarantees passId exists (new + old users)
+   * ✅ The only place we decide/repair passId.
    * Order:
    * 1) localStorage
-   * 2) MEGA table restore (if authed)
-   * 3) backend /me (canonical/link)
-   * 4) local generation fallback
-   * 5) persist to mega_customers (if authed)
+   * 2) restore from mega_customers (if authed)
+   * 3) backend /me canonicalize/link
+   * 4) local generation fallback (guaranteed)
+   * 5) persist to localStorage + mega_customers (if authed)
    */
-  const refreshPassId = useCallback(
-    async (userId?: string | null, userEmail?: string | null) => {
-      // 1) local first
-      let local = readStoredPassId();
-      if (local && local !== passId) setPassId(local);
+  const refreshPassId = useCallback(async (userId?: string | null, userEmail?: string | null) => {
+    const uid = (userId || "").trim() || null;
+    const uemail = normalizeEmail(userEmail);
 
-      // 2) restore from MEGA customers if logged in and no local
-      if (!local && userId) {
-        const restored = await tryRestorePassIdFromMegaCustomers({ userId, email: userEmail ?? null });
-        if (restored) {
-          persistPassId(restored);
-          local = restored;
-          if (restored !== passId) setPassId(restored);
-        }
+    // 1) local
+    let local = readStoredPassId();
+    if (local && local !== passId) {
+      setPassId(local);
+    }
+
+    // 2) restore from mega_customers if authed + no local
+    if (!local && uid) {
+      const restored = await tryRestorePassIdFromMegaCustomers({ userId: uid, email: uemail });
+      if (restored) {
+        persistPassIdLocal(restored);
+        local = restored;
+        if (restored !== passId) setPassId(restored);
       }
+    }
 
-      // 3) ask backend /me to canonicalize/link (may return same or new)
-      const fromBackend = await ensurePassIdViaBackend(local);
-      let finalPid = fromBackend || local;
+    // 3) backend canonicalize/link
+    const fromBackend = await ensurePassIdViaBackend(local);
+    let finalPid = (fromBackend || local || "").trim() || null;
 
-      // 4) last fallback: generate locally (ensures EVERY user gets one at least once)
-      if (!finalPid) {
-        finalPid = generateLocalPassId();
-      }
+    // 4) guaranteed fallback
+    if (!finalPid) finalPid = generateLocalPassId();
 
-      // persist to local state/storage
-      persistPassId(finalPid);
-      if (finalPid !== passId) setPassId(finalPid);
+    // persist local state/storage
+    persistPassIdLocal(finalPid);
+    if (finalPid !== passId) setPassId(finalPid);
 
-      // 5) store in mega_customers (frontend write)
-      if (userId) {
-        void persistPassIdToMegaCustomers({
-          userId,
-          email: userEmail ?? null,
-          passId: finalPid,
-        });
-      }
+    // 5) persist to mega_customers
+    if (uid) {
+      void persistPassIdToMegaCustomers({ userId: uid, email: uemail, passId: finalPid });
+    }
 
-      return finalPid;
-    },
-    [passId]
-  );
+    return finalPid;
+  }, [passId]);
 
-  // ✅ Children are always wrapped with passId context
+  // PassId context wrapper
   const gatedChildren = useMemo(
     () => <PassIdContext.Provider value={passId}>{children}</PassIdContext.Provider>,
     [children, passId]
   );
 
-  // ✅ MEGA gating: ONLY mount children when we have a real supabase user id
+  // Mount app only when authenticated (as you requested)
   const hasUserId = !!session?.user?.id;
-  const isAuthed = hasUserId || bypassForNow;
+  const isAuthed = hasUserId;
 
-  // Session bootstrap + auth listener
+  // Init + auth listener
   useEffect(() => {
     let mounted = true;
 
@@ -431,7 +417,6 @@ export function AuthGate({ children }: AuthGateProps) {
         const s = data.session ?? null;
         setSession(s);
 
-        // Ensure passId exists (anon ok), and later links when JWT exists
         await refreshPassId(s?.user?.id ?? null, s?.user?.email ?? null);
       } finally {
         if (mounted) setInitializing(false);
@@ -453,7 +438,7 @@ export function AuthGate({ children }: AuthGateProps) {
         setError(null);
         setGoogleOpening(false);
 
-        // keep MEGA continuity: still ensure anon pass exists
+        // keep continuity (anon pass)
         void refreshPassId(null, null);
         return;
       }
@@ -463,14 +448,15 @@ export function AuthGate({ children }: AuthGateProps) {
           const uid = newSession?.user?.id ?? null;
           const uemail = newSession?.user?.email ?? null;
 
-          const nextPassId = await refreshPassId(uid, uemail);
+          const pid = await refreshPassId(uid, uemail);
 
-          // Optional: lead capture
-          if (uemail) void syncShopifyWelcome(uemail, uid || undefined, nextPassId);
+          // optional lead capture
+          if (uemail) void syncShopifyWelcome(uemail, uid || undefined, pid);
         })();
-      } else {
-        void refreshPassId(newSession?.user?.id ?? null, newSession?.user?.email ?? null);
+        return;
       }
+
+      void refreshPassId(newSession?.user?.id ?? null, newSession?.user?.email ?? null);
     });
 
     return () => {
@@ -479,12 +465,13 @@ export function AuthGate({ children }: AuthGateProps) {
     };
   }, [refreshPassId]);
 
-  // Public stats (optional)
+  // Optional public stats label
   useEffect(() => {
     let cancelled = false;
 
     const fetchStats = async () => {
       try {
+        if (!API_BASE_URL) return;
         const res = await fetch(`${API_BASE_URL}/public/stats/total-users`);
         if (!res.ok) return;
 
@@ -498,33 +485,29 @@ export function AuthGate({ children }: AuthGateProps) {
     };
 
     void fetchStats();
-
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // ✅ Email OTP flow — lead capture WITHOUT setting identity
+  // Email OTP
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = email.trim();
+    const trimmed = (email || "").trim();
     if (!trimmed) return;
 
     setError(null);
     setLoading(true);
 
-    // Ensure passId exists (anon), and sync lead
+    // ensure anon passId + lead capture
     const pid = await refreshPassId(null, trimmed);
     void syncShopifyWelcome(trimmed, undefined, pid);
 
     try {
       const { error: supaError } = await supabase.auth.signInWithOtp({
         email: trimmed,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
+        options: { emailRedirectTo: window.location.origin },
       });
-
       if (supaError) throw supaError;
 
       setOtpSent(true);
@@ -536,19 +519,18 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   };
 
+  // Google OAuth
   const handleGoogleLogin = async () => {
     setError(null);
     setGoogleOpening(true);
 
-    // Ensure passId exists before redirect
+    // ensure passId exists before redirect
     void refreshPassId(session?.user?.id ?? null, session?.user?.email ?? null);
 
     try {
       const { error: supaError } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: window.location.origin,
-        },
+        options: { redirectTo: window.location.origin },
       });
       if (supaError) throw supaError;
     } catch (err: any) {
@@ -557,7 +539,7 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   };
 
-  // ✅ While we’re checking local session storage, don’t mount MinaApp yet
+  // Loading screen
   if (initializing) {
     return (
       <div className="mina-auth-shell">
@@ -568,28 +550,30 @@ export function AuthGate({ children }: AuthGateProps) {
               alt="Mina"
             />
           </div>
+
           <div className="mina-auth-card">
             <p className="mina-auth-text">Loading…</p>
           </div>
 
           <div className="mina-auth-footer">{displayedUsersLabel}</div>
         </div>
+
         <div className="mina-auth-right" />
       </div>
     );
   }
 
-  // ✅ MinaApp (children) mounts ONLY when session.user.id exists
+  // ✅ Mount app when authed
   if (isAuthed) {
     return gatedChildren;
   }
 
+  // Login UI
   const trimmed = email.trim();
   const hasEmail = trimmed.length > 0;
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
   const inboxHref = getInboxHref(targetEmail);
   const openInNewTab = inboxHref.startsWith("http");
-
   const showBack = (emailMode && hasEmail) || otpSent;
 
   return (
@@ -701,6 +685,7 @@ export function AuthGate({ children }: AuthGateProps) {
                     >
                       Open email app
                     </a>
+
                     <p className="mina-auth-text" style={{ marginTop: 8 }}>
                       We’ve sent a sign-in link to {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}. Open
                       it to continue with Mina.
