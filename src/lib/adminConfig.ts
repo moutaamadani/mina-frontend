@@ -82,143 +82,92 @@ export function saveAdminConfig(next: AdminConfig) {
 
 /* =============================================================================
    ADMIN LOGIC (MEGA)
-   - Primary: mega_customers (credits >= 9999 OR role/is_admin flag)
-   - Optional: mega_admin allowlist rows (record_type = admin_allowlist)
+   ✅ Source of truth: mega_customers.mg_admin_allowlist = true
+   Optional fallback: mega_customers.mg_source_system contains "minadmin" or "mina-admin"
 ============================================================================= */
 
 const MEGA_CUSTOMERS = "mega_customers";
-const MEGA_ADMIN = "mega_admin";
 
-// ✅ Your “super-admin credits flag”
-const ADMIN_CREDITS_THRESHOLD = 9999;
+const COL_USER_ID = "mg_user_id";
+const COL_EMAIL = "mg_email";
 
-function findNumericField(row: any, candidates: string[]): number | null {
-  for (const k of candidates) {
-    const v = row?.[k];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v);
-  }
-  return null;
+// ✅ you added this column in mega_customers
+const COL_ADMIN_ALLOWLIST = "mg_admin_allowlist";
+
+// Optional fallback key (if you also want “system key” admins)
+const COL_SOURCE_SYSTEM = "mg_source_system";
+
+function normalizeEmail(email?: string | null) {
+  const e = (email || "").trim().toLowerCase();
+  return e || "";
 }
 
-function findCredits(row: any): number | null {
-  if (!row || typeof row !== "object") return null;
-
-  // common explicit names first
-  const direct = findNumericField(row, [
-    "credits",
-    "credit",
-    "balance",
-    "mg_credits",
-    "mg_credit",
-    "mg_balance",
-    "mg_credits_balance",
-    "mg_credit_balance",
-    "mg_remaining_credits",
-    "remaining_credits",
-  ]);
-  if (direct !== null) return direct;
-
-  // fallback: scan any field with "credit" or "balance"
-  for (const key of Object.keys(row)) {
-    if (!/credit|balance/i.test(key)) continue;
-    const v = row[key];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v))) return Number(v);
-  }
-  return null;
-}
-
-function findIsAdminFlag(row: any): boolean {
-  if (!row || typeof row !== "object") return false;
-
-  const boolKeys = ["is_admin", "admin", "mg_is_admin", "mg_admin"];
-  for (const k of boolKeys) {
-    if (row?.[k] === true) return true;
-    if (row?.[k] === "true") return true;
-    if (row?.[k] === 1) return true;
-  }
-
-  const roleKeys = ["role", "mg_role"];
-  for (const k of roleKeys) {
-    const v = row?.[k];
-    if (typeof v === "string" && /admin|owner|staff/i.test(v)) return true;
-  }
-
+function truthy(v: any): boolean {
+  if (v === true) return true;
+  if (v === 1) return true;
+  if (typeof v === "string" && v.toLowerCase().trim() === "true") return true;
   return false;
+}
+
+function isSourceSystemAdmin(row: any): boolean {
+  const v = row?.[COL_SOURCE_SYSTEM];
+  if (typeof v !== "string") return false;
+  const s = v.toLowerCase();
+  // accept both styles you mentioned
+  return s.includes("minadmin") || s.includes("mina-admin");
 }
 
 /**
  * ✅ isAdmin():
  * - Reads current Supabase user
- * - Checks mega_customers row: admin flag OR credits >= 9999
- * - Optionally checks mega_admin allowlist rows (record_type = admin_allowlist)
+ * - Loads mega_customers row by mg_user_id first, then mg_email
+ * - Admin if: mg_admin_allowlist === true
+ * - Optional fallback: mg_source_system contains "minadmin" / "mina-admin"
  * - NEVER throws
  */
 export async function isAdmin(): Promise<boolean> {
   try {
     const { data } = await supabase.auth.getUser();
     const user = data.user;
-    const email = (user?.email || "").trim().toLowerCase();
+
     const userId = (user?.id || "").trim();
+    const email = normalizeEmail(user?.email || "");
 
-    if (!email && !userId) return false;
+    if (!userId && !email) return false;
 
-    // 1) mega_customers check (best: each user can read their own row via RLS)
-    try {
-      // Try by user_id first, fallback to email
-      const q = supabase
+    let row: any | null = null;
+
+    // 1) by user id (best)
+    if (userId) {
+      const { data: byId, error } = await supabase
         .from(MEGA_CUSTOMERS)
         .select("*")
-        .limit(1);
-
-      const byUserId =
-        userId
-          ? await q.eq("mg_user_id", userId).maybeSingle()
-          : { data: null, error: null };
-
-      const row1 = byUserId?.data ?? null;
-
-      const byEmail =
-        !row1 && email
-          ? await supabase.from(MEGA_CUSTOMERS).select("*").limit(1).eq("mg_email", email).maybeSingle()
-          : { data: null, error: null };
-
-      const row = row1 || byEmail?.data || null;
-
-      if (row) {
-        if (findIsAdminFlag(row)) return true;
-        const credits = findCredits(row);
-        if (credits !== null && credits >= ADMIN_CREDITS_THRESHOLD) return true;
-      }
-    } catch {
-      // ignore (RLS or schema mismatch)
-    }
-
-    // 2) Optional mega_admin allowlist rows
-    // Add rows like:
-    //  mg_record_type = "admin_allowlist"
-    //  mg_email = "someone@domain.com"
-    //  mg_is_admin = true
-    try {
-      if (!email) return false;
-
-      const { data: allowRow } = await supabase
-        .from(MEGA_ADMIN)
-        .select("mg_email, mg_is_admin, mg_role, mg_record_type")
-        .eq("mg_record_type", "admin_allowlist")
-        .eq("mg_email", email)
+        .eq(COL_USER_ID, userId)
         .limit(1)
         .maybeSingle();
 
-      if (allowRow) {
-        if (allowRow.mg_is_admin === true) return true;
-        if (typeof allowRow.mg_role === "string" && /admin|owner|staff/i.test(allowRow.mg_role)) return true;
-        return true; // if row exists, treat as admin
-      }
-    } catch {
-      // ignore
+      if (!error && byId) row = byId as any;
     }
+
+    // 2) fallback by email (for older rows)
+    if (!row && email) {
+      const { data: byEmail, error } = await supabase
+        .from(MEGA_CUSTOMERS)
+        .select("*")
+        .eq(COL_EMAIL, email)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && byEmail) row = byEmail as any;
+    }
+
+    if (!row) return false;
+
+    // ✅ primary admin flag
+    if (truthy(row?.[COL_ADMIN_ALLOWLIST])) return true;
+
+    // ✅ optional fallback (your “mg_source_system{minadmin key}” idea)
+    if (isSourceSystemAdmin(row)) return true;
 
     return false;
   } catch {
