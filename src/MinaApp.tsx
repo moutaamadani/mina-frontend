@@ -564,6 +564,7 @@ const historyDirtyRef = useRef<boolean>(false);
 // between Studio/Profile for the same user.
 const creditsCacheRef = useRef<Record<string, CreditsState>>({});
 const creditsDirtyRef = useRef<boolean>(true);
+const creditsCacheAtRef = useRef<Record<string, number>>({});
 
   // -------------------------
   // 4.1 Global tab + customer
@@ -1341,10 +1342,14 @@ const extractExpiresAt = (obj: any): string | null => {
 const fetchCredits = async () => {
   if (!API_BASE_URL || !currentPassId) return;
   try {
-    // Reuse cached balance unless a new generation or passId change marked it
-    // dirty.
-    if (!creditsDirtyRef.current && creditsCacheRef.current[currentPassId]) {
-      setCredits(creditsCacheRef.current[currentPassId]);
+    // Reuse cached balance unless a new generation/passId change marked it
+    // dirty, or the cache is older than ~30s.
+    const cached = creditsCacheRef.current[currentPassId];
+    const cachedAt = creditsCacheAtRef.current[currentPassId] || 0;
+    const isStale = Date.now() - cachedAt > 30_000;
+
+    if (!creditsDirtyRef.current && cached && !isStale) {
+      setCredits(cached);
       return;
     }
 
@@ -1368,6 +1373,7 @@ const fetchCredits = async () => {
     };
 
     creditsCacheRef.current[currentPassId] = nextCredits;
+    creditsCacheAtRef.current[currentPassId] = Date.now();
     creditsDirtyRef.current = false;
     setCredits(nextCredits);
   } catch {
@@ -1479,6 +1485,26 @@ useEffect(() => {
   void fetchHistory();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [activeTab, currentPassId]);
+
+useEffect(() => {
+  const markCreditsDirty = () => {
+    creditsDirtyRef.current = true;
+    void fetchCredits();
+  };
+
+  const handleVisibility = () => {
+    if (!document.hidden) markCreditsDirty();
+  };
+
+  window.addEventListener("focus", markCreditsDirty);
+  document.addEventListener("visibilitychange", handleVisibility);
+
+  return () => {
+    window.removeEventListener("focus", markCreditsDirty);
+    document.removeEventListener("visibilitychange", handleVisibility);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currentPassId]);
 
 
 const getEditorialNumber = (id: string, index: number) => {
@@ -1823,6 +1849,19 @@ const handleGenerateStill = async () => {
   // ========================================================================
   // Part 10 mirrors the still flow but for motion: suggestion prompts, video
   // generation, and handling the active motion clip selection.
+const chunkSuggestion = (text: string) => {
+  const words = text
+    .split(/\s+/)
+    .map((w) => w.trim())
+    .filter(Boolean);
+
+  const lines: string[] = [];
+  for (let i = 0; i < words.length; i += 4) {
+    lines.push(words.slice(i, i + 4).join(" "));
+  }
+  return lines;
+};
+
 const applyMotionSuggestionText = async (text: string) => {
   if (!text) return;
   if (describeMoreTimeoutRef.current !== null) {
@@ -1832,12 +1871,15 @@ const applyMotionSuggestionText = async (text: string) => {
   setShowDescribeMore(false);
   setMotionSuggestTyping(true);
 
-  for (let i = 0; i < text.length; i++) {
-    const next = text.slice(0, i + 1);
-    setMotionDescription(next);
-    setBrief(next);
+  const lines = chunkSuggestion(text);
+  let accumulated = "";
+
+  for (const line of lines) {
+    accumulated = accumulated ? `${accumulated}\n${line}` : line;
+    setMotionDescription(accumulated);
+    setBrief(accumulated);
     // eslint-disable-next-line no-await-in-loop
-    await new Promise((resolve) => setTimeout(resolve, 12));
+    await new Promise((resolve) => setTimeout(resolve, 40));
   }
 
   setMotionSuggestTyping(false);
@@ -2012,17 +2054,11 @@ const guessDownloadExt = (url: string, fallbackExt: string) => {
   return fallbackExt;
 };
 
-const buildDownloadName = (url: string, fallbackBase: string, fallbackExt: string) => {
-  try {
-    const parsed = new URL(url);
-    const last = parsed.pathname.split("/").filter(Boolean).pop();
-    if (last && last.includes(".")) return last;
-  } catch {
-    /* ignore */
-  }
-
+const buildDownloadName = (url: string, _fallbackBase: string, fallbackExt: string) => {
+  // Force a consistent branded filename for all downloads.
+  const base = "Mina_v3_prompt";
   const ext = guessDownloadExt(url, fallbackExt);
-  return fallbackBase.endsWith(ext) ? fallbackBase : `${fallbackBase}${ext}`;
+  return base.endsWith(ext) ? base : `${base}${ext}`;
 };
 
 const forceSaveUrl = async (url: string, filename: string) => {

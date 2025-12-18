@@ -481,6 +481,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCreditsOk = props.motionCreditsOk ?? true;
   const motionBlockReason = props.motionBlockReason || null;
 
+  const typeForMeLabel = !props.motionHasImage
+    ? "Add an image"
+    : !motionCreditsOk
+      ? "Buy more credits"
+      : "Type for me";
+
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
     : motionSuggesting
@@ -692,15 +698,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             }
                           >
                             {renderPillIcon(TYPE_FOR_ME_ICON, "✎")}
-                            <span className="studio-pill-main">Type for me</span>
+                            <span className="studio-pill-main">{typeForMeLabel}</span>
                           </button>
-                          {(!motionHasImage || !motionCreditsOk) && (
-                            <div className="studio-pill-note">
-                              {!motionHasImage
-                                ? "Add an image to animate."
-                                : motionBlockReason || "Buy more credits to animate."}
-                            </div>
-                          )}
 
                           {/* Image */}
                           <button
