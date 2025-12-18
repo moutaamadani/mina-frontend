@@ -138,6 +138,7 @@ npm run dev
 ```bash
 # Mina API
 VITE_MINA_API_BASE_URL=https://mina-editorial-ai-api.onrender.com
+VITE_BACKEND_URL=
 
 # Optional: where “Buy credits” points (falls back to an internal default URL)
 VITE_MINA_TOPUP_URL=https://faltastudio.com/products/mina-50-matcha
