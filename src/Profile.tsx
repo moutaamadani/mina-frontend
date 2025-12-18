@@ -27,19 +27,6 @@ function pick(obj, keys, fallback = "") {
   }
   return fallback;
 }
-    // Coerce DB-ish truthy values safely (handles "false" string correctly)
-    function toBool(v) {
-      if (v === true || v === false) return v;
-      if (typeof v === "number") return v !== 0;
-      if (typeof v === "string") {
-        const s = v.trim().toLowerCase();
-        if (!s) return false;
-        if (["true", "1", "yes", "y", "t"].includes(s)) return true;
-        if (["false", "0", "no", "n", "f"].includes(s)) return false;
-        return Boolean(s);
-      }
-      return Boolean(v);
-    }
 
 function formatDate(iso) {
   if (!iso) return "";
@@ -73,7 +60,7 @@ function safeFilename(base, url) {
   return `${base}${suffix}`;
 }
 
-// ✅ Important: if a column exists but returns 0 rows, we keep trying other keys
+// Try multiple possible “owner” columns without breaking if column doesn't exist
 async function fetchByOwnerKey({
   table,
   select,
@@ -86,9 +73,6 @@ async function fetchByOwnerKey({
   const ownerKeys = ["pass_id", "passId", "customer_pass_id", "customer_id", "customerId"];
   let lastError = null;
 
-  // first column that *exists* (no error), even if it returns no rows
-  let firstExistingKey = null;
-
   for (const ownerKey of ownerKeys) {
     const q = supabase
       .from(table)
@@ -98,33 +82,19 @@ async function fetchByOwnerKey({
 
     const { data, error } = await q.eq(ownerKey, ownerValue);
 
-    if (error) {
-      lastError = error;
-      const msg = String(error.message || "").toLowerCase();
-      // If it's a "column does not exist" style error, keep trying other keys
-      if (msg.includes("column") && msg.includes("does not exist")) continue;
+    if (!error) return { data: data || [], ownerKeyUsed: ownerKey, error: null };
 
-      // Otherwise: stop (permissions / network / etc)
-      break;
-    }
+    lastError = error;
+    const msg = String(error.message || "").toLowerCase();
+    // If it's a "column does not exist" style error, keep trying other keys
+    if (msg.includes("column") && msg.includes("does not exist")) continue;
 
-    // Column exists (no error)
-    if (!firstExistingKey) firstExistingKey = ownerKey;
-
-    const rows = data || [];
-    if (rows.length > 0) {
-      return { data: rows, ownerKeyUsed: ownerKey, error: null };
-    }
-
-    // Empty result — keep trying other keys to avoid locking onto wrong but existing columns
+    // Otherwise: stop (permissions / network / etc)
+    break;
   }
-
-  // If we found at least one existing owner column, return empty data with that key (user may truly have 0 rows)
-  if (firstExistingKey) return { data: [], ownerKeyUsed: firstExistingKey, error: null };
 
   return { data: [], ownerKeyUsed: null, error: lastError };
 }
-
 
 async function fetchCustomer(passId) {
   // Same tolerant approach for mega_customer lookup
@@ -208,29 +178,23 @@ export default function Profile() {
   const [filterLiked, setFilterLiked] = useState(false);
   const [filterRecent, setFilterRecent] = useState(false); // last 7 days
   const [filterSession, setFilterSession] = useState("all");
-const pageRef = useRef(0);
-const sentinelRef = useRef(null);
 
-// Keep an always-current passId for loaders (avoids boot timing issues)
-const passIdRef = useRef("");
-
+  const pageRef = useRef(0);
+  const sentinelRef = useRef(null);
 
   const handleLogout = async () => {
-  try {
-    await supabase.auth.signOut();
-  } catch {
-    // ignore
-  }
-  try {
-    localStorage.removeItem(PASS_ID_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-
-  passIdRef.current = "";
-  window.location.href = "/";
-};
-
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    try {
+      localStorage.removeItem(PASS_ID_STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+    window.location.href = "/";
+  };
 
   const handleBackToStudio = () => {
     // Adjust if your studio route differs
@@ -238,66 +202,64 @@ const passIdRef = useRef("");
   };
 
   const loadNextPage = useCallback(
-  async ({ reset = false } = {}) => {
-    const pid = (passIdRef.current || "").trim();
-    if (!pid) return;
-    if (!hasMore && !reset) return;
-    if (isPageLoading) return;
+    async ({ reset = false } = {}) => {
+      if (!passId) return;
+      if (!hasMore && !reset) return;
+      if (isPageLoading) return;
 
-    setIsPageLoading(true);
-    setError("");
+      setIsPageLoading(true);
+      setError("");
 
-    try {
-      const page = reset ? 0 : pageRef.current;
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
+      try {
+        const page = reset ? 0 : pageRef.current;
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
 
-      let data = [];
-      let usedKey = ownerKeyUsed;
+        let data = [];
+        let usedKey = ownerKeyUsed;
 
-      if (usedKey) {
-        const q = supabase
-          .from("mega_generation")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .range(from, to)
-          .eq(usedKey, pid);
+        if (usedKey) {
+          const q = supabase
+            .from("mega_generation")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .range(from, to)
+            .eq(usedKey, passId);
 
-        const { data: d, error: e } = await q;
-        if (e) throw e;
-        data = d || [];
-      } else {
-        const res = await fetchByOwnerKey({
-          table: "mega_generation",
-          select: "*",
-          ownerValue: pid,
-          rangeFrom: from,
-          rangeTo: to,
-        });
-        if (res.error) throw res.error;
-        data = res.data || [];
-        usedKey = res.ownerKeyUsed;
-        if (usedKey) setOwnerKeyUsed(usedKey);
+          const { data: d, error: e } = await q;
+          if (e) throw e;
+          data = d || [];
+        } else {
+          const res = await fetchByOwnerKey({
+            table: "mega_generation",
+            select: "*",
+            ownerValue: passId,
+            rangeFrom: from,
+            rangeTo: to,
+          });
+          if (res.error) throw res.error;
+          data = res.data || [];
+          usedKey = res.ownerKeyUsed;
+          if (usedKey) setOwnerKeyUsed(usedKey);
+        }
+
+        if (reset) {
+          pageRef.current = 1;
+          setItems(data);
+        } else {
+          pageRef.current = page + 1;
+          setItems((prev) => [...prev, ...data]);
+        }
+
+        setHasMore(data.length === PAGE_SIZE);
+      } catch (e) {
+        setError(String(e?.message || e || "Failed to load archive."));
+      } finally {
+        setIsPageLoading(false);
       }
-
-      if (reset) {
-        pageRef.current = 1;
-        setItems(data);
-      } else {
-        pageRef.current = page + 1;
-        setItems((prev) => [...prev, ...data]);
-      }
-
-      setHasMore(data.length === PAGE_SIZE);
-    } catch (e) {
-      setError(String(e?.message || e || "Failed to load archive."));
-    } finally {
-      setIsPageLoading(false);
-    }
-  },
-  [hasMore, isPageLoading, ownerKeyUsed]
-);
-
+    },
+    [passId, hasMore, isPageLoading, ownerKeyUsed]
+  );
 
   // Boot: read passId + fetch customer + counts + first page
   useEffect(() => {
@@ -322,7 +284,6 @@ const passIdRef = useRef("");
 
       if (!mounted) return;
       setPassId(stored);
-passIdRef.current = stored;
 
       try {
         const [custRes, countRes] = await Promise.all([fetchCustomer(stored), fetchCounts(stored)]);
@@ -384,15 +345,14 @@ passIdRef.current = stored;
     return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
   }, [items]);
 
-  const creationOptions = useMemo(() => {
-  const set = new Set();
-  for (const it of items) {
-    const c = pick(it, ["creation", "mode", "kind", "type", "pipeline"], "");
-    if (c) set.add(c);
-  }
-  return ["all", ...Array.from(set).sort((a, b) => String(a).localeCompare(String(b)))];
-}, [items]);
-
+  const sessionOptions = useMemo(() => {
+    const set = new Set();
+    for (const it of items) {
+      const s = pick(it, ["session", "session_id", "sessionId"], "");
+      if (s) set.add(s);
+    }
+    return ["all", ...Array.from(set)];
+  }, [items]);
 
   const isMatch = useCallback(
     (it) => {
@@ -416,7 +376,7 @@ passIdRef.current = stored;
 
       // liked
       if (filterLiked) {
-        const liked = toBool(pick(it, ["liked", "is_liked", "isLiked"], false));
+        const liked = Boolean(pick(it, ["liked", "is_liked", "isLiked"], false));
         if (!liked) return false;
       }
 
@@ -667,7 +627,7 @@ passIdRef.current = stored;
 
           const prompt = pick(it, ["prompt", "text", "input_prompt", "inputPrompt"], "");
           const createdAt = pick(it, ["created_at", "createdAt"], "");
-          const liked = toBool(pick(it, ["liked", "is_liked", "isLiked"], false));
+          const liked = Boolean(pick(it, ["liked", "is_liked", "isLiked"], false));
 
           const thumbFallback =
             pick(it, ["thumb_url", "thumbnail_url", "preview_url", "thumbUrl", "previewUrl"], "") ||
