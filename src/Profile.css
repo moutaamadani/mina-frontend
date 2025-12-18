@@ -163,7 +163,6 @@
 
 .profile-filter-pill.active {
   background: rgba(8, 10, 0, 0.06);
-  color: var(--mina-accent, #858e47);
 }
 
 /* Error */
