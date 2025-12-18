@@ -8,6 +8,7 @@ import StudioLeft from "./StudioLeft";
 import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
+import TopLoadingBar from "./components/TopLoadingBar";
 
 
 const API_BASE_URL =
@@ -556,6 +557,11 @@ const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
+
+  // -------------------------
+  // App boot loading bar
+  // -------------------------
+  const [booting, setBooting] = useState(true);
 
   // -------------------------
   // 4.3 Studio – brief + steps
@@ -1166,6 +1172,9 @@ useEffect(() => {
           setCurrentUserEmail(null);
           setIsAdminUser(false);
         }
+      } finally {
+        // ✅ boot ends here (first load only)
+        if (!cancelled) setBooting(false);
       }
     };
 
@@ -1182,7 +1191,6 @@ useEffect(() => {
       } catch {
         if (!cancelled) setIsAdminUser(false);
       }
-
     });
 
     return () => {
@@ -2618,7 +2626,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // Part 18 composes the full studio layout: left controls, right preview, and
   // conditional overlays/loaders.
-  return (
+  const appUi = (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
       <div className="studio-frame">
@@ -2741,6 +2749,13 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 
       {renderCustomStyleModal()}
     </div>
+  );
+
+  return (
+    <>
+      <TopLoadingBar active={booting} />
+      {appUi}
+    </>
   );
   // ========================================================================
   // [PART 18 END]

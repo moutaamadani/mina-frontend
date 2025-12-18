@@ -13,6 +13,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
 import "./Profile.css";
+import TopLoadingBar from "./components/TopLoadingBar";
 
 type Row = Record<string, any>;
 
@@ -46,6 +47,7 @@ function fmtDateTime(iso: string | null) {
 export default function Profile() {
   const [email, setEmail] = useState("");
   const [historyErr, setHistoryErr] = useState("");
+  const [loadingHistory, setLoadingHistory] = useState(true);
 
   const [generations, setGenerations] = useState<Row[]>([]);
   const [feedbacks, setFeedbacks] = useState<Row[]>([]);
@@ -80,6 +82,7 @@ const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : 
 
   async function fetchHistory() {
     setHistoryErr("");
+    setLoadingHistory(true);
     try {
       if (!apiBase) {
         setHistoryErr("Missing VITE_MINA_API_BASE_URL (or VITE_API_BASE_URL).");
@@ -133,6 +136,8 @@ const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : 
       setFeedbacks([]);
       setCredits(null);
       setExpiresAt(null);
+    } finally {
+      setLoadingHistory(false);
     }
   }
 
@@ -210,10 +215,12 @@ const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : 
   };
 
   return (
-    <div className="profile-shell">
-      {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
-      <div className="profile-topbar">
-        <div /> {/* keep spacing exactly (space-between) */}
+    <>
+      <TopLoadingBar active={loadingHistory} />
+      <div className="profile-shell">
+        {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
+        <div className="profile-topbar">
+          <div /> {/* keep spacing exactly (space-between) */}
         <div className="profile-topbar-right">
           <a className="profile-toplink" href="/studio">
             Back to studio
@@ -366,6 +373,7 @@ const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : 
         })}
         <div className="profile-grid-sentinel" />
       </div>
-    </div>
+      </div>
+    </>
   );
 }

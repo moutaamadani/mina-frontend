@@ -14,6 +14,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
+import TopLoadingBar from "./TopLoadingBar";
 
 type AuthGateProps = {
   children: React.ReactNode;
@@ -292,6 +293,8 @@ export function AuthGate({ children }: AuthGateProps) {
   const hasPassId = typeof passId === "string" && passId.trim().length > 0;
   const isAuthed = hasUserId && hasPassId;
 
+  const authLoading = initializing || loading || googleOpening || (hasUserId && !hasPassId);
+
 
 
   // Init + auth listener
@@ -439,48 +442,54 @@ export function AuthGate({ children }: AuthGateProps) {
   // Loading screen
   if (initializing) {
     return (
-      <div className="mina-auth-shell">
-        <div className="mina-auth-left">
-          <div className="mina-auth-brand">
-            <img
-              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-              alt="Mina"
-            />
+      <>
+        <TopLoadingBar active={authLoading} />
+        <div className="mina-auth-shell">
+          <div className="mina-auth-left">
+            <div className="mina-auth-brand">
+              <img
+                src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+                alt="Mina"
+              />
+            </div>
+
+            <div className="mina-auth-card">
+              <p className="mina-auth-text">Loading…</p>
+            </div>
+
+            <div className="mina-auth-footer">{displayedUsersLabel}</div>
           </div>
 
-          <div className="mina-auth-card">
-            <p className="mina-auth-text">Loading…</p>
-          </div>
-
-          <div className="mina-auth-footer">{displayedUsersLabel}</div>
+          <div className="mina-auth-right" />
         </div>
-
-        <div className="mina-auth-right" />
-      </div>
+      </>
     );
   }
 
   // ✅ If user is signed in but passId is still resolving, show a small loader
   if (hasUserId && !hasPassId) {
     return (
-      <div className="mina-auth-shell">
-        <div className="mina-auth-left">
-          <div className="mina-auth-brand">
-            <img
-              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-              alt="Mina"
-            />
+      <>
+        <TopLoadingBar active={authLoading} />
+        <div className="mina-auth-shell">
+          <div className="mina-auth-left">
+            <div className="mina-auth-brand">
+              <img
+                src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+                alt="Mina"
+              />
+            </div>
+
+            <div className="mina-auth-card">
+              <p className="mina-auth-text">Finishing login…</p>
+            </div>
+
+            <div className="mina-auth-footer">{displayedUsersLabel}</div>
           </div>
 
-          <div className="mina-auth-card">
-            <p className="mina-auth-text">Finishing login…</p>
-          </div>
-
-          <div className="mina-auth-footer">{displayedUsersLabel}</div>
+          <div className="mina-auth-right" />
         </div>
-
-        <div className="mina-auth-right" />
-      </div>
+      </>
     );
   }
 
@@ -499,132 +508,135 @@ export function AuthGate({ children }: AuthGateProps) {
   const showBack = (emailMode && hasEmail) || otpSent;
 
   return (
-    <div className="mina-auth-shell">
-      <div className="mina-auth-left">
-        <div className="mina-auth-brand">
-          <img
-            src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-            alt="Mina"
-          />
-        </div>
-
-        <div className="mina-auth-card">
-          <div className={showBack ? "mina-fade mina-auth-back-wrapper" : "mina-fade hidden mina-auth-back-wrapper"}>
-            <button
-              type="button"
-              className="mina-auth-back"
-              onClick={() => {
-                if (otpSent) {
-                  setOtpSent(false);
-                  setSentTo(null);
-                  setError(null);
-                  setEmailMode(true);
-                } else {
-                  setEmailMode(false);
-                  setEmail("");
-                  setError(null);
-                  setGoogleOpening(false);
-                }
-              }}
-              aria-label="Back"
-            >
-              <img
-                src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/back-svgrepo-com.svg?v=1765359286"
-                alt=""
-              />
-            </button>
+    <>
+      <TopLoadingBar active={authLoading} />
+      <div className="mina-auth-shell">
+        <div className="mina-auth-left">
+          <div className="mina-auth-brand">
+            <img
+              src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
+              alt="Mina"
+            />
           </div>
 
-          {!otpSent ? (
-            <>
-              <div className="mina-auth-actions">
-                <div className="mina-auth-stack">
-                  <div className={"fade-overlay auth-panel auth-panel--google " + (emailMode ? "hidden" : "visible")}>
-                    <button type="button" className="mina-auth-link mina-auth-main" onClick={handleGoogleLogin}>
-                      {googleOpening ? "Opening Google…" : "Login with Google"}
-                    </button>
+          <div className="mina-auth-card">
+            <div className={showBack ? "mina-fade mina-auth-back-wrapper" : "mina-fade hidden mina-auth-back-wrapper"}>
+              <button
+                type="button"
+                className="mina-auth-back"
+                onClick={() => {
+                  if (otpSent) {
+                    setOtpSent(false);
+                    setSentTo(null);
+                    setError(null);
+                    setEmailMode(true);
+                  } else {
+                    setEmailMode(false);
+                    setEmail("");
+                    setError(null);
+                    setGoogleOpening(false);
+                  }
+                }}
+                aria-label="Back"
+              >
+                <img
+                  src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/back-svgrepo-com.svg?v=1765359286"
+                  alt=""
+                />
+              </button>
+            </div>
 
-                    <div style={{ marginTop: 8 }}>
-                      <button
-                        type="button"
-                        className="mina-auth-link secondary"
-                        onClick={() => {
-                          setEmailMode(true);
-                          setError(null);
-                        }}
-                        disabled={loading}
-                      >
-                        Use email instead
+            {!otpSent ? (
+              <>
+                <div className="mina-auth-actions">
+                  <div className="mina-auth-stack">
+                    <div className={"fade-overlay auth-panel auth-panel--google " + (emailMode ? "hidden" : "visible")}>
+                      <button type="button" className="mina-auth-link mina-auth-main" onClick={handleGoogleLogin}>
+                        {googleOpening ? "Opening Google…" : "Login with Google"}
                       </button>
-                    </div>
-                  </div>
 
-                  <div className={"fade-overlay auth-panel auth-panel--email " + (emailMode ? "visible" : "hidden")}>
-                    <form onSubmit={handleEmailLogin} className="mina-auth-form">
-                      <label className="mina-auth-label">
-                        <input
-                          className="mina-auth-input"
-                          type="email"
-                          placeholder="Type email here"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                        />
-                      </label>
-
-                      <div className={hasEmail ? "fade-block delay" : "fade-block hidden"}>
+                      <div style={{ marginTop: 8 }}>
                         <button
-                          type="submit"
-                          className="mina-auth-link mina-auth-main small"
-                          disabled={loading || !hasEmail}
+                          type="button"
+                          className="mina-auth-link secondary"
+                          onClick={() => {
+                            setEmailMode(true);
+                            setError(null);
+                          }}
+                          disabled={loading}
                         >
-                          {loading ? "Sending link…" : "Sign in"}
+                          Use email instead
                         </button>
                       </div>
+                    </div>
 
-                      <div className={hasEmail ? "fade-block delay" : "fade-block hidden"}>
-                        <p className="mina-auth-hint">
-                          We’ll email you a one-time link. If this address is new, that email will also confirm your
-                          account.
-                        </p>
-                      </div>
-                    </form>
+                    <div className={"fade-overlay auth-panel auth-panel--email " + (emailMode ? "visible" : "hidden")}>
+                      <form onSubmit={handleEmailLogin} className="mina-auth-form">
+                        <label className="mina-auth-label">
+                          <input
+                            className="mina-auth-input"
+                            type="email"
+                            placeholder="Type email here"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                          />
+                        </label>
+
+                        <div className={hasEmail ? "fade-block delay" : "fade-block hidden"}>
+                          <button
+                            type="submit"
+                            className="mina-auth-link mina-auth-main small"
+                            disabled={loading || !hasEmail}
+                          >
+                            {loading ? "Sending link…" : "Sign in"}
+                          </button>
+                        </div>
+
+                        <div className={hasEmail ? "fade-block delay" : "fade-block hidden"}>
+                          <p className="mina-auth-hint">
+                            We’ll email you a one-time link. If this address is new, that email will also confirm your
+                            account.
+                          </p>
+                        </div>
+                      </form>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {error && <div className="mina-auth-error">{error}</div>}
-            </>
-          ) : (
-            <>
-              <div className="mina-auth-actions">
-                <div className="mina-auth-stack">
-                  <div className="fade-overlay auth-panel auth-panel--check visible">
-                    <a
-                      className="mina-auth-link mina-auth-main"
-                      href={inboxHref}
-                      target={openInNewTab ? "_blank" : undefined}
-                      rel={openInNewTab ? "noreferrer" : undefined}
-                    >
-                      Open email app
-                    </a>
+                {error && <div className="mina-auth-error">{error}</div>}
+              </>
+            ) : (
+              <>
+                <div className="mina-auth-actions">
+                  <div className="mina-auth-stack">
+                    <div className="fade-overlay auth-panel auth-panel--check visible">
+                      <a
+                        className="mina-auth-link mina-auth-main"
+                        href={inboxHref}
+                        target={openInNewTab ? "_blank" : undefined}
+                        rel={openInNewTab ? "noreferrer" : undefined}
+                      >
+                        Open email app
+                      </a>
 
-                    <p className="mina-auth-text" style={{ marginTop: 8 }}>
-                      We’ve sent a sign-in link to {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}. Open
-                      it to continue with Mina.
-                    </p>
+                      <p className="mina-auth-text" style={{ marginTop: 8 }}>
+                        We’ve sent a sign-in link to {targetEmail ? <strong>{targetEmail}</strong> : "your inbox"}. Open
+                        it to continue with Mina.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {error && <div className="mina-auth-error">{error}</div>}
-            </>
-          )}
+                {error && <div className="mina-auth-error">{error}</div>}
+              </>
+            )}
+          </div>
+
+          <div className="mina-auth-footer">{displayedUsersLabel}</div>
         </div>
 
-        <div className="mina-auth-footer">{displayedUsersLabel}</div>
+        <div className="mina-auth-right" />
       </div>
-
-      <div className="mina-auth-right" />
-    </div>
+    </>
   );
 }
