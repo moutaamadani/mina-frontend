@@ -55,6 +55,12 @@ export default function Profile() {
 
   // Filters (ONLY these)
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
+  const cycleMotion = () => {
+  setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
+};
+
+const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : "Still";
+
   const [likedOnly, setLikedOnly] = useState(false);
   const [recentOnly, setRecentOnly] = useState(false);
 
@@ -265,18 +271,14 @@ export default function Profile() {
 
         {/* ✅ Filters (NO Session, NO Creation) */}
         <div className="profile-filters">
-          <div className="profile-filter">
-            <span className="profile-filter-label">Motion</span>
-            <select
-              className="profile-filter-select"
-              value={motion}
-              onChange={(e) => setMotion(e.target.value as any)}
-            >
-              <option value="all">All</option>
-              <option value="still">Still</option>
-              <option value="motion">Motion</option>
-            </select>
-          </div>
+          <button
+            type="button"
+            className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
+            onClick={cycleMotion}
+          >
+            Motion&nbsp;{motionLabel}
+          </button>
+
 
           <button
             type="button"
