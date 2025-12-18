@@ -58,6 +58,10 @@ button {
     background 0.08s ease-out;
 }
 
+button:not(:disabled):hover {
+  opacity: 0.8;
+}
+
 button:active {
   opacity: 0.6;
 }

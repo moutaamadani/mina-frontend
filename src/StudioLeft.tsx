@@ -100,8 +100,8 @@ type StudioLeftProps = {
   logoInputRef: React.RefObject<HTMLInputElement>;
   inspirationInputRef: React.RefObject<HTMLInputElement>;
 
-  stylePresetKey: string;
-  setStylePresetKey: (k: string) => void;
+  stylePresetKeys: string[];
+  setStylePresetKeys: (k: string[]) => void;
 
   stylePresets: readonly StylePreset[];
   customStyles: CustomStyle[];
@@ -137,6 +137,8 @@ type StudioLeftProps = {
   motionSuggesting?: boolean;
   canCreateMotion?: boolean;
   motionHasImage?: boolean;
+  motionCreditsOk?: boolean;
+  motionBlockReason?: string | null;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -286,8 +288,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     logoInputRef,
     inspirationInputRef,
 
-    stylePresetKey,
-    setStylePresetKey,
+    stylePresetKeys,
+    setStylePresetKeys,
     stylePresets,
     customStyles,
     getStyleLabel,
@@ -395,9 +397,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     ];
   }, [stylePresets, customStyles, getStyleLabel]);
 
-  const currentStyleCard = allStyleCards.find((c) => c.key === stylePresetKey) || null;
-  const styleThumb = currentStyleCard?.thumb || "";
-  const styleLabel = currentStyleCard?.label || "Style";
+  const selectedStyleCards = allStyleCards.filter((c) => stylePresetKeys.includes(c.key));
+  const primaryStyleCard = selectedStyleCards[0] || null;
+  const styleThumb = primaryStyleCard?.thumb || "";
+  const styleLabel =
+    selectedStyleCards.length === 0
+      ? "Editorial styles"
+      : selectedStyleCards.length === 1
+        ? primaryStyleCard?.label || "Style"
+        : `${selectedStyleCards.length} styles`;
 
   const renderPillIcon = (src: string, fallback: React.ReactNode, isPlus?: boolean) => (
     <span
@@ -422,12 +430,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const motionSuggesting = !!props.motionSuggesting;
   const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
+  const motionCreditsOk = props.motionCreditsOk ?? true;
+  const motionBlockReason = props.motionBlockReason || null;
 
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
     : motionSuggesting
       ? "creating"
-      : canCreateMotion
+      : canCreateMotion && motionCreditsOk
         ? "ready"
         : "describe_more";
 
@@ -439,18 +449,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? isMotion
         ? "Animating…"
         : "Creating…"
-      : createState === "uploading"
-        ? "Uploading…"
-        : createState === "describe_more"
-          ? "Describe more"
-          : isMotion
-            ? "Animate"
-            : "Create";
+    : createState === "uploading"
+      ? "Uploading…"
+      : createState === "describe_more"
+        ? isMotion && !motionCreditsOk
+          ? "Add credits"
+          : "Describe more"
+        : isMotion
+          ? "Animate"
+          : "Create";
 
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (isMotion && (!hasMotionHandler || motionSuggesting)) ||
+    (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
     (!isMotion && !canCreateStill);
 
   const handleCreateClick = () => {
@@ -493,6 +505,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
       if (seed) onBriefChange(seed);
     }
+  };
+
+  // still style click: allow 0/1/2+ selections just like motion styles
+  const toggleStylePreset = (key: string) => {
+    setStylePresetKeys((prev) => {
+      const exists = prev.includes(key);
+      return exists ? prev.filter((k) => k !== key) : [...prev, key];
+    });
+    openPanel("style");
   };
 
   return (
@@ -592,7 +613,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
-                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
+                    {renderPillIcon(styleThumb, "+", true)}
                     <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
@@ -645,13 +666,22 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     style={pillBaseStyle(1)}
                     onClick={() => onTypeForMe?.()}
-                    disabled={motionSuggesting || motionGenerating || !motionHasImage}
+                    disabled={
+                      motionSuggesting || motionGenerating || !motionHasImage || !motionCreditsOk
+                    }
                   >
                     <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
                       ✎
                     </span>
                     <span className="studio-pill-main">Type for me</span>
                   </button>
+                  {(!motionHasImage || !motionCreditsOk) && (
+                    <div className="studio-pill-note">
+                      {!motionHasImage
+                        ? "Add an image to animate."
+                        : motionBlockReason || "Buy more credits to animate."}
+                    </div>
+                  )}
 
                   {/* Mouvement style */}
                   <button
@@ -665,7 +695,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
-                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
+                    {renderPillIcon(styleThumb, "+", true)}
                     <span className="studio-pill-main">Mouvement style</span>
                   </button>
 
@@ -855,16 +885,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={s.key}
                           type="button"
-                          className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
-                          onMouseEnter={() => setStylePresetKey(s.key)}
-                          onClick={() => setStylePresetKey(s.key)}
-                        >
-                          <div className="studio-style-thumb">
-                            <img src={s.thumb} alt="" />
-                          </div>
+                      className={classNames(
+                        "studio-style-card",
+                        stylePresetKeys.includes(s.key) && "active"
+                      )}
+                      onClick={() => toggleStylePreset(s.key)}
+                    >
+                      <div className="studio-style-thumb">
+                        {s.thumb ? <img src={s.thumb} alt="" /> : <span aria-hidden="true">+</span>}
+                      </div>
 
-                          <div
-                            className="studio-style-label"
+                      <div
+                        className="studio-style-label"
                             onDoubleClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
