@@ -14,175 +14,187 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./lib/supabaseClient";
 import "./Profile.css";
 
-type MegaRow = Record<string, any>;
+type Row = Record<string, any>;
 
-function pick<T = any>(row: MegaRow, keys: string[], fallback: any = null): T {
+function pick(row: Row, keys: string[], fallback = ""): string {
   for (const k of keys) {
-    if (row && row[k] !== undefined && row[k] !== null) return row[k] as T;
+    const v = row?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
   }
-  return fallback as T;
-}
-
-function toIso(v: any): string {
-  const s = String(v || "").trim();
-  if (!s) return "";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString();
+  return fallback;
 }
 
 function isVideoUrl(url: string) {
-  const clean = (url || "").split("?")[0].split("#")[0].toLowerCase();
-  return clean.endsWith(".mp4") || clean.endsWith(".webm") || clean.endsWith(".mov") || clean.endsWith(".m4v");
+  const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov") || u.endsWith(".m4v");
 }
 
-function looksLikeMotion(row: MegaRow, url: string) {
-  const t = String(pick(row, ["mg_result_type", "mg_type", "type"], "")).toLowerCase();
-  if (t.includes("motion") || t.includes("video")) return true;
-  if (isVideoUrl(url)) return true;
-  return false;
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
+}
+
+function fmtDateTime(iso: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString();
 }
 
 export default function Profile() {
-  const [passId, setPassId] = useState<string>("");
-  const [email, setEmail] = useState<string>("");
-  const [generations, setGenerations] = useState<MegaRow[]>([]);
-  const [feedbacks, setFeedbacks] = useState<MegaRow[]>([]);
-  const [err, setErr] = useState<string>("");
+  const [email, setEmail] = useState("");
+  const [historyErr, setHistoryErr] = useState("");
 
-  // Filters you want (ONLY these)
-  const [motionFilter, setMotionFilter] = useState<"all" | "still" | "motion">("all"); // 3-state
+  const [generations, setGenerations] = useState<Row[]>([]);
+  const [feedbacks, setFeedbacks] = useState<Row[]>([]);
+
+  const [credits, setCredits] = useState<number | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+
+  // Filters (ONLY these)
+  const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
   const [likedOnly, setLikedOnly] = useState(false);
   const [recentOnly, setRecentOnly] = useState(false);
 
-  const apiBaseUrl =
+  const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
+
+  const apiBase =
     (import.meta as any).env?.VITE_MINA_API_BASE_URL ||
     (import.meta as any).env?.VITE_API_BASE_URL ||
     "";
 
   useEffect(() => {
-    // passId usually stored from /me
-    const stored = String(localStorage.getItem("minaPassId") || "").trim();
-    if (stored) setPassId(stored);
-
-    // email from Supabase session
     supabase.auth.getSession().then(({ data }) => {
       const em = data.session?.user?.email || "";
       setEmail(em ? String(em) : "");
     });
   }, []);
 
-  async function apiFetch(path: string) {
-    const headers: Record<string, string> = { Accept: "application/json" };
+  async function fetchHistory() {
+    setHistoryErr("");
+    try {
+      if (!apiBase) {
+        setHistoryErr("Missing VITE_MINA_API_BASE_URL (or VITE_API_BASE_URL).");
+        return;
+      }
 
-    // auth bearer (if logged in)
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (token) headers.Authorization = `Bearer ${token}`;
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token || null;
 
-    // pass header (your backend reads this)
-    const pid = String(localStorage.getItem("minaPassId") || passId || "").trim();
-    if (pid) headers["X-Mina-Pass-Id"] = pid;
+      const passId = String(localStorage.getItem("minaPassId") || "").trim();
 
-    return fetch(`${apiBaseUrl}${path}`, { method: "GET", headers });
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (passId) headers["X-Mina-Pass-Id"] = passId;
+
+      // ✅ FIX: your backend is GET /history (not /history/pass/:id)
+      const resp = await fetch(`${apiBase}/history`, { method: "GET", headers });
+      const text = await resp.text();
+
+      let json: any = null;
+      try {
+        json = text ? JSON.parse(text) : null;
+      } catch {
+        json = null;
+      }
+
+      if (!resp.ok || !json?.ok) {
+        setHistoryErr(
+          json?.message ||
+            json?.error ||
+            `History failed (${resp.status}): ${text?.slice(0, 220) || "Unknown error"}`
+        );
+        setGenerations([]);
+        setFeedbacks([]);
+        setCredits(null);
+        setExpiresAt(null);
+        return;
+      }
+
+      setGenerations(Array.isArray(json.generations) ? json.generations : []);
+      setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
+
+      const bal = json?.credits?.balance;
+      setCredits(Number.isFinite(Number(bal)) ? Number(bal) : null);
+
+      const exp = json?.credits?.expiresAt ?? null;
+      setExpiresAt(exp ? String(exp) : null);
+    } catch (e: any) {
+      setHistoryErr(e?.message || String(e));
+      setGenerations([]);
+      setFeedbacks([]);
+      setCredits(null);
+      setExpiresAt(null);
+    }
   }
 
   useEffect(() => {
-    if (!apiBaseUrl) return;
-
-    (async () => {
-      setErr("");
-      try {
-        // ✅ FIX: your backend route is GET /history (NOT /history/pass/:id)
-        // also supports /history/pass/:passId if you added the backend alias above
-        const resp = await apiFetch(`/history`);
-        const text = await resp.text();
-
-        let json: any = null;
-        try {
-          json = text ? JSON.parse(text) : null;
-        } catch {
-          json = null;
-        }
-
-        if (!resp.ok || !json?.ok) {
-          const msg =
-            json?.message ||
-            json?.error ||
-            `History failed (${resp.status}): ${text?.slice(0, 250) || "Unknown error"}`;
-          setErr(msg);
-          setGenerations([]);
-          setFeedbacks([]);
-          return;
-        }
-
-        setGenerations(Array.isArray(json.generations) ? json.generations : []);
-        setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
-      } catch (e: any) {
-        setErr(e?.message || String(e));
-        setGenerations([]);
-        setFeedbacks([]);
-      }
-    })();
-  }, [apiBaseUrl, passId]);
+    void fetchHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase]);
 
   const likedUrlSet = useMemo(() => {
-    // your backend stores likes as feedback rows; comment=="" is your “liked” convention
-    const set = new Set<string>();
+    const s = new Set<string>();
     for (const f of feedbacks) {
-      const comment = String(pick(f, ["mg_comment", "comment"], "")).trim();
+      const comment = pick(f, ["mg_comment", "comment"], "").trim();
+      // your “like” convention was: comment == ""
       if (comment !== "") continue;
 
-      const img = String(pick(f, ["mg_image_url", "imageUrl"], "")).trim();
-      const vid = String(pick(f, ["mg_video_url", "videoUrl"], "")).trim();
+      const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
+      const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
       const url = img || vid;
-      if (url) set.add(url);
+      if (url) s.add(url);
     }
-    return set;
+    return s;
   }, [feedbacks]);
 
   const items = useMemo(() => {
-    const mapped = (generations || []).map((g) => {
-      const img = String(pick(g, ["mg_image_url"], "")).trim();
-      const vid = String(pick(g, ["mg_video_url"], "")).trim();
-      const out = String(pick(g, ["outputUrl", "url"], "")).trim();
+    const mapped = (generations || []).map((g, idx) => {
+      const id = pick(g, ["mg_id", "id"], `row_${idx}`);
+      const createdAt = pick(g, ["mg_created_at", "createdAt", "mg_event_at"], "") || "";
+      const prompt = pick(g, ["mg_prompt", "prompt"], "") || "";
 
-      const url = out || vid || img || "";
-      const createdAt = toIso(pick(g, ["mg_created_at", "createdAt"], "")) || "";
-      const prompt = String(pick(g, ["mg_prompt", "prompt"], "")).trim();
-      const platform = String(pick(g, ["mg_platform", "platform"], "")).trim();
-      const id = String(pick(g, ["mg_id", "id"], "")).trim();
+      const img = pick(g, ["mg_image_url", "imageUrl", "mg_output_url", "outputUrl"], "").trim();
+      const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
 
-      const motion = looksLikeMotion(g, url);
+      const url = vid || img; // prefer video when present
+      const motionLike =
+        String(pick(g, ["mg_result_type", "resultType", "type"], "")).toLowerCase().includes("motion") ||
+        String(pick(g, ["mg_result_type", "resultType", "type"], "")).toLowerCase().includes("video") ||
+        Boolean(vid) ||
+        isVideoUrl(url);
+
       const liked = url ? likedUrlSet.has(url) : false;
 
-      return { raw: g, id, url, createdAt, prompt, platform, motion, liked };
+      // keep your “sizes” vibe (minimal deterministic pattern)
+      let sizeClass = "profile-card--tall";
+      if (idx % 13 === 0) sizeClass = "profile-card--hero";
+      else if (idx % 9 === 0) sizeClass = "profile-card--wide";
+      else if (idx % 7 === 0) sizeClass = "profile-card--mini";
+
+      return { id, createdAt, prompt, url, liked, isMotion: motionLike, sizeClass };
     });
 
-    // default sort newest first (and “Recent” just filters to newest chunk)
+    // newest first
     mapped.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
     let out = mapped;
 
-    // Motion 3-state
-    if (motionFilter === "still") out = out.filter((x) => !x.motion);
-    if (motionFilter === "motion") out = out.filter((x) => x.motion);
+    if (motion === "still") out = out.filter((x) => !x.isMotion);
+    if (motion === "motion") out = out.filter((x) => x.isMotion);
 
     if (likedOnly) out = out.filter((x) => x.liked);
 
-    if (recentOnly) out = out.slice(0, 50); // “recent view” (no session filter anymore)
+    if (recentOnly) out = out.slice(0, 60);
 
     return out;
-  }, [generations, likedUrlSet, motionFilter, likedOnly, recentOnly]);
+  }, [generations, likedUrlSet, motion, likedOnly, recentOnly]);
 
-  const creationsCount = generations.length;
-  const likedCount = likedUrlSet.size;
-
-  const cycleMotion = () => {
-    setMotionFilter((p) => (p === "all" ? "still" : p === "still" ? "motion" : "all"));
+  const onTogglePrompt = (id: string) => {
+    setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
-
-  const motionLabel = motionFilter === "all" ? "All" : motionFilter === "still" ? "Still" : "Motion";
 
   const logout = async () => {
     try {
@@ -191,50 +203,18 @@ export default function Profile() {
     window.location.reload();
   };
 
-  const backToStudio = () => {
-    // adjust if your studio route is different
-    window.location.href = "/studio";
-  };
-
   return (
-    <div className="profilePage">
-      {/* TOP ROW (no logo left) */}
-      <div className="profileTopRow">
-        <div className="profileMeta">
-          <div className="profileMetaItem">
-            <span className="profileMetaLabel">Pass</span>
-            <span className="profileMetaValue">{passId || "—"}</span>
-          </div>
-
-          <div className="profileMetaItem">
-            <span className="profileMetaLabel">Email</span>
-            <span className="profileMetaValue">{email || "—"}</span>
-          </div>
-
-          <div className="profileMetaItem">
-            <span className="profileMetaLabel">Creations</span>
-            <span className="profileMetaValue">{creationsCount}</span>
-          </div>
-
-          <div className="profileMetaItem">
-            <span className="profileMetaLabel">Liked</span>
-            <span className="profileMetaValue">{likedCount}</span>
-          </div>
-
-          {/* ✅ Logout moved to the same level as Email row (no underline) */}
-          <button className="profileLogoutBtn" onClick={logout} type="button">
-            Logout
-          </button>
-        </div>
-
-        {/* ✅ Instead of Logout in header: Back to studio | Get more Matchas */}
-        <div className="profileHeaderLinks">
-          <button className="profileLinkBtn" onClick={backToStudio} type="button">
+    <div className="profile-shell">
+      {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
+      <div className="profile-topbar">
+        <div /> {/* keep spacing exactly (space-between) */}
+        <div className="profile-topbar-right">
+          <a className="profile-toplink" href="/studio">
             Back to studio
-          </button>
-          <span className="profileLinkSep">|</span>
+          </a>
+          <span className="profile-topsep">|</span>
           <a
-            className="profileLinkA"
+            className="profile-toplink"
             href="https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw"
             target="_blank"
             rel="noreferrer"
@@ -244,78 +224,145 @@ export default function Profile() {
         </div>
       </div>
 
-      <div className="profileDivider" />
-
-      <div className="profileBodyTop">
-        <div>
-          <div className="profileTitle">Archive</div>
-          {!err ? (
-            <div className="profileSubtle">{items.length ? "" : "No creations yet."}</div>
-          ) : (
-            <div className="profileError">{err}</div>
-          )}
+      {/* ✅ Meta strip (row 2) — Email + Credits + Expiration + Logout (not underlined) */}
+      <div className="profile-meta-strip">
+        <div className="profile-kv">
+          <span className="profile-k">Email</span>
+          <span className="profile-v">{email || "—"}</span>
         </div>
 
-        {/* ✅ FILTERS (Session + Creation removed) */}
-        <div className="profileFilters">
-          {/* ✅ Motion is now a 3-state pill, NOT a dropdown, NOT an infinite toggle */}
-          <button className="pillBtn" onClick={cycleMotion} type="button" aria-label="Cycle motion filter">
-            <span className="pillLabel">Motion</span>
-            <span className="pillValue">{motionLabel}</span>
+        <div className="profile-kv">
+          <span className="profile-k">Credits</span>
+          <span className="profile-v">{credits === null ? "—" : credits}</span>
+        </div>
+
+        <div className="profile-kv">
+          <span className="profile-k">Expiration</span>
+          <span className="profile-v">{expiresAt ? fmtDate(expiresAt) : "—"}</span>
+        </div>
+
+        <div className="profile-kv">
+          <button className="profile-logout-meta" onClick={logout} type="button">
+            Logout
           </button>
+        </div>
+      </div>
+
+      {/* Archive head */}
+      <div className="profile-archive-head">
+        <div>
+          <div className="profile-archive-title">Archive</div>
+          <div className="profile-archive-sub">
+            {historyErr ? (
+              <span className="profile-error">{historyErr}</span>
+            ) : items.length ? (
+              `${items.length} item${items.length === 1 ? "" : "s"}`
+            ) : (
+              "No creations yet."
+            )}
+          </div>
+        </div>
+
+        {/* ✅ Filters (NO Session, NO Creation) */}
+        <div className="profile-filters">
+          <div className="profile-filter">
+            <span className="profile-filter-label">Motion</span>
+            <select
+              className="profile-filter-select"
+              value={motion}
+              onChange={(e) => setMotion(e.target.value as any)}
+            >
+              <option value="all">All</option>
+              <option value="still">Still</option>
+              <option value="motion">Motion</option>
+            </select>
+          </div>
 
           <button
-            className={`pillBtn ${likedOnly ? "pillActive" : ""}`}
-            onClick={() => setLikedOnly((v) => !v)}
             type="button"
+            className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
+            onClick={() => setLikedOnly((v) => !v)}
           >
             Liked
           </button>
 
           <button
-            className={`pillBtn ${recentOnly ? "pillActive" : ""}`}
-            onClick={() => setRecentOnly((v) => !v)}
             type="button"
+            className={`profile-filter-pill ${recentOnly ? "active" : ""}`}
+            onClick={() => setRecentOnly((v) => !v)}
           >
             Recent
           </button>
         </div>
       </div>
 
-      <div className="profileGrid">
-        {items.map((it) => (
-          <div className="profileCard" key={it.id || it.url}>
-            <div className="profileMedia">
-              {it.url ? (
-                it.motion ? (
-                  <video src={it.url} controls playsInline />
-                ) : (
-                  <img src={it.url} alt="creation" loading="lazy" />
-                )
-              ) : (
-                <div className="profileMissing">No media</div>
-              )}
-            </div>
+      {/* Grid */}
+      <div className="profile-grid">
+        {items.map((it) => {
+          const expanded = Boolean(expandedPromptIds[it.id]);
+          const showViewMore = (it.prompt || "").length > 90;
 
-            <div className="profileCardMeta">
-              <div className="profileCardTopLine">
-                <span className="profileTag">{it.motion ? "Motion" : "Still"}</span>
-                {it.liked ? <span className="profileTagLiked">Liked</span> : null}
-                <span className="profileDate">{it.createdAt ? new Date(it.createdAt).toLocaleString() : ""}</span>
+          return (
+            <div key={it.id} className={`profile-card ${it.sizeClass}`}>
+              <div className="profile-card-top">
+                <a
+                  className="profile-card-show"
+                  href={it.url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => {
+                    if (!it.url) e.preventDefault();
+                  }}
+                >
+                  Show
+                </a>
+
+                <span className={`profile-card-liked ${it.liked ? "" : "ghost"}`}>Liked</span>
               </div>
 
-              {it.platform ? <div className="profilePlatform">{it.platform}</div> : null}
+              <div
+                className="profile-card-media"
+                onClick={() => {
+                  if (it.url) window.open(it.url, "_blank", "noreferrer");
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                {it.url ? (
+                  it.isMotion ? (
+                    <video src={it.url} controls playsInline />
+                  ) : (
+                    <img src={it.url} alt="" loading="lazy" />
+                  )
+                ) : (
+                  <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
+                )}
+              </div>
 
-              {it.prompt ? <div className="profilePrompt">{it.prompt}</div> : null}
+              <div className="profile-card-promptline">
+                <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
+                  {it.prompt || ""}
+                </div>
 
-              {it.url ? (
-                <a className="profileOpenLink" href={it.url} target="_blank" rel="noreferrer">
-                  Open asset
-                </a>
-              ) : null}
+                {showViewMore ? (
+                  <button
+                    className="profile-card-viewmore"
+                    type="button"
+                    onClick={() => onTogglePrompt(it.id)}
+                  >
+                    {expanded ? "less" : "more"}
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="profile-card-bottom">
+                <div className="profile-card-date">{fmtDateTime(it.createdAt || null)}</div>
+                <div />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+        <div className="profile-grid-sentinel" />
       </div>
     </div>
   );
