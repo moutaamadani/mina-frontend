@@ -207,10 +207,10 @@ export default function Profile() {
     setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {}
+  const logout = () => {
+    supabase.auth.signOut().catch(() => {
+      /* ignore sign-out errors so the page can reset instantly */
+    });
     window.location.reload();
   };
 

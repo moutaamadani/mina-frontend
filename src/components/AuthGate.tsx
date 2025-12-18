@@ -464,21 +464,12 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   };
 
-  // Inline loader that keeps the studio shell on-screen while auth finishes.
-  const inlineLoader = authLoading ? (
-    <div className="mina-inline-auth-loader">
-      <div className="mina-inline-dot" />
-      <span>Finishing sign-in…</span>
-    </div>
-  ) : null;
-
   // ✅ Mount app when initializing or when ready; only show auth UI once we know
   // there's no session so the studio shell never disappears mid-check.
   if (initializing || hasUserId || isAuthed) {
     return (
       <>
         <TopLoadingBar active={authLoading} />
-        {inlineLoader}
         {gatedChildren}
       </>
     );
