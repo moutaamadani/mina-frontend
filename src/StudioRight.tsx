@@ -1,7 +1,15 @@
 // src/StudioRight.tsx
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: React + styling.
+// 2) Types: tiny shapes for still/motion items and props.
+// 3) Component body: derived media state, carousel helpers, click handlers, UI.
+// -----------------------------------------------------------------------------
+// [PART 1] Imports
 import React, { useEffect, useMemo, useState } from "react";
 import "./StudioRight.css";
 
+// [PART 2] Local types (kept light so the viewer understands the props)
 type StillItem = { id: string; url: string };
 type MotionItem = { id: string; url: string };
 
@@ -20,6 +28,7 @@ type StudioRightProps = {
   onSubmitFeedback: () => void;
 };
 
+// [PART 3] UI component (preview pane + feedback box)
 export default function StudioRight(props: StudioRightProps) {
   const {
     currentStill,

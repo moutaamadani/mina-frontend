@@ -1,4 +1,11 @@
 // src/lib/adminConfig.ts
+// -----------------------------------------------------------------------------
+// File map
+// 1) Purpose notes: safe storage for admin config + MEGA admin flag check.
+// 2) Types/constants: AdminConfig shape + defaults + storage key.
+// 3) Local helpers: JSON parsing + config load/save wrappers.
+// 4) Admin logic: Supabase/MEGA check for mg_admin_allowlist flag.
+// -----------------------------------------------------------------------------
 // - Stores UI runtime config in localStorage (safe)
 // - Provides isAdmin() based on MEGA tables (safe, no crashes)
 

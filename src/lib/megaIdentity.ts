@@ -1,6 +1,19 @@
 // src/lib/megaIdentity.ts
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: Supabase client.
+// 2) Constants: storage key + Crockford alphabet.
+// 3) Generators: helpers for time/random encoding and passId creation.
+// 4) Local storage helpers: read/persist/clear passId.
+// 5) Types: Mega customer row + ensure result.
+// 6) Table discovery: resolve MEGA table names.
+// 7) Backend helpers: fetch/update MEGA rows and link users.
+// 8) ensurePassId: main flow that returns a pass id and row source.
+// -----------------------------------------------------------------------------
+// [PART 1] Imports
 import { supabase } from "./supabaseClient";
 
+// [PART 2] Constants
 const PASS_ID_STORAGE_KEY = "minaPassId";
 
 /** Crockford Base32 for ULID-like ids */

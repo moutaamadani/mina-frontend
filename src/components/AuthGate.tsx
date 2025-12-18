@@ -1,4 +1,16 @@
 // src/components/AuthGate.tsx
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: React + Supabase types/client.
+// 2) Constants: API base URL + storage keys + baseline feature flags.
+// 3) Context + hooks: share passId through the tree.
+// 4) Storage helpers: safe localStorage wrappers.
+// 5) PassId helpers: generate, persist, and normalize identifiers.
+// 6) Backend helpers: ensure passId with API + optional Shopify sync.
+// 7) UI helpers: inbox links for email domains.
+// 8) Component: AuthGate that renders children once passId/session is ready.
+// -----------------------------------------------------------------------------
+// [PART 1] Imports
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";

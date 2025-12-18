@@ -1,6 +1,15 @@
 // src/lib/supabaseClient.ts
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: Supabase client factory.
+// 2) Env constants: URL + anon key with safety guard.
+// 3) Client setup: createClient with durable auth options and storage fallback.
+// 4) Helpers: getSupabaseJwt + withSupabaseAuthHeaders for API calls.
+// -----------------------------------------------------------------------------
+// [PART 1] Imports
 import { createClient } from "@supabase/supabase-js";
 
+// [PART 2] Env constants
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
@@ -8,6 +17,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase env vars (VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY)");
 }
 
+// [PART 3] Safe client setup
 // Safe storage (prevents crashes in non-browser builds)
 const storage =
   typeof window !== "undefined" && typeof window.localStorage !== "undefined"
