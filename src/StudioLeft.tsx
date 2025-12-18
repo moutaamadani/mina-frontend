@@ -100,8 +100,8 @@ type StudioLeftProps = {
   logoInputRef: React.RefObject<HTMLInputElement>;
   inspirationInputRef: React.RefObject<HTMLInputElement>;
 
-  stylePresetKey: string;
-  setStylePresetKey: (k: string) => void;
+  stylePresetKeys: string[];
+  setStylePresetKeys: (k: string[]) => void;
 
   stylePresets: readonly StylePreset[];
   customStyles: CustomStyle[];
@@ -137,6 +137,8 @@ type StudioLeftProps = {
   motionSuggesting?: boolean;
   canCreateMotion?: boolean;
   motionHasImage?: boolean;
+  motionCreditsOk?: boolean;
+  motionBlockReason?: string | null;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -231,16 +233,52 @@ const Collapse: React.FC<{
 // ------------------------------------
 // Motion styles (exactly 6)
 // ------------------------------------
-const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string }> = [
-  { key: "melt", label: "Melt", seed: "Slow, asmr, melting motion—soft drips, luxury macro feel." },
-  { key: "drop", label: "Drop", seed: "Falling in slow rhythm—minimal, ASMR, drops." },
-  { key: "expand", label: "Expand", seed: "Subtle expansion, calm luxury vibe." },
-  { key: "satisfying", label: "Satisfying", seed: "Slime video, satisfying, smooth, satisfying, motion loop—micro movements, clean, premium." },
-  { key: "slow_motion", label: "Slow motion", seed: "Ultra slow motion, 1000fps, asmr, premium calm." },
-   { key: "fix_camera", label: "Still camera", seed: "fix camera" },
-  { key: "loop", label: "Perfect loop", seed: "perfect loop" },
-
+const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string; thumb: string }> = [
+  {
+    key: "expand",
+    label: "Expand",
+    seed: "Subtle expansion, calm luxury vibe.",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Expand.png",
+  },
+  {
+    key: "melt",
+    label: "Melt",
+    seed: "Slow, asmr, melting motion—soft drips, luxury macro feel.",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Melt.png",
+  },
+  {
+    key: "drop",
+    label: "Drop",
+    seed: "Falling in slow rhythm—minimal, ASMR, drops.",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Drop.png",
+  },
+  {
+    key: "satisfying",
+    label: "Satisfying",
+    seed: "Slime video, satisfying, smooth, satisfying, motion loop—micro movements, clean, premium.",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/satisfying.png",
+  },
+  {
+    key: "slow_motion",
+    label: "Slow motion",
+    seed: "Ultra slow motion, 1000fps, asmr, premium calm.",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Slow%20motion.png",
+  },
+  {
+    key: "fix_camera",
+    label: "Still camera",
+    seed: "fix camera",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/fix%20camera.png",
+  },
+  {
+    key: "loop",
+    label: "Perfect loop",
+    seed: "perfect loop",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/perfect_loop.png",
+  },
 ];
+
+const TYPE_FOR_ME_ICON = "https://assets.faltastudio.com/Website%20Assets/icon-type-for-me.svg";
 
 // ============================================================================
 // Component
@@ -286,8 +324,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     logoInputRef,
     inspirationInputRef,
 
-    stylePresetKey,
-    setStylePresetKey,
+    stylePresetKeys,
+    setStylePresetKeys,
     stylePresets,
     customStyles,
     getStyleLabel,
@@ -395,9 +433,27 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     ];
   }, [stylePresets, customStyles, getStyleLabel]);
 
-  const currentStyleCard = allStyleCards.find((c) => c.key === stylePresetKey) || null;
-  const styleThumb = currentStyleCard?.thumb || "";
-  const styleLabel = currentStyleCard?.label || "Style";
+  const selectedStyleCards = allStyleCards.filter((c) => stylePresetKeys.includes(c.key));
+  const primaryStyleCard = selectedStyleCards[0] || null;
+  const styleThumb = primaryStyleCard?.thumb || "";
+  const styleLabel =
+    selectedStyleCards.length === 0
+      ? "Editorial styles"
+      : selectedStyleCards.length === 1
+        ? primaryStyleCard?.label || "Style"
+        : `${selectedStyleCards.length} styles`;
+
+  const motionStyleCards = MOTION_STYLES;
+  const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
+  const primaryMotionCard =
+    selectedMotionCards[0] || motionStyleCards.find((c) => c.key === "fix_camera") || motionStyleCards[0];
+  const motionStyleThumb = primaryMotionCard?.thumb || "";
+  const motionStyleLabel =
+    selectedMotionCards.length === 0
+      ? primaryMotionCard?.label || "Mouvement style"
+      : selectedMotionCards.length === 1
+        ? selectedMotionCards[0].label
+        : `${selectedMotionCards.length} styles`;
 
   const renderPillIcon = (src: string, fallback: React.ReactNode, isPlus?: boolean) => (
     <span
@@ -422,12 +478,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const motionSuggesting = !!props.motionSuggesting;
   const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
+  const motionCreditsOk = props.motionCreditsOk ?? true;
+  const motionBlockReason = props.motionBlockReason || null;
 
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
     : motionSuggesting
       ? "creating"
-      : canCreateMotion
+      : canCreateMotion && motionCreditsOk
         ? "ready"
         : "describe_more";
 
@@ -439,18 +497,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? isMotion
         ? "Animating…"
         : "Creating…"
-      : createState === "uploading"
-        ? "Uploading…"
-        : createState === "describe_more"
-          ? "Describe more"
-          : isMotion
-            ? "Animate"
-            : "Create";
+    : createState === "uploading"
+      ? "Uploading…"
+      : createState === "describe_more"
+        ? isMotion && !motionCreditsOk
+          ? "Add credits"
+          : "Describe more"
+        : isMotion
+          ? "Animate"
+          : "Create";
 
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (isMotion && (!hasMotionHandler || motionSuggesting)) ||
+    (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
     (!isMotion && !canCreateStill);
 
   const handleCreateClick = () => {
@@ -493,6 +553,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
       if (seed) onBriefChange(seed);
     }
+  };
+
+  // still style click: allow 0/1/2+ selections just like motion styles
+  const toggleStylePreset = (key: string) => {
+    setStylePresetKeys((prev) => {
+      const exists = prev.includes(key);
+      return exists ? prev.filter((k) => k !== key) : [...prev, key];
+    });
+    openPanel("style");
   };
 
   return (
@@ -592,7 +661,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
-                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
+                    {renderPillIcon(styleThumb, "+", true)}
                     <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
@@ -612,6 +681,27 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
+                          {/* Type for me */}
+                          <button
+                            type="button"
+                            className={classNames("studio-pill", motionSuggesting && "active")}
+                            style={pillBaseStyle(0)}
+                            onClick={() => onTypeForMe?.()}
+                            disabled={
+                              motionSuggesting || motionGenerating || !motionHasImage || !motionCreditsOk
+                            }
+                          >
+                            {renderPillIcon(TYPE_FOR_ME_ICON, "✎")}
+                            <span className="studio-pill-main">Type for me</span>
+                          </button>
+                          {(!motionHasImage || !motionCreditsOk) && (
+                            <div className="studio-pill-note">
+                              {!motionHasImage
+                                ? "Add an image to animate."
+                                : motionBlockReason || "Buy more credits to animate."}
+                            </div>
+                          )}
+
                           {/* Image */}
                           <button
                             type="button"
@@ -620,7 +710,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                               effectivePanel === "product" && "active",
                               !productThumb && "studio-pill--solo-plus"
                             )}
-                            style={pillBaseStyle(0)}
+                            style={pillBaseStyle(1)}
                             onClick={() => {
                               if (!productThumb) {
                                 triggerPick("product");
@@ -634,42 +724,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             <span className="studio-pill-main">Image</span>
                           </button>
 
+                          {/* Mouvement style */}
+                          <button
+                            type="button"
+                            className={classNames(
+                              "studio-pill",
+                              effectivePanel === "style" && "active",
+                              !motionStyleThumb && "studio-pill--solo-plus"
+                            )}
+                            style={pillBaseStyle(2)}
+                            onClick={() => openPanel("style")}
+                            onMouseEnter={() => openPanel("style")}
+                          >
+                            {renderPillIcon(motionStyleThumb, "+", true)}
+                            <span className="studio-pill-main">{motionStyleLabel}</span>
+                          </button>
 
-                  {/* Type for me */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "studio-pill--ghost",
-                      motionSuggesting && "active"
-                    )}
-                    style={pillBaseStyle(1)}
-                    onClick={() => onTypeForMe?.()}
-                    disabled={motionSuggesting || motionGenerating || !motionHasImage}
-                  >
-                    <span className="studio-pill-icon studio-pill-icon-mark" aria-hidden="true">
-                      ✎
-                    </span>
-                    <span className="studio-pill-main">Type for me</span>
-                  </button>
-
-                  {/* Mouvement style */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      effectivePanel === "style" && "active",
-                      !styleThumb && "studio-pill--solo-plus"
-                    )}
-                    style={pillBaseStyle(0)}
-                    onClick={() => openPanel("style")}
-                    onMouseEnter={() => openPanel("style")}
-                  >
-                    {renderPillIcon(styleThumb, styleLabel.slice(0, 1) || "+")}
-                    <span className="studio-pill-main">Mouvement style</span>
-                  </button>
-
-                  {/* Ratio */}
+                          {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
@@ -855,16 +926,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={s.key}
                           type="button"
-                          className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
-                          onMouseEnter={() => setStylePresetKey(s.key)}
-                          onClick={() => setStylePresetKey(s.key)}
-                        >
-                          <div className="studio-style-thumb">
-                            <img src={s.thumb} alt="" />
-                          </div>
+                      className={classNames(
+                        "studio-style-card",
+                        stylePresetKeys.includes(s.key) && "active"
+                      )}
+                      onClick={() => toggleStylePreset(s.key)}
+                    >
+                      <div className="studio-style-thumb">
+                        {s.thumb ? <img src={s.thumb} alt="" /> : <span aria-hidden="true">+</span>}
+                      </div>
 
-                          <div
-                            className="studio-style-label"
+                      <div
+                        className="studio-style-label"
                             onDoubleClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -946,22 +1019,22 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
                     <div className="studio-style-row">
                       {MOTION_STYLES.map((m) => (
-  <button
-    key={m.key}
-    type="button"
-    className={classNames(
-      "studio-style-card",
-      "studio-motion-style-card",
-      motionStyleKeys.includes(m.key) && "active"
-    )}
-    onClick={() => pickMotionStyle(m.key)}
-  >
-    <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
-      <span aria-hidden="true">{m.label.slice(0, 1)}</span>
-    </div>
-    <div className="studio-motion-style-label">{m.label}</div>
-  </button>
-))}
+                        <button
+                          key={m.key}
+                          type="button"
+                          className={classNames(
+                            "studio-style-card",
+                            "studio-motion-style-card",
+                            motionStyleKeys.includes(m.key) && "active"
+                          )}
+                          onClick={() => pickMotionStyle(m.key)}
+                        >
+                          <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
+                            {m.thumb ? <img src={m.thumb} alt="" /> : <span aria-hidden="true">{m.label.slice(0, 1)}</span>}
+                          </div>
+                          <div className="studio-motion-style-label">{m.label}</div>
+                        </button>
+                      ))}
 
                     </div>
                   </div>

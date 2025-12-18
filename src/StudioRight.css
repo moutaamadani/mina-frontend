@@ -54,6 +54,11 @@
   background: transparent;
 }
 
+.studio-output-click:not(:disabled):hover,
+.studio-output-click:active {
+  opacity: 1;
+}
+
 /* Frame is full size, NO radius */
 .studio-output-frame {
   position: relative;

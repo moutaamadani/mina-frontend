@@ -35,8 +35,21 @@ const BASELINE_USERS = 3700;
 // --------------------
 const PassIdContext = React.createContext<string | null>(null);
 
+// Share the Supabase session + auth loading flags with the rest of the app so we
+// don't duplicate session checks in MinaApp.
+const AuthContext = React.createContext<{
+  session: Session | null;
+  initializing: boolean;
+  authLoading: boolean;
+  accessToken: string | null;
+} | null>(null);
+
 export function usePassId(): string | null {
   return React.useContext(PassIdContext);
+}
+
+export function useAuthContext() {
+  return React.useContext(AuthContext);
 }
 
 // --------------------
@@ -237,6 +250,7 @@ function formatUserCount(n: number | null): string {
 export function AuthGate({ children }: AuthGateProps) {
   const [session, setSession] = useState<Session | null>(null);
   const [initializing, setInitializing] = useState(true);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
   // start from localStorage if exists
   const [passId, setPassId] = useState<string | null>(() => readStoredPassId());
@@ -288,18 +302,21 @@ export function AuthGate({ children }: AuthGateProps) {
     return finalPid;
   }, []);
 
-  // PassId context wrapper
-  const gatedChildren = useMemo(
-    () => <PassIdContext.Provider value={passId}>{children}</PassIdContext.Provider>,
-    [children, passId]
-  );
-
   // Mount app only when authenticated AND passId is ready
   const hasUserId = !!session?.user?.id;
   const hasPassId = typeof passId === "string" && passId.trim().length > 0;
   const isAuthed = hasUserId && hasPassId;
 
   const authLoading = initializing || loading || googleOpening || (hasUserId && !hasPassId);
+
+  // PassId context wrapper
+  const gatedChildren = useMemo(() => {
+    return (
+      <AuthContext.Provider value={{ session, initializing, authLoading, accessToken }}>
+        <PassIdContext.Provider value={passId}>{children}</PassIdContext.Provider>
+      </AuthContext.Provider>
+    );
+  }, [accessToken, authLoading, children, initializing, passId, session]);
 
 
 
@@ -314,6 +331,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
         const s = data.session ?? null;
         setSession(s);
+        setAccessToken(s?.access_token || null);
         const pidPromise = refreshPassId(s?.user?.id ?? null, s?.user?.email ?? null);
 
         const pid = await Promise.race([
@@ -336,6 +354,7 @@ export function AuthGate({ children }: AuthGateProps) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession ?? null);
+      setAccessToken(newSession?.access_token || null);
 
       if (event === "SIGNED_OUT") {
         setEmail("");
@@ -445,67 +464,19 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   };
 
-  // Loading screen
-  if (initializing) {
+  // ✅ Mount app when initializing or when ready; only show auth UI once we know
+  // there's no session so the studio shell never disappears mid-check.
+  if (initializing || hasUserId || isAuthed) {
     return (
       <>
         <TopLoadingBar active={authLoading} />
-        <div className="mina-auth-shell">
-          <div className="mina-auth-left">
-            <div className="mina-auth-brand">
-              <img
-                src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-                alt="Mina"
-              />
-            </div>
-
-            <div className="mina-auth-card">
-              <p className="mina-auth-text">Loading…</p>
-            </div>
-
-            <div className="mina-auth-footer">{displayedUsersLabel}</div>
-          </div>
-
-          <div className="mina-auth-right" />
-        </div>
+        {gatedChildren}
       </>
     );
   }
 
-  // ✅ If user is signed in but passId is still resolving, show a small loader
-  if (hasUserId && !hasPassId) {
-    return (
-      <>
-        <TopLoadingBar active={authLoading} />
-        <div className="mina-auth-shell">
-          <div className="mina-auth-left">
-            <div className="mina-auth-brand">
-              <img
-                src="https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Minalogo.svg?v=1765367006"
-                alt="Mina"
-              />
-            </div>
 
-            <div className="mina-auth-card">
-              <p className="mina-auth-text">Finishing login…</p>
-            </div>
-
-            <div className="mina-auth-footer">{displayedUsersLabel}</div>
-          </div>
-
-          <div className="mina-auth-right" />
-        </div>
-      </>
-    );
-  }
-
-  // ✅ Mount app when fully ready
-  if (isAuthed) {
-    return gatedChildren;
-  }
-
-
-  // Login UI
+  // Login UI (only when we know there's no active session)
   const trimmed = email.trim();
   const hasEmail = trimmed.length > 0;
   const targetEmail = sentTo || (hasEmail ? trimmed : null);
