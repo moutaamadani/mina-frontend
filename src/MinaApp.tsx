@@ -2736,7 +2736,11 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
             {renderStudioRight()}
           </div>
         ) : (
-            <Profile />
+            <Profile
+              passId={currentPassId}
+              apiBaseUrl={API_BASE_URL}
+              onBackToStudio={() => setActiveTab("studio")}
+            />
 
         )}
       </div>
