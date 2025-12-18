@@ -1,8 +1,16 @@
 import React from "react";
 import { supabase } from "./lib/supabaseClient";
 
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: React + Supabase helper.
+// 2) Constants: localStorage key for passId.
+// 3) Component: logout handler + placeholder profile view.
+// -----------------------------------------------------------------------------
+// [PART 1] Constants
 const PASS_ID_STORAGE_KEY = "minaPassId";
 
+// [PART 2] Profile component (logout + simple placeholder UI)
 export default function Profile() {
   const handleLogout = async () => {
     try {

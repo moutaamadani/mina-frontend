@@ -1,8 +1,17 @@
 // src/StudioLeft.tsx
 // ============================================================================
 // Mina Studio — LEFT SIDE (Input + pills + panels + style + create + motion)
+// ---------------------------------------------------------------------------
+// File map
+// 1) Imports: React + CSS.
+// 2) Types: local shapes for uploads, presets, props (kept self-contained).
+// 3) Helpers: classNames + stable Collapse wrapper for animated panels.
+// 4) Timelines: keyframe map + inline style helpers.
+// 5) Components: pill row, upload panels, prompts, toggles, motion controls.
+// 6) Main component: StudioLeft UI wiring and rendering.
 // ============================================================================
 
+// [PART 1] Imports
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./StudioLeft.css";
 

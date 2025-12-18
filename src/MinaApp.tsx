@@ -19,6 +19,35 @@ const LIKE_STORAGE_KEY = "minaLikedMap";
 // [PART 1 END]
 // ============================================================================
 
+// ------------------------------------------------------------------------------
+// File map (read this first)
+// ------------------------------------------------------------------------------
+// Part 1 – Environment: wires up imports + runtime constants.
+// Part 2 – Types: shapes for API responses, uploads, and UI state.
+// Part 3 – Constants/helpers: reusable numbers, formatters, and URL safety helpers.
+// Part 4 – Component scaffold: MinaApp() plus state buckets.
+//   4.1 – High-level tab + admin context.
+//   4.2 – Health + credits tracking.
+//   4.3 – Studio prompts + toggles.
+//   4.4 – Upload queues and pill/panel UI toggles.
+//   4.5 – Generate state (pending/error flags for still + motion).
+//   4.6 – History + profile view pagination.
+//   4.7 – Vision/typing UI timing + caret/textarea focus.
+//   4.8 – Custom style upload/edit UI.
+//   4.9 – Stable refs for cleanup.
+// Part 5 – Derived values: computed booleans and memoized UI helpers.
+// Part 6 – Effects: on-mount bootstrapping and event listeners.
+// Part 7 – API helpers: network calls for health, credits, and uploads.
+// Part 8 – Upload helpers (small functions inside Part 7 section).
+// Part 9 – Stills: editorial flow (prompt building, generate, history tiles).
+// Part 10 – Motion: suggestion + video generation flow.
+// Part 11 – Feedback/like/download utilities.
+// Part 12 – Studio layout: left/right panes wiring.
+// Part 13 – Custom style CRUD (saved presets management).
+// Part 15 – Render helpers: right side + premium CTA pills.
+// Part 16 – Custom style modal rendering.
+// Part 18 – Final layout composition + conditional overlays.
+
 // ============================================================================
 // [PART 2 START] Types
 // ============================================================================
@@ -207,6 +236,10 @@ type MinaAppProps = Record<string, never>;
 // ============================================================================
 // [PART 3 START] Constants & helpers
 // ============================================================================
+// Part 3 overview: shared constant values and tiny helper functions that power
+// the UI (aspect ratios, style presets, animations, and small formatters).
+// Everything below is read-only configuration or pure helpers with no side
+// effects so you can skim them quickly.
 const ASPECT_OPTIONS: AspectOption[] = [
   { key: "9-16", ratio: "9:16", label: "9:16", subtitle: "Tiktok/Reel", platformKey: "tiktok" },
   { key: "3-4", ratio: "3:4", label: "3:4", subtitle: "Post", platformKey: "instagram-post" },
@@ -422,6 +455,9 @@ function saveCustomStyles(styles: CustomStylePreset[]) {
 // ==============================================
 // PART UI HELPERS (pills/panels)
 // ==============================================
+// Part 3.1 (UI helpers) – small utilities that keep panel/pill behavior tidy,
+// like URL detection and picking the closest aspect ratio. These helpers are
+// isolated from React state so they are easy to reason about and test.
 type PanelKey = "product" | "logo" | "inspiration" | "style" | null;
 
 type CustomStyle = {
@@ -462,6 +498,13 @@ function pickNearestAspectOption(ratio: number, options: AspectOption[]): Aspect
 // [PART 4 START] Component
 // ============================================================================
 const MinaApp: React.FC<MinaAppProps> = () => {
+  // Part 4 is broken into labeled blocks so you can skim state by topic:
+  // - 4.1..4.3 keep track of the active view and user/session meta.
+  // - 4.4..4.5 capture what the user is uploading or generating.
+  // - 4.6..4.8 store profile/history paging plus custom-style form state.
+  // - 4.9 holds refs that survive renders for cleanup + observers.
+  // Each block now carries a short plain-English header explaining what the
+  // group of state/effects does.
   // =====================
 // [NUMBER MAP START]
 // =====================
@@ -758,6 +801,9 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   // ========================================================================
   // [PART 5 START] Derived values (the “rules” you requested)
   // ========================================================================
+  // Part 5 explains the computed booleans/numbers the UI relies on (stages,
+  // currently selected items, pricing, typing timers). Nothing here mutates
+  // state; it only combines existing state to simplify the render logic.
   const briefLength = brief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
   const currentPassId = passId;
@@ -1100,6 +1146,8 @@ useEffect(() => {
   // ========================================================================
   // [PART 6 START] Effects – bootstrap
   // ========================================================================
+  // Part 6 wires up lifecycle hooks: on-mount bootstrapping for session/admin
+  // context plus cleanup-safe listeners (storage sync, window resize, etc.).
   useEffect(() => {
     let cancelled = false;
 
@@ -1152,6 +1200,9 @@ useEffect(() => {
   // ========================================================================
 // [PART 7 START] API helpers
 // ========================================================================
+// Part 7 organizes every network helper: authentication bridge, health/credit
+// fetchers, session bootstrap, history loaders, and upload endpoints. Each
+// subsection is labeled so you can trace requests quickly.
 
 // ------------------------------------------------------------------------
 // Supabase → API auth bridge
@@ -1507,9 +1558,11 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 }
 
 
-// ========================================================================
-// [PART 9 START] Stills (editorial)
-// ========================================================================
+  // ========================================================================
+  // [PART 9 START] Stills (editorial)
+  // ========================================================================
+  // Part 9 handles the editorial still-image flow: building prompts, kicking
+  // off generation, and managing the gallery/history tiles for still outputs.
 const handleGenerateStill = async () => {
   const trimmed = stillBrief.trim();
   if (trimmed.length < 40) return;
@@ -1663,9 +1716,11 @@ const handleGenerateStill = async () => {
 // [PART 9 END]
 // ========================================================================
 
-// ========================================================================
-// [PART 10 START] Motion (suggest + generate)
-// ========================================================================
+  // ========================================================================
+  // [PART 10 START] Motion (suggest + generate)
+  // ========================================================================
+  // Part 10 mirrors the still flow but for motion: suggestion prompts, video
+  // generation, and handling the active motion clip selection.
 const applyMotionSuggestionText = async (text: string) => {
   if (!text) return;
   if (describeMoreTimeoutRef.current !== null) {
@@ -1820,9 +1875,11 @@ const handleGenerateMotion = async () => {
 // [PART 10 END]
 // ========================================================================
 
-// ========================================================================
-// [PART 11 START] Feedback / like / download
-// ========================================================================
+  // ========================================================================
+  // [PART 11 START] Feedback / like / download
+  // ========================================================================
+  // Part 11 groups user feedback utilities: sending comments, toggling likes,
+  // and building download links for generated assets.
 const getCurrentMediaKey = () => {
   const mediaType = currentMotion ? "motion" : currentStill ? "still" : null;
   if (!mediaType) return null;
@@ -1945,9 +2002,11 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 // ========================================================================
 
 
-  // ==============================================
-  // 12. UI helpers – aspect + uploads + logout
-  // ==============================================
+  // ========================================================================
+  // [PART 12 START] UI helpers – aspect + uploads + logout
+  // ========================================================================
+  // Part 12 is the grab-bag of UI helpers that glue the studio together:
+  // aspect cycling, toggling animate mode, scroll handling, and logout tidy-up.
   const handleCycleAspect = () => {
     setAspectIndex((prev) => {
       const next = (prev + 1) % ASPECT_OPTIONS.length;
@@ -2302,6 +2361,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // [PART 13 START] Custom styles (saved list + rename + delete)
   // ========================================================================
+  // Part 13 manages CRUD-like behaviors for custom style presets: open/close
+  // panel, set errors, and update the saved list.
   const handleOpenCustomStylePanel = () => {
     setCustomStylePanelOpen(true);
     setCustomStyleError(null);
@@ -2430,6 +2491,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // [PART 15 START] Render – RIGHT side (separate component)
   // ========================================================================
+  // Part 15 extracts the right-pane renderer (image/video preview + controls)
+  // so the JSX below stays readable.
 
   // Keep lazy component stable across renders (no remounting)
   const StudioRightLazyRef = useRef<
@@ -2474,6 +2537,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // [PART 16 START] Render – Custom style modal (blur handled in CSS)
   // ========================================================================
+  // Part 16 renders the custom-style modal shell; data/state is handled above,
+  // so this section is mostly JSX wiring for the dialog.
   const renderCustomStyleModal = () => {
     if (!customStylePanelOpen) return null;
 
@@ -2551,6 +2616,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // [PART 18 START] Final layout
   // ========================================================================
+  // Part 18 composes the full studio layout: left controls, right preview, and
+  // conditional overlays/loaders.
   return (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />

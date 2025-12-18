@@ -1,6 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { isAdmin as checkIsAdmin } from "../lib/adminConfig";
 
+// -----------------------------------------------------------------------------
+// File map
+// 1) Imports: React + admin checker.
+// 2) Component: gate the Admin link behind an async isAdmin() probe.
+// -----------------------------------------------------------------------------
 export default function AdminLink() {
   const [ready, setReady] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
