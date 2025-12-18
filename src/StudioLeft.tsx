@@ -100,8 +100,8 @@ type StudioLeftProps = {
   logoInputRef: React.RefObject<HTMLInputElement>;
   inspirationInputRef: React.RefObject<HTMLInputElement>;
 
-  stylePresetKey: string;
-  setStylePresetKey: (k: string) => void;
+  stylePresetKeys: string[];
+  setStylePresetKeys: (k: string[]) => void;
 
   stylePresets: readonly StylePreset[];
   customStyles: CustomStyle[];
@@ -286,8 +286,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     logoInputRef,
     inspirationInputRef,
 
-    stylePresetKey,
-    setStylePresetKey,
+    stylePresetKeys,
+    setStylePresetKeys,
     stylePresets,
     customStyles,
     getStyleLabel,
@@ -395,9 +395,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     ];
   }, [stylePresets, customStyles, getStyleLabel]);
 
-  const currentStyleCard = allStyleCards.find((c) => c.key === stylePresetKey) || null;
-  const styleThumb = currentStyleCard?.thumb || "";
-  const styleLabel = currentStyleCard?.label || "Style";
+  const selectedStyleCards = allStyleCards.filter((c) => stylePresetKeys.includes(c.key));
+  const primaryStyleCard = selectedStyleCards[0] || null;
+  const styleThumb = primaryStyleCard?.thumb || "";
+  const styleLabel =
+    selectedStyleCards.length === 0
+      ? "No style"
+      : selectedStyleCards.length === 1
+        ? primaryStyleCard?.label || "Style"
+        : `${selectedStyleCards.length} styles`;
 
   const renderPillIcon = (src: string, fallback: React.ReactNode, isPlus?: boolean) => (
     <span
@@ -493,6 +499,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
       if (seed) onBriefChange(seed);
     }
+  };
+
+  // still style click: allow 0/1/2+ selections just like motion styles
+  const toggleStylePreset = (key: string) => {
+    setStylePresetKeys((prev) => {
+      const exists = prev.includes(key);
+      return exists ? prev.filter((k) => k !== key) : [...prev, key];
+    });
+    openPanel("style");
   };
 
   return (
@@ -855,9 +870,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={s.key}
                           type="button"
-                          className={classNames("studio-style-card", stylePresetKey === s.key && "active")}
-                          onMouseEnter={() => setStylePresetKey(s.key)}
-                          onClick={() => setStylePresetKey(s.key)}
+                          className={classNames(
+                            "studio-style-card",
+                            stylePresetKeys.includes(s.key) && "active"
+                          )}
+                          onClick={() => toggleStylePreset(s.key)}
                         >
                           <div className="studio-style-thumb">
                             <img src={s.thumb} alt="" />
