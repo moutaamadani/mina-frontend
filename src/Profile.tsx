@@ -394,17 +394,6 @@ passIdRef.current = stored;
 }, [items]);
 
 
-  const creationOptions = useMemo(() => {
-    // Try to infer from row.type / mode / kind / pipeline etc.
-    const set = new Set();
-    for (const it of items) {
-      const c = pick(it, ["creation", "mode", "kind", "type", "pipeline"], "");
-      if (c) set.add(c);
-    }
-    const arr = Array.from(set);
-    return ["all", ...arr];
-  }, [items]);
-
   const isMatch = useCallback(
     (it) => {
       // motion
