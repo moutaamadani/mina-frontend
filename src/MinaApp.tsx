@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
 import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
-import { usePassId } from "./components/AuthGate";
+import { useAuthContext, usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
 import TopLoadingBar from "./components/TopLoadingBar";
 
@@ -534,6 +534,15 @@ const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>([]);
 const [historyLoading, setHistoryLoading] = useState(false);
 const [historyError, setHistoryError] = useState<string | null>(null);
 const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
+// Cache profile payloads per passId so tab switches reuse the last fetch instead
+// of re-normalizing every generation URL.
+const historyCacheRef = useRef<Record<string, { generations: GenerationRecord[]; feedbacks: FeedbackRecord[] }>>({});
+const historyDirtyRef = useRef<boolean>(false);
+
+// Cache credits per passId to skip duplicate balance calls when navigating
+// between Studio/Profile for the same user.
+const creditsCacheRef = useRef<Record<string, CreditsState>>({});
+const creditsDirtyRef = useRef<boolean>(true);
 
   // -------------------------
   // 4.1 Global tab + customer
@@ -561,7 +570,7 @@ const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
   // -------------------------
   // App boot loading bar
   // -------------------------
-  const [booting, setBooting] = useState(true);
+  const [booting] = useState(false);
   const [pendingRequests, setPendingRequests] = useState(0);
 
   // -------------------------
@@ -814,6 +823,13 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const briefLength = brief.trim().length;
   const uploadsPending = Object.values(uploads).some((arr) => arr.some((it) => it.uploading));
   const currentPassId = passId;
+
+  // Mark caches dirty anytime the passId changes so the next Profile visit
+  // reloads fresh data for the new user.
+  useEffect(() => {
+    historyDirtyRef.current = true;
+    creditsDirtyRef.current = true;
+  }, [currentPassId]);
 
   // UI stages
   const stageHasPills = uiStage >= 1;
@@ -1155,51 +1171,31 @@ useEffect(() => {
   // ========================================================================
   // Part 6 wires up lifecycle hooks: on-mount bootstrapping for session/admin
   // context plus cleanup-safe listeners (storage sync, window resize, etc.).
+  // ✅ Reuse the Supabase session handed down by AuthGate so we don't double
+  // check auth on mount. This also keeps the studio shell visible while the
+  // session hydrates.
+  const authContext = useAuthContext();
+
   useEffect(() => {
+    const email = authContext?.session?.user?.email?.toLowerCase() || null;
+    setCurrentUserEmail(email);
+
     let cancelled = false;
-
-    const applySession = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (cancelled) return;
-
-        const email = (data.session?.user?.email || "").toLowerCase() || null;
-        setCurrentUserEmail(email);
-
-        const ok = await checkIsAdmin();
-        if (!cancelled) setIsAdminUser(ok);
-      } catch {
-        if (!cancelled) {
-          setCurrentUserEmail(null);
-          setIsAdminUser(false);
-        }
-      } finally {
-        // ✅ boot ends here (first load only)
-        if (!cancelled) setBooting(false);
-      }
-    };
-
-    void applySession();
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (cancelled) return;
-
-      const email = (session?.user?.email || "").toLowerCase() || null;
-      setCurrentUserEmail(email);
+    const syncAdmin = async () => {
       try {
         const ok = await checkIsAdmin();
         if (!cancelled) setIsAdminUser(ok);
       } catch {
         if (!cancelled) setIsAdminUser(false);
       }
-    });
+    };
+
+    void syncAdmin();
 
     return () => {
       cancelled = true;
-      sub.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authContext]);
 
 
   // ========================================================================
@@ -1217,7 +1213,9 @@ useEffect(() => {
 // Supabase → API auth bridge
 // Every Mina API call remains API-based, but gets Supabase JWT automatically.
 // ------------------------------------------------------------------------
-const getSupabaseAccessToken = async (): Promise<string | null> => {
+const getSupabaseAccessToken = async (accessTokenFromAuth: string | null): Promise<string | null> => {
+  // Prefer the token already loaded by AuthGate to avoid a second session fetch.
+  if (accessTokenFromAuth) return accessTokenFromAuth;
   try {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token || null;
@@ -1232,7 +1230,7 @@ const apiFetch = async (path: string, init: RequestInit = {}) => {
     if (!API_BASE_URL) throw new Error("Missing API base URL");
 
     const headers = new Headers(init.headers || {});
-    const token = await getSupabaseAccessToken();
+    const token = await getSupabaseAccessToken(authContext?.accessToken || null);
 
     // Attach JWT for your backend to verify (safe even if backend ignores it)
     if (token && !headers.has("Authorization")) {
@@ -1285,6 +1283,13 @@ const extractExpiresAt = (obj: any): string | null => {
 const fetchCredits = async () => {
   if (!API_BASE_URL || !currentPassId) return;
   try {
+    // Reuse cached balance unless a new generation or passId change marked it
+    // dirty.
+    if (!creditsDirtyRef.current && creditsCacheRef.current[currentPassId]) {
+      setCredits(creditsCacheRef.current[currentPassId]);
+      return;
+    }
+
     setCreditsLoading(true);
 
     const params = new URLSearchParams({ passId: currentPassId });
@@ -1295,14 +1300,18 @@ const fetchCredits = async () => {
 
     const expiresAt = extractExpiresAt(json);
 
-    setCredits((prev) => ({
-      balance: Number(json?.balance ?? prev?.balance ?? 0),
+    const nextCredits: CreditsState = {
+      balance: Number(json?.balance ?? credits?.balance ?? 0),
       meta: {
-        imageCost: Number(json?.meta?.imageCost ?? prev?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1),
-        motionCost: Number(json?.meta?.motionCost ?? prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5),
+        imageCost: Number(json?.meta?.imageCost ?? credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1),
+        motionCost: Number(json?.meta?.motionCost ?? credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5),
         expiresAt,
       },
-    }));
+    };
+
+    creditsCacheRef.current[currentPassId] = nextCredits;
+    creditsDirtyRef.current = false;
+    setCredits(nextCredits);
   } catch {
     // silent
   } finally {
@@ -1350,6 +1359,14 @@ const fetchHistory = async () => {
   if (!API_BASE_URL || !currentPassId) return;
 
   try {
+    // Serve cached profile data unless a new generation invalidated it.
+    if (!historyDirtyRef.current && historyCacheRef.current[currentPassId]) {
+      const cached = historyCacheRef.current[currentPassId];
+      setHistoryGenerations(cached.generations);
+      setHistoryFeedbacks(cached.feedbacks);
+      return;
+    }
+
     setHistoryLoading(true);
     setHistoryError(null);
 
@@ -1382,6 +1399,9 @@ const fetchHistory = async () => {
         }
       })
     );
+
+    historyCacheRef.current[currentPassId] = { generations: updated, feedbacks };
+    historyDirtyRef.current = false;
 
     setHistoryGenerations(updated);
     setHistoryFeedbacks(feedbacks);
@@ -1695,6 +1715,10 @@ const handleGenerateStill = async () => {
     // store remote AFTER we already showed text (faster UX)
     const storedUrl = await storeRemoteToR2(url, "generations");
 
+    // Mark profile caches dirty so Profile reloads fresh history/credits next time.
+    historyDirtyRef.current = true;
+    creditsDirtyRef.current = true;
+
     const item: StillItem = {
       id: data.generationId || `still_${Date.now()}`,
       url: storedUrl,
@@ -1857,6 +1881,10 @@ const handleGenerateMotion = async () => {
     if (overlay.trim()) setMinaOverrideText(overlay.trim());
 
     const storedUrl = await storeRemoteToR2(url, "motions");
+
+    // Mark profile caches dirty so the next Profile visit pulls the latest run.
+    historyDirtyRef.current = true;
+    creditsDirtyRef.current = true;
 
     const item: MotionItem = {
       id: data.generationId || `motion_${Date.now()}`,
@@ -2631,20 +2659,14 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // Part 18 composes the full studio layout: left controls, right preview, and
   // conditional overlays/loaders.
+  // Keep the top loading bar limited to "heavy" actions so navigation between
+  // tabs doesn't cause flicker.
   const topBarActive =
-    booting ||
     pendingRequests > 0 ||
     uploadsPending ||
     stillGenerating ||
     motionGenerating ||
-    motionSuggestLoading ||
-    motionSuggestTyping ||
-    customStyleTraining ||
-    feedbackSending ||
-    likeSubmitting ||
-    historyLoading ||
-    creditsLoading ||
-    checkingHealth;
+    customStyleTraining;
   const appUi = (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
