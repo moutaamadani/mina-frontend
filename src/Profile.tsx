@@ -58,10 +58,10 @@ export default function Profile() {
   // Filters (ONLY these)
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
   const cycleMotion = () => {
-  setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
-};
+    setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
+  };
 
-const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : "Still";
+  const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
   const [recentOnly, setRecentOnly] = useState(false);
@@ -283,7 +283,7 @@ const motionLabel = motion === "all" ? "All" : motion === "motion" ? "Motion" : 
             className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
             onClick={cycleMotion}
           >
-            Motion&nbsp;{motionLabel}
+            {motionLabel}
           </button>
 
 
