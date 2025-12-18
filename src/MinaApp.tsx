@@ -11,9 +11,29 @@ import Profile from "./Profile";
 import TopLoadingBar from "./components/TopLoadingBar";
 
 
-const API_BASE_URL =
-  import.meta.env.VITE_MINA_API_BASE_URL ||
-  "https://mina-editorial-ai-api.onrender.com";
+const normalizeBase = (raw?: string | null) => {
+  if (!raw) return "";
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+};
+
+// Prefer an env override, then fall back to same-origin /api so production
+// builds avoid CORS errors when the backend is reverse-proxied. On SSR builds
+// (no window), we retain the Render URL as a last resort to keep dev usable.
+const API_BASE_URL = (() => {
+  const envBase = normalizeBase(
+    import.meta.env.VITE_MINA_API_BASE_URL ||
+      (import.meta as any).env?.VITE_API_BASE_URL ||
+      (import.meta as any).env?.VITE_BACKEND_URL
+  );
+  if (envBase) return envBase;
+
+  if (typeof window !== "undefined") {
+    if (window.location.origin.includes("localhost")) return "http://localhost:3000";
+    return `${window.location.origin}/api`;
+  }
+
+  return "https://mina-editorial-ai-api.onrender.com";
+})();
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
 // ============================================================================
