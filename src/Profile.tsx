@@ -233,8 +233,8 @@ const passIdRef = useRef("");
 
 
   const handleBackToStudio = () => {
-    // Studio is the homepage
-    window.location.href = "/";
+    // Adjust if your studio route differs
+    window.location.href = "/studio";
   };
 
   const loadNextPage = useCallback(
@@ -376,31 +376,22 @@ passIdRef.current = stored;
 
   // Build filter options from loaded items
   const motionOptions = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set();
     for (const it of items) {
       const m = pick(it, ["motion", "motion_style", "motionStyle", "motion_name"], "");
-      if (m) set.add(String(m));
+      if (m) set.add(m);
     }
     return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [items]);
-
-  const sessionOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) {
-      const s = pick(it, ["session", "session_id", "sessionId"], "");
-      if (s) set.add(String(s));
-    }
-    return ["all", ...Array.from(set)];
   }, [items]);
 
   const creationOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const it of items) {
-      const c = pick(it, ["creation", "mode", "kind", "type", "pipeline"], "");
-      if (c) set.add(String(c));
-    }
-    return ["all", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [items]);
+  const set = new Set();
+  for (const it of items) {
+    const c = pick(it, ["creation", "mode", "kind", "type", "pipeline"], "");
+    if (c) set.add(c);
+  }
+  return ["all", ...Array.from(set).sort((a, b) => String(a).localeCompare(String(b)))];
+}, [items]);
 
 
   const isMatch = useCallback(
@@ -514,9 +505,7 @@ passIdRef.current = stored;
         const { error: delErr } = await supabase.from("mega_generation").delete().eq("id", id);
         if (delErr) throw delErr;
 
-        setItems((prev) =>
-          prev.filter((x) => pick(x, ["id", "generation_id", "generationId"], "") !== id)
-        );
+        setItems((prev) => prev.filter((x) => pick(x, ["id"], "") !== id));
         setConfirmDeleteId(null);
       } catch (e) {
         setError(String(e?.message || e || "Delete failed."));
@@ -565,7 +554,7 @@ passIdRef.current = stored;
   return (
     <div className="profile-shell">
       <div className="profile-topbar">
-        <a className="profile-logo-link" href="/" onClick={(e) => { e.preventDefault(); handleBackToStudio(); }}>
+        <a className="profile-logo-link" href="/studio" onClick={(e) => { e.preventDefault(); handleBackToStudio(); }}>
           {/* Put your real Mina logo in /public/mina-logo.svg (or change this src) */}
           <img className="profile-logo" src="/mina-logo.svg" alt="Mina" />
         </a>
