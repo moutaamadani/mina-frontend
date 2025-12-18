@@ -769,12 +769,14 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   }, [customStyleImages]);
 
   useEffect(() => {
+    const currentBrief = brief;
     if (animateMode) {
-      const currentBrief = brief;
       setStillBrief(currentBrief);
-      setBrief(motionDescription || currentBrief);
+      setMotionDescription("");
+      setBrief("");
+      setTypingUiHidden(true);
+      window.setTimeout(() => setTypingUiHidden(false), 220);
     } else {
-      const currentBrief = brief;
       setMotionDescription(currentBrief);
       setBrief(stillBrief || currentBrief);
     }
@@ -885,6 +887,9 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
 
   const imageCost = credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
+
+  const motionCreditsOk = (credits?.balance ?? 0) >= motionCost;
+  const motionBlockReason = motionCreditsOk ? null : "Buy more credits to animate.";
 
   const briefHintVisible = showDescribeMore;
 
@@ -1604,29 +1609,31 @@ const handleGenerateStill = async () => {
   const trimmed = stillBrief.trim();
   if (trimmed.length < 40) return;
 
+  // Flip UI state immediately so the CTA responds instantly
+  setStillGenerating(true);
+  setStillError(null);
+  setMinaOverrideText(null);
+
   if (!API_BASE_URL) {
     setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
+    setStillGenerating(false);
     return;
   }
 
   if (!currentPassId) {
     setStillError("Missing Pass ID for MEGA session.");
+    setStillGenerating(false);
     return;
   }
 
   const sid = await ensureSession();
   if (!sid) {
     setStillError("Could not start Mina session.");
+    setStillGenerating(false);
     return;
   }
 
   try {
-    // clear old “real” message so placeholder can run while generating
-    setMinaOverrideText(null);
-
-    setStillGenerating(true);
-    setStillError(null);
-
     const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
 
     const payload: {
@@ -1828,24 +1835,25 @@ const handleSuggestMotion = async () => {
 const handleGenerateMotion = async () => {
   if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
+  // Flip UI state immediately so the CTA responds instantly
+  setMotionGenerating(true);
+  setMotionError(null);
+  setMinaOverrideText(null);
+
   if (!currentPassId) {
     setMotionError("Missing Pass ID for MEGA session.");
+    setMotionGenerating(false);
     return;
   }
 
   const sid = await ensureSession();
   if (!sid) {
     setMotionError("Could not start Mina session.");
+    setMotionGenerating(false);
     return;
   }
 
   try {
-    // clear old “real” message so placeholder can run while generating
-    setMinaOverrideText(null);
-
-    setMotionGenerating(true);
-    setMotionError(null);
-
     const res = await apiFetch("/motion/generate", {
       method: "POST",
       body: JSON.stringify({
@@ -1963,6 +1971,23 @@ const buildDownloadName = (url: string, fallbackBase: string, fallbackExt: strin
   return fallbackBase.endsWith(ext) ? fallbackBase : `${fallbackBase}${ext}`;
 };
 
+const forceSaveUrl = async (url: string, filename: string) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Download failed with ${res.status}`);
+
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  URL.revokeObjectURL(blobUrl);
+};
+
 const handleLikeCurrentStill = async () => {
   const targetMedia = currentMotion || currentStill;
   if (!targetMedia) return;
@@ -2035,7 +2060,7 @@ const handleSubmitFeedback = async () => {
   }
 };
 
-const handleDownloadCurrentStill = () => {
+const handleDownloadCurrentStill = async () => {
   const target = currentMotion?.url || currentStill?.url;
   if (!target) return;
 
@@ -2047,12 +2072,13 @@ const handleDownloadCurrentStill = () => {
   const fallbackBase = currentMotion ? `mina-motion-${safePrompt}` : `mina-image-${safePrompt}`;
   const filename = buildDownloadName(target, fallbackBase, guessDownloadExt(target, currentMotion ? ".mp4" : ".png"));
 
-  const a = document.createElement("a");
-  a.href = target;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  try {
+    await forceSaveUrl(target, filename);
+  } catch (err: any) {
+    const msg = err?.message || "Download failed.";
+    if (currentMotion) setMotionError(msg);
+    else setStillError(msg);
+  }
 };
 
 const currentMediaKey = getCurrentMediaKey();
@@ -2701,7 +2727,12 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
           <div className="studio-header-right">
             {activeTab === "studio" && (
               <>
-                <button type="button" className="studio-header-cta" onClick={handleToggleAnimateMode}>
+                <button
+                  type="button"
+                  className="studio-header-cta"
+                  onClick={handleToggleAnimateMode}
+                  disabled={stillGenerating || motionGenerating || pendingRequests > 0}
+                >
                   {animateMode ? "Create" : "Animate this"}
                 </button>
 
@@ -2788,6 +2819,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               motionSuggesting={motionSuggestLoading || motionSuggestTyping}
               canCreateMotion={canCreateMotion}
               motionHasImage={!!motionReferenceImageUrl}
+              motionCreditsOk={motionCreditsOk}
+              motionBlockReason={motionBlockReason}
               motionGenerating={motionGenerating}
               motionError={motionError}
               onCreateMotion={handleGenerateMotion}

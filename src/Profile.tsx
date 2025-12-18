@@ -276,13 +276,24 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const triggerDownload = (url: string, id: string) => {
     if (!url) return;
     const filename = buildDownloadName(url, id ? `mina-${id}` : "mina-download");
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Download failed with ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(() => {
+        /* ignore download failure so UI stays responsive */
+      });
   };
 
   return (
