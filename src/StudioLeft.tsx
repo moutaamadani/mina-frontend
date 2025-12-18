@@ -400,7 +400,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const styleThumb = primaryStyleCard?.thumb || "";
   const styleLabel =
     selectedStyleCards.length === 0
-      ? "No style"
+      ? "Editorial style"
       : selectedStyleCards.length === 1
         ? primaryStyleCard?.label || "Style"
         : `${selectedStyleCards.length} styles`;
