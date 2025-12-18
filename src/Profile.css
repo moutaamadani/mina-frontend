@@ -403,3 +403,39 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* --- additions (do not change existing styles) --- */
+
+.profile-toplink {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  color: inherit;
+}
+
+.profile-topsep {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(8, 10, 0, 0.45);
+}
+
+.profile-logout-meta {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none; /* ✅ NOT underlined */
+  color: rgba(8, 10, 0, 0.85);
+  cursor: pointer;
+}
+
+.profile-card-media video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
