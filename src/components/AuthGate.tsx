@@ -302,6 +302,13 @@ export function AuthGate({ children }: AuthGateProps) {
     return finalPid;
   }, []);
 
+  // Mount app only when authenticated AND passId is ready
+  const hasUserId = !!session?.user?.id;
+  const hasPassId = typeof passId === "string" && passId.trim().length > 0;
+  const isAuthed = hasUserId && hasPassId;
+
+  const authLoading = initializing || loading || googleOpening || (hasUserId && !hasPassId);
+
   // PassId context wrapper
   const gatedChildren = useMemo(() => {
     return (
@@ -310,13 +317,6 @@ export function AuthGate({ children }: AuthGateProps) {
       </AuthContext.Provider>
     );
   }, [accessToken, authLoading, children, initializing, passId, session]);
-
-  // Mount app only when authenticated AND passId is ready
-  const hasUserId = !!session?.user?.id;
-  const hasPassId = typeof passId === "string" && passId.trim().length > 0;
-  const isAuthed = hasUserId && hasPassId;
-
-  const authLoading = initializing || loading || googleOpening || (hasUserId && !hasPassId);
 
 
 
