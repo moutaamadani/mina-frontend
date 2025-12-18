@@ -45,6 +45,31 @@ function fmtDateTime(iso: string | null) {
   return d.toLocaleString();
 }
 
+function guessDownloadExt(url: string, fallbackExt: string) {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".mp4")) return ".mp4";
+  if (lower.endsWith(".webm")) return ".webm";
+  if (lower.endsWith(".mov")) return ".mov";
+  if (lower.endsWith(".m4v")) return ".m4v";
+  if (lower.match(/\.jpe?g$/)) return ".jpg";
+  if (lower.endsWith(".png")) return ".png";
+  if (lower.endsWith(".gif")) return ".gif";
+  if (lower.endsWith(".webp")) return ".webp";
+  return fallbackExt;
+}
+
+function buildDownloadName(url: string, fallback: string) {
+  try {
+    const parsed = new URL(url);
+    const last = parsed.pathname.split("/").filter(Boolean).pop();
+    if (last && last.includes(".")) return last;
+  } catch {
+    /* ignore */
+  }
+
+  return `${fallback}${guessDownloadExt(url, ".png")}`;
+}
+
 type ProfileProps = {
   passId?: string | null;
   apiBaseUrl?: string;
@@ -248,6 +273,18 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     window.location.reload();
   };
 
+  const triggerDownload = (url: string, id: string) => {
+    if (!url) return;
+    const filename = buildDownloadName(url, id ? `mina-${id}` : "mina-download");
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   return (
     <>
       <TopLoadingBar active={loadingHistory} />
@@ -354,28 +391,26 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           return (
             <div key={it.id} className={`profile-card ${it.sizeClass}`}>
               <div className="profile-card-top">
-                <a
+                <button
                   className="profile-card-show"
-                  href={it.url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => {
-                    if (!it.url) e.preventDefault();
-                  }}
+                  type="button"
+                  onClick={() => triggerDownload(it.url, it.id)}
+                  disabled={!it.url}
                 >
-                  Show
-                </a>
+                  Download
+                </button>
 
                 <span className={`profile-card-liked ${it.liked ? "" : "ghost"}`}>Liked</span>
               </div>
 
               <div
                 className="profile-card-media"
-                onClick={() => {
-                  if (it.url) window.open(it.url, "_blank", "noreferrer");
-                }}
                 role="button"
                 tabIndex={0}
+                onClick={() => triggerDownload(it.url, it.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") triggerDownload(it.url, it.id);
+                }}
               >
                 {it.url ? (
                   it.isMotion ? (

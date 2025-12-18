@@ -129,14 +129,15 @@ type GenerationRecord = {
   prompt: string;
   outputUrl: string;
   createdAt: string;
-  meta?: {
-    tone?: string;
-    platform?: string;
-    minaVisionEnabled?: boolean;
-    stylePresetKey?: string;
-    productImageUrl?: string;
-    styleImageUrls?: string[];
-    aspectRatio?: string;
+    meta?: {
+      tone?: string;
+      platform?: string;
+      minaVisionEnabled?: boolean;
+      stylePresetKey?: string;
+      stylePresetKeys?: string[];
+      productImageUrl?: string;
+      styleImageUrls?: string[];
+      aspectRatio?: string;
     [key: string]: unknown;
   } | null;
 };
@@ -645,8 +646,8 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     inspiration: [],
   });
 
-  // Style selection (hover selects too)
-  const [stylePresetKey, setStylePresetKey] = useState<string>("vintage");
+  // Style selection (allow multiple, default to none)
+  const [stylePresetKeys, setStylePresetKeys] = useState<string[]>([]);
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
 
   // Inline rename for styles (no new panel)
@@ -913,8 +914,10 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     }, TYPING_REVEAL_DELAY_MS);
   }, [isTyping, typingUiHidden]);
 
-  // Style key for API (avoid unknown custom keys)
-  const stylePresetKeyForApi = stylePresetKey.startsWith("custom-") ? "custom-style" : stylePresetKey;
+  // Style keys for API (avoid unknown custom keys)
+  const normalizeStyleKeyForApi = (k: string) => (k.startsWith("custom-") ? "custom-style" : k);
+  const stylePresetKeysForApi = (stylePresetKeys.length ? stylePresetKeys : ["none"]).map(normalizeStyleKeyForApi);
+  const primaryStyleKeyForApi = stylePresetKeysForApi[0] || "none";
 
   useEffect(() => {
     let cancelled = false;
@@ -1450,11 +1453,12 @@ const handleCancelNumberEdit = () => {
 };
 
 const handleDownloadGeneration = (item: GenerationRecord, label: string) => {
+  const safeLabel = `mina-v3-prompt-${label || item.id}`;
+  const filename = buildDownloadName(item.outputUrl, safeLabel, guessDownloadExt(item.outputUrl, ".png"));
+
   const link = document.createElement("a");
   link.href = item.outputUrl;
-  link.download = `mina-v3-prompt-${label || item.id}`;
-  link.target = "_blank";
-  link.rel = "noreferrer";
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -1633,6 +1637,7 @@ const handleGenerateStill = async () => {
       platform: string;
       minaVisionEnabled: boolean;
       stylePresetKey: string;
+      stylePresetKeys?: string[];
       aspectRatio: string;
       productImageUrl?: string;
       logoImageUrl?: string;
@@ -1644,7 +1649,8 @@ const handleGenerateStill = async () => {
       tone,
       platform: currentAspect.platformKey,
       minaVisionEnabled,
-      stylePresetKey: stylePresetKeyForApi,
+      stylePresetKey: primaryStyleKeyForApi,
+      stylePresetKeys: stylePresetKeysForApi,
       aspectRatio: safeAspectRatio,
     };
 
@@ -1796,7 +1802,8 @@ const handleSuggestMotion = async () => {
         tone,
         platform: animateAspectOption.platformKey,
         minaVisionEnabled,
-        stylePresetKey: stylePresetKeyForApi,
+        stylePresetKey: primaryStyleKeyForApi,
+        stylePresetKeys: stylePresetKeysForApi,
         motionStyles: motionStyleKeys,
         aspectRatio: animateAspectOption.ratio,
       }),
@@ -1849,7 +1856,8 @@ const handleGenerateMotion = async () => {
         tone,
         platform: animateAspectOption.platformKey,
         minaVisionEnabled,
-        stylePresetKey: stylePresetKeyForApi,
+        stylePresetKey: primaryStyleKeyForApi,
+        stylePresetKeys: stylePresetKeysForApi,
         motionStyles: motionStyleKeys,
         aspectRatio: animateAspectOption.ratio,
       }),
@@ -1929,6 +1937,32 @@ const getCurrentMediaKey = () => {
   return rawKey ? `${mediaType}:${rawKey}` : null;
 };
 
+const guessDownloadExt = (url: string, fallbackExt: string) => {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".mp4")) return ".mp4";
+  if (lower.endsWith(".webm")) return ".webm";
+  if (lower.endsWith(".mov")) return ".mov";
+  if (lower.endsWith(".m4v")) return ".m4v";
+  if (lower.match(/\.jpe?g$/)) return ".jpg";
+  if (lower.endsWith(".png")) return ".png";
+  if (lower.endsWith(".gif")) return ".gif";
+  if (lower.endsWith(".webp")) return ".webp";
+  return fallbackExt;
+};
+
+const buildDownloadName = (url: string, fallbackBase: string, fallbackExt: string) => {
+  try {
+    const parsed = new URL(url);
+    const last = parsed.pathname.split("/").filter(Boolean).pop();
+    if (last && last.includes(".")) return last;
+  } catch {
+    /* ignore */
+  }
+
+  const ext = guessDownloadExt(url, fallbackExt);
+  return fallbackBase.endsWith(ext) ? fallbackBase : `${fallbackBase}${ext}`;
+};
+
 const handleLikeCurrentStill = async () => {
   const targetMedia = currentMotion || currentStill;
   if (!targetMedia) return;
@@ -2005,32 +2039,17 @@ const handleDownloadCurrentStill = () => {
   const target = currentMotion?.url || currentStill?.url;
   if (!target) return;
 
-  let filename = "";
-  try {
-    const parsed = new URL(target);
-    const last = parsed.pathname.split("/").filter(Boolean).pop();
-    if (last && last.includes(".")) filename = last;
-  } catch {
-    // fallback below
-  }
-
-  if (!filename) {
-    const safePrompt =
-      (lastStillPrompt || brief || "Mina-image")
-        .replace(/[^a-z0-9]+/gi, "-")
-        .toLowerCase()
-        .slice(0, 80) || "mina-image";
-    filename = currentMotion ? `mina-motion-${safePrompt}.mp4` : `mina-image-${safePrompt}.png`;
-  }
-
-  const a = document.createElement("a");
-  a.href = target;
   const safePrompt =
     (lastStillPrompt || stillBrief || brief || "Mina-image")
       .replace(/[^a-z0-9]+/gi, "-")
       .toLowerCase()
       .slice(0, 80) || "mina-image";
-  a.download = `Mina-v3-${safePrompt}`;
+  const fallbackBase = currentMotion ? `mina-motion-${safePrompt}` : `mina-image-${safePrompt}`;
+  const filename = buildDownloadName(target, fallbackBase, guessDownloadExt(target, currentMotion ? ".mp4" : ".png"));
+
+  const a = document.createElement("a");
+  a.href = target;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -2338,8 +2357,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       delete copy[key];
       return copy;
     });
-    // if deleting selected, fall back to vintage
-    if (stylePresetKey === key) setStylePresetKey("vintage");
+    // Remove deleted styles from any selection
+    setStylePresetKeys((prev) => prev.filter((k) => k !== key));
   };
 
   const handleSignOut = async () => {
@@ -2489,7 +2508,10 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       };
 
       setCustomStyles((prev) => [newStyle, ...prev]);
-      setStylePresetKey(newKey);
+      setStylePresetKeys((prev) => {
+        const next = prev.filter((k) => k !== newKey);
+        return [newKey, ...next];
+      });
 
       // close modal
       setCustomStylePanelOpen(false);
@@ -2521,9 +2543,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
     setCustomPresets(updated);
     saveCustomStyles(updated);
 
-    if (stylePresetKey === key) {
-      setStylePresetKey("vintage");
-    }
+    setStylePresetKeys((prev) => prev.filter((k) => k !== key));
   };
   // ========================================================================
   // [PART 13 END]
@@ -2744,8 +2764,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               productInputRef={productInputRef}
               logoInputRef={logoInputRef}
               inspirationInputRef={inspirationInputRef}
-              stylePresetKey={stylePresetKey}
-              setStylePresetKey={setStylePresetKey}
+              stylePresetKeys={stylePresetKeys}
+              setStylePresetKeys={setStylePresetKeys}
               stylePresets={computedStylePresets}
               customStyles={customStyles}
               getStyleLabel={getStyleLabel}
