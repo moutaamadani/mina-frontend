@@ -26,7 +26,7 @@
   border-radius: 0;
 
   /* ✅ same “black opacity system” */
-  background: rgba(0, 0, 0, 0.06);
+  background: #EEEEE2;
 }
 
 /* Stage 0 center text */
@@ -121,7 +121,7 @@
   width: 100%;
   padding: 18px 18px;
 
-  background: #cec2aa;
+  background: #EEEEE2;
   border-radius: 0;
 
   display: flex;
@@ -140,7 +140,7 @@
 
   font-size: 13px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(8, 10, 0, 0.9);
 }
 
 .studio-feedback-input--compact::placeholder {

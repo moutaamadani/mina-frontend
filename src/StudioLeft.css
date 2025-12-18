@@ -56,7 +56,7 @@
 }
 
 .studio-left-cta-state.on {
-  color: #BAA37A; /* ✅ green accent */
+  color: #BED796; /* ✅ green accent */
 }
 
 /* Drag subtle darken (no outline) */
@@ -299,7 +299,7 @@
   line-height: 1.08;
   font-weight: 600;
   letter-spacing: -0.02em;
-  color: #BAA37A;
+  color: #BED796;
   opacity: 0;
   transform: translateY(var(--textarea-float-distance, 4px));
   transition: opacity var(--group-fade-duration, 320ms) ease-in-out,
@@ -438,7 +438,7 @@
 
 /* ✅ NEW: selected thumb in animate mode uses green (not black) */
 .studio-thumb.is-selected {
-  outline: 1px solid #BAA37A;
+  outline: 1px solid #BED796;
 }
 
 /* ------------------------------------------
@@ -526,11 +526,11 @@
 }
 
 .studio-motion-style-card.active .studio-style-thumb {
-  outline: 1px solid #BAA37A;
+  outline: 1px solid #BED796;
 }
 
 .studio-motion-style-card.active .studio-motion-style-label {
-  color: #BAA37A;
+  color: #BED796;
 }
 
 /* ------------------------------------------
@@ -654,12 +654,12 @@
 
 /* active motion cards get a green outline */
 .studio-motion-style-card.active .studio-style-thumb {
-  outline: 1px solid #BAA37A; /* green accent */
+  outline: 1px solid #BED796; /* green accent */
 }
 
 /* active motion card labels turn green */
 .studio-motion-style-card.active .studio-motion-style-label {
-  color: #BAA37A;
+  color: #BED796;
 }
 
 /* motion card thumb uses subtle grey background */
