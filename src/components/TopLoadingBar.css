@@ -1,39 +1,23 @@
-/* Tiny top-of-page loading line (indeterminate) */
+/* Tiny top-of-page loading line (progressive) */
 .mina-top-loading {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
 
-  height: 2px;
+  height: 3px;
   z-index: 9999;
 
-  /* track */
-  background: rgba(8, 10, 0, 0.1);
+  background: rgba(8, 10, 0, 0.08);
   pointer-events: none;
   overflow: hidden;
 }
 
-.mina-top-loading::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -35%;
-
+.mina-top-loading__bar {
   height: 100%;
-  width: 35%;
-
-  /* moving bar */
-  background: rgba(8, 10, 0, 0.9);
-
-  animation: minaTopLoadingMove 900ms ease-in-out infinite;
-}
-
-@keyframes minaTopLoadingMove {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(385%);
-  }
+  background: linear-gradient(90deg, rgba(8, 10, 0, 0.7), rgba(8, 10, 0, 0.95));
+  box-shadow: 0 0 12px rgba(8, 10, 0, 0.25);
+  width: 0;
+  transition: width 160ms ease, opacity 200ms ease;
+  opacity: 0.95;
 }

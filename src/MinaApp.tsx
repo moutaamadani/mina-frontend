@@ -562,6 +562,7 @@ const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
   // App boot loading bar
   // -------------------------
   const [booting, setBooting] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState(0);
 
   // -------------------------
   // 4.3 Studio – brief + steps
@@ -1226,26 +1227,30 @@ const getSupabaseAccessToken = async (): Promise<string | null> => {
 };
 
 const apiFetch = async (path: string, init: RequestInit = {}) => {
-  if (!API_BASE_URL) throw new Error("Missing API base URL");
+  setPendingRequests((n) => n + 1);
+  try {
+    if (!API_BASE_URL) throw new Error("Missing API base URL");
 
-  const headers = new Headers(init.headers || {});
-  const token = await getSupabaseAccessToken();
+    const headers = new Headers(init.headers || {});
+    const token = await getSupabaseAccessToken();
 
-  // Attach JWT for your backend to verify (safe even if backend ignores it)
-  if (token && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${token}`);
+    // Attach JWT for your backend to verify (safe even if backend ignores it)
+    if (token && !headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    if (currentPassId && !headers.has("X-Mina-Pass-Id")) {
+      headers.set("X-Mina-Pass-Id", currentPassId);
+    }
+
+    // Ensure JSON content-type when body is present and caller didn't specify
+    if (init.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  } finally {
+    setPendingRequests((n) => Math.max(0, n - 1));
   }
-
-  if (currentPassId && !headers.has("X-Mina-Pass-Id")) {
-    headers.set("X-Mina-Pass-Id", currentPassId);
-  }
-
-  // Ensure JSON content-type when body is present and caller didn't specify
-  if (init.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  return fetch(`${API_BASE_URL}${path}`, { ...init, headers });
 };
 
 const handleCheckHealth = async () => {
@@ -2626,6 +2631,20 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   // ========================================================================
   // Part 18 composes the full studio layout: left controls, right preview, and
   // conditional overlays/loaders.
+  const topBarActive =
+    booting ||
+    pendingRequests > 0 ||
+    uploadsPending ||
+    stillGenerating ||
+    motionGenerating ||
+    motionSuggestLoading ||
+    motionSuggestTyping ||
+    customStyleTraining ||
+    feedbackSending ||
+    likeSubmitting ||
+    historyLoading ||
+    creditsLoading ||
+    checkingHealth;
   const appUi = (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
@@ -2753,7 +2772,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 
   return (
     <>
-      <TopLoadingBar active={booting} />
+      <TopLoadingBar active={topBarActive} />
       {appUi}
     </>
   );
