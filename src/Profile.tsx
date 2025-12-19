@@ -497,6 +497,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           <div className="profile-archive-sub">
             {historyErr ? (
               <span className="profile-error">{historyErr}</span>
+            ) : loadingHistory ? (
+              "Loading stills and shots…"
             ) : items.length ? (
               `${items.length} item${items.length === 1 ? "" : "s"}`
             ) : (
@@ -546,10 +548,10 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                 <button
                   className="profile-card-show"
                   type="button"
-                  onClick={() => openLightbox(it.url, it.isMotion)}
+                  onClick={() => triggerDownload(it.url, it.id)}
                   disabled={!it.url}
                 >
-                  Open
+                  Download
                 </button>
 
                 {it.liked ? <span className="profile-card-liked">Liked</span> : null}

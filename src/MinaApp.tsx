@@ -307,17 +307,20 @@ const STYLE_PRESETS = [
   {
     key: "vintage",
     label: "Vintage",
-    thumb: "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Vintage_1.png?v=1765457775",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-thumb.png",
+    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-hero.png",
   },
   {
     key: "gradient",
     label: "Gradient",
-    thumb: "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Gradient.png?v=1765457775",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-thumb.png",
+    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-hero.png",
   },
   {
     key: "back-light",
     label: "Back light",
-    thumb: "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Backlight.png?v=1765457775",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
+    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
   },
 ] as const;
 

@@ -1121,6 +1121,8 @@ video {
 
   .studio-body--two-col {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    grid-auto-flow: row;
     height: auto;
     min-height: 100vh;
   }
@@ -1131,6 +1133,7 @@ video {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    padding: 80px 24px 40px;
   }
 
   .profile-editorial-shell {
@@ -1361,6 +1364,16 @@ video {
 .studio-header-cta:disabled {
   cursor: default;
   opacity: 0.35;
+}
+
+.studio-header-overlay.is-dark .studio-header-right,
+.studio-header-overlay.is-dark .studio-header-right .studio-header-cta {
+  color: #fff;
+}
+
+.studio-header-overlay.is-dark .studio-header-cta:hover,
+.studio-header-overlay.is-dark .studio-header-cta:active {
+  color: #fff;
 }
 
 .studio-header-overlay.is-dark .studio-header-cta {

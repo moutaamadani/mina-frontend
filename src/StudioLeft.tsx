@@ -37,6 +37,7 @@ export type StylePreset = {
   key: string;
   label: string;
   thumb: string;
+  hero?: string;
 };
 
 export type CustomStyle = {
