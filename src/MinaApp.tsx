@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
+import StudioRight from "./StudioRight";
 import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { useAuthContext, usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
@@ -15,6 +16,9 @@ const normalizeBase = (raw?: string | null) => {
   if (!raw) return "";
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
+
+const MATCHA_URL =
+  "https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw";
 
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied. On SSR builds
@@ -925,7 +929,9 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const imageCost = credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
 
-  const motionCreditsOk = (credits?.balance ?? 0) >= motionCost;
+  const creditBalance = credits?.balance;
+  const imageCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= imageCost;
+  const motionCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= motionCost;
   const motionBlockReason = motionCreditsOk ? null : "Buy more credits to animate.";
 
   const briefHintVisible = showDescribeMore;
@@ -2197,7 +2203,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const handleToggleAnimateMode = () => {
     setAnimateMode((prev) => {
       const next = !prev;
-      if (!prev && !uploads.product.length && latestStill?.url) {
+      if (next && latestStill?.url) {
         setUploads((curr) => ({
           ...curr,
           product: [
@@ -2679,39 +2685,20 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const displayedMotion = mediaKindForDisplay === "motion" ? currentMotion : null;
   const displayedStill = mediaKindForDisplay === "motion" ? null : currentStill;
 
-  // Keep lazy component stable across renders (no remounting)
-  const StudioRightLazyRef = useRef<
-    React.LazyExoticComponent<React.ComponentType<any>> | null
-  >(null);
-
-  if (!StudioRightLazyRef.current) {
-    StudioRightLazyRef.current = React.lazy(() => import("./StudioRight"));
-  }
-
   const renderStudioRight = () => {
-    const StudioRight = StudioRightLazyRef.current!;
-
     return (
-      <React.Suspense
-        fallback={
-          <div className="studio-right">
-
-          </div>
-        }
-      >
-        <StudioRight
-          currentStill={displayedStill}
-          currentMotion={displayedMotion}
-          stillItems={stillItems}
-          stillIndex={stillIndex}
-          setStillIndex={setStillIndex}
-          feedbackText={feedbackText}
-          setFeedbackText={setFeedbackText}
-          feedbackSending={feedbackSending}
-          feedbackError={feedbackError}
-          onSubmitFeedback={handleSubmitFeedback}
-        />
-      </React.Suspense>
+      <StudioRight
+        currentStill={displayedStill}
+        currentMotion={displayedMotion}
+        stillItems={stillItems}
+        stillIndex={stillIndex}
+        setStillIndex={setStillIndex}
+        feedbackText={feedbackText}
+        setFeedbackText={setFeedbackText}
+        feedbackSending={feedbackSending}
+        feedbackError={feedbackError}
+        onSubmitFeedback={handleSubmitFeedback}
+      />
     );
   };
 
@@ -2923,6 +2910,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               motionError={motionError}
               onCreateMotion={handleGenerateMotion}
               onTypeForMe={handleSuggestMotion}
+              imageCreditsOk={imageCreditsOk}
+              matchaUrl={MATCHA_URL}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
               onGoProfile={() => setActiveTab("profile")}
