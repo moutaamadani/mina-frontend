@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "./lib/supabaseClient";
 import StudioLeft from "./StudioLeft";
+import StudioRight from "./StudioRight";
 import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { useAuthContext, usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
