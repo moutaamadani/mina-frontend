@@ -42,6 +42,12 @@ function isImageUrl(url: string) {
   );
 }
 
+function normalizeMediaUrl(url: string) {
+  if (!url) return "";
+  const base = url.split(/[?#]/)[0];
+  return base || url;
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -332,14 +338,14 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
 
       const url = vid || (isVideoUrl(out) ? out : "") || img || out;
-      if (url) s.add(url);
+      const key = normalizeMediaUrl(url);
+      if (key) s.add(key);
     }
 
     return s;
   }, [feedbacks]);
 
-
-  const items = useMemo(() => {
+  const { items, activeCount } = useMemo(() => {
     // ✅ Merge both: generations + feedbacks
     const allRows = [...(generations || []), ...(feedbacks || [])];
 
@@ -348,7 +354,16 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       .map((g, idx) => {
         const id = pick(g, ["mg_id", "id"], `row_${idx}`);
         const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
-        const prompt = pick(g, ["mg_prompt", "prompt"], "") || "";
+
+        const payload = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
+        const gptMeta = (g as any)?.gpt ?? null;
+
+        const prompt =
+          pick(g, ["mg_user_prompt", "userPrompt", "promptUser", "prompt_raw", "promptOriginal"], "") ||
+          pick(payload, ["userPrompt", "user_prompt", "userMessage", "prompt"], "") ||
+          pick(gptMeta, ["userMessage", "input"], "") ||
+          pick(g, ["mg_prompt", "prompt"], "") ||
+          "";
 
         const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
         const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
@@ -374,7 +389,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const url = (videoUrl || imageUrl || out).trim();
         const isMotion = Boolean(videoUrl);
 
-        const liked = url ? likedUrlSet.has(url) : false;
+        const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) : false;
 
         return { id, createdAt, prompt, url, liked, isMotion };
       })
@@ -386,31 +401,30 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     // 3) ✅ Deduplicate by URL so you don’t see the same media twice
     const seen = new Set<string>();
     base = base.filter((it) => {
-      if (seen.has(it.url)) return false;
-      seen.add(it.url);
+      const key = normalizeMediaUrl(it.url);
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
 
-    // 4) Apply your existing filters
-    let out = base;
+    // 4) Add size classes and dimming flags
+    const out = base.map((it, idx) => {
+      const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
+      const matchesLiked = !likedOnly || it.liked;
+      const matchesRecent = !recentOnly || idx < 60;
 
-    if (motion === "still") out = out.filter((x) => !x.isMotion);
-    if (motion === "motion") out = out.filter((x) => x.isMotion);
+      const dimmed = !(matchesMotion && matchesLiked && matchesRecent);
 
-    if (likedOnly) out = out.filter((x) => x.liked);
-
-    if (recentOnly) out = out.slice(0, 60);
-
-    // 5) Add your size classes AFTER sorting (stable layout)
-    out = out.map((it, idx) => {
       let sizeClass = "profile-card--tall";
       if (idx % 13 === 0) sizeClass = "profile-card--hero";
       else if (idx % 9 === 0) sizeClass = "profile-card--wide";
       else if (idx % 7 === 0) sizeClass = "profile-card--mini";
-      return { ...it, sizeClass };
+      return { ...it, sizeClass, dimmed };
     });
 
-    return out;
+    const activeCount = out.filter((it) => !it.dimmed).length;
+
+    return { items: out, activeCount };
   }, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
 
 
@@ -500,7 +514,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
             ) : loadingHistory ? (
               "Loading stills and shots…"
             ) : items.length ? (
-              `${items.length} item${items.length === 1 ? "" : "s"}`
+              `${activeCount} creation${activeCount === 1 ? "" : "s"}`
             ) : (
               "No creations yet."
             )}
@@ -543,7 +557,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           const showViewMore = (it.prompt || "").length > 90;
 
           return (
-            <div key={it.id} className={`profile-card ${it.sizeClass}`}>
+            <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
               <div className="profile-card-top">
                 <button
                   className="profile-card-show"

@@ -141,6 +141,9 @@ type StudioLeftProps = {
   motionCreditsOk?: boolean;
   motionBlockReason?: string | null;
 
+  imageCreditsOk?: boolean;
+  matchaUrl: string;
+
   motionGenerating?: boolean;
   motionError?: string | null;
   onCreateMotion?: () => void;
@@ -355,6 +358,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     onCreateMotion,
     onTypeForMe,
 
+    imageCreditsOk: imageCreditsOkProp,
+    matchaUrl,
+
     minaMessage,
     minaTalking,
 
@@ -362,6 +368,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     onGoProfile,
   } = props;
+
+  const imageCreditsOk = imageCreditsOkProp ?? true;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -480,7 +488,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const hasMotionHandler = typeof props.onCreateMotion === "function";
 
   const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
-    stillGenerating ? "creating" : uploadsPending ? "uploading" : briefLen < 40 ? "describe_more" : "ready";
+    stillGenerating
+      ? "creating"
+      : uploadsPending
+        ? "uploading"
+        : !imageCreditsOk
+          ? "describe_more"
+          : briefLen < 40
+            ? "describe_more"
+            : "ready";
 
   const motionSuggesting = !!props.motionSuggesting;
   const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
@@ -508,8 +524,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     : createState === "uploading"
       ? "Uploading…"
       : createState === "describe_more"
-        ? isMotion && !motionCreditsOk
-          ? "Add credits"
+        ? (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk)
+          ? "I need Matcha"
           : "Describe more"
         : isMotion
           ? "Animate"
@@ -519,9 +535,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     createState === "creating" ||
     createState === "uploading" ||
     (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
-    (!isMotion && !canCreateStill);
+    (!isMotion && (!canCreateStill || !imageCreditsOk));
 
   const handleCreateClick = () => {
+    const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
+
     if (createState === "ready") {
       if (isMotion) {
         props.onCreateMotion?.();
@@ -530,7 +548,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       }
       return;
     }
+
     if (createState === "describe_more") {
+      if (wantsMatcha) {
+        window.open(matchaUrl, "_blank", "noopener");
+        return;
+      }
+
       requestAnimationFrame(() => briefInputRef.current?.focus());
     }
   };

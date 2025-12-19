@@ -16,6 +16,9 @@ const normalizeBase = (raw?: string | null) => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
+const MATCHA_URL =
+  "https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw";
+
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied. On SSR builds
 // (no window), we retain the Render URL as a last resort to keep dev usable.
@@ -946,7 +949,9 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const imageCost = credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
 
-  const motionCreditsOk = (credits?.balance ?? 0) >= motionCost;
+  const creditBalance = credits?.balance;
+  const imageCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= imageCost;
+  const motionCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= motionCost;
   const motionBlockReason = motionCreditsOk ? null : "Buy more credits to animate.";
 
   const briefHintVisible = showDescribeMore;
@@ -2218,7 +2223,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const handleToggleAnimateMode = () => {
     setAnimateMode((prev) => {
       const next = !prev;
-      if (!prev && !uploads.product.length && latestStill?.url) {
+      if (next && latestStill?.url) {
         setUploads((curr) => ({
           ...curr,
           product: [
@@ -2944,6 +2949,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               motionError={motionError}
               onCreateMotion={handleGenerateMotion}
               onTypeForMe={handleSuggestMotion}
+              imageCreditsOk={imageCreditsOk}
+              matchaUrl={MATCHA_URL}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
               onGoProfile={() => setActiveTab("profile")}
