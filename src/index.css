@@ -1333,6 +1333,43 @@ video {
   min-width: 0;
 }
 
+@media (max-width: 900px) {
+  .mina-studio-root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .studio-body--two-col {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    flex: 1;
+    display: flex;
+  }
+
+  .studio-left,
+  .studio-right {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 100%;
+    padding: 72px 20px 32px;
+  }
+
+  .studio-right {
+    min-height: 60vh;
+  }
+
+  .studio-footer-links {
+    width: 100%;
+    justify-content: flex-start;
+    position: sticky;
+    bottom: 0;
+    background: var(--mina-bg);
+    padding-bottom: 10px;
+  }
+}
+
 /* ===========================================================
    HEADER CTAs — bold, no underline (match StudioRight "Send")
    (ONLY affects buttons we tag with .studio-header-cta)

@@ -2706,39 +2706,20 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const displayedMotion = mediaKindForDisplay === "motion" ? currentMotion : null;
   const displayedStill = mediaKindForDisplay === "motion" ? null : currentStill;
 
-  // Keep lazy component stable across renders (no remounting)
-  const StudioRightLazyRef = useRef<
-    React.LazyExoticComponent<React.ComponentType<any>> | null
-  >(null);
-
-  if (!StudioRightLazyRef.current) {
-    StudioRightLazyRef.current = React.lazy(() => import("./StudioRight"));
-  }
-
   const renderStudioRight = () => {
-    const StudioRight = StudioRightLazyRef.current!;
-
     return (
-      <React.Suspense
-        fallback={
-          <div className="studio-right">
-
-          </div>
-        }
-      >
-        <StudioRight
-          currentStill={displayedStill}
-          currentMotion={displayedMotion}
-          stillItems={stillItems}
-          stillIndex={stillIndex}
-          setStillIndex={setStillIndex}
-          feedbackText={feedbackText}
-          setFeedbackText={setFeedbackText}
-          feedbackSending={feedbackSending}
-          feedbackError={feedbackError}
-          onSubmitFeedback={handleSubmitFeedback}
-        />
-      </React.Suspense>
+      <StudioRight
+        currentStill={displayedStill}
+        currentMotion={displayedMotion}
+        stillItems={stillItems}
+        stillIndex={stillIndex}
+        setStillIndex={setStillIndex}
+        feedbackText={feedbackText}
+        setFeedbackText={setFeedbackText}
+        feedbackSending={feedbackSending}
+        feedbackError={feedbackError}
+        onSubmitFeedback={handleSubmitFeedback}
+      />
     );
   };
 

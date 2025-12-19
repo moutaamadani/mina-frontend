@@ -531,15 +531,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           ? "Animate"
           : "Create";
 
+  const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
+
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
-    (!isMotion && (!canCreateStill || !imageCreditsOk));
+    (createState === "describe_more"
+      ? wantsMatcha
+        ? false
+        : isMotion
+          ? !hasMotionHandler || motionSuggesting || !motionCreditsOk
+          : !canCreateStill
+      : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
+        (!isMotion && (!canCreateStill || !imageCreditsOk)));
 
   const handleCreateClick = () => {
-    const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
-
     if (createState === "ready") {
       if (isMotion) {
         props.onCreateMotion?.();
@@ -1124,10 +1130,24 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         />
       </div>
 
-      {/* Profile bottom-left */}
-      <button type="button" className="studio-profile-float" onClick={onGoProfile}>
-        Profile
-      </button>
+      <div className="studio-footer-links">
+        <button type="button" className="studio-footer-link" onClick={onGoProfile}>
+          Profile
+        </button>
+        <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
+          Need help?
+        </a>
+        <a
+          className="studio-footer-link studio-footer-link--tutorial"
+          href="https://www.faltastudio.com/pages/tutorial"
+          target="_blank"
+          rel="noreferrer"
+          aria-disabled="true"
+          onClick={(e) => e.preventDefault()}
+        >
+          Tutorial
+        </a>
+      </div>
     </div>
   );
 };

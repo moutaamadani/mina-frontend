@@ -48,6 +48,92 @@ function normalizeMediaUrl(url: string) {
   return base || url;
 }
 
+type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
+
+const ASPECT_OPTIONS: { key: AspectKey; ratio: string; label: string }[] = [
+  {
+    key: "2-3",
+    ratio: "2:3",
+    label: "2:3",
+  },
+  {
+    key: "1-1",
+    ratio: "1:1",
+    label: "1:1",
+  },
+  {
+    key: "9-16",
+    ratio: "9:16",
+    label: "9:16",
+  },
+  {
+    key: "3-4",
+    ratio: "3:4",
+    label: "3:4",
+  },
+];
+
+function normalizeAspectRatio(raw: string | null | undefined) {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const direct = trimmed.replace("/", ":");
+  if (direct.includes(":")) {
+    const [a, b] = direct.split(":").map((p) => p.trim());
+    if (a && b) {
+      const candidate = `${a}:${b}`;
+      const match = ASPECT_OPTIONS.find((opt) => opt.ratio === candidate);
+      if (match) return match.ratio;
+    }
+  }
+
+  const re = /([0-9.]+)\s*[xX:\/ ]\s*([0-9.]+)/;
+  const m = trimmed.match(re);
+  if (m) {
+    const w = parseFloat(m[1]);
+    const h = parseFloat(m[2]);
+    if (Number.isFinite(w) && Number.isFinite(h) && h > 0) {
+      const val = w / h;
+      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = { opt: null, diff: Infinity };
+      for (const opt of ASPECT_OPTIONS) {
+        const [aw, ah] = opt.ratio.split(":").map((p) => parseFloat(p));
+        if (!Number.isFinite(aw) || !Number.isFinite(ah) || ah === 0) continue;
+        const ratio = aw / ah;
+        const diff = Math.abs(ratio - val);
+        if (diff < best.diff) best = { opt, diff };
+      }
+      if (best.opt) return best.opt.ratio;
+    }
+  }
+
+  return "";
+}
+
+function findLikeUrl(row: Row) {
+  const hasKey = (obj: any, key: string) => obj && Object.prototype.hasOwnProperty.call(obj, key);
+
+  const payload = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const payloadComment = typeof payload?.comment === "string" ? payload.comment.trim() : null;
+
+  const commentFieldPresent = hasKey(row, "mg_comment") || hasKey(row, "comment");
+  const commentValue = commentFieldPresent ? pick(row, ["mg_comment", "comment"], "") : null;
+  const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
+
+  const recTypeRaw = String(pick(row, ["mg_record_type", "recordType"], "") || "").toLowerCase();
+  if (recTypeRaw && recTypeRaw !== "feedback") return "";
+
+  const isLike = (payloadComment !== null && payloadComment === "") || (commentTrim !== null && commentTrim === "");
+  if (!isLike) return "";
+
+  const out = pick(row, ["mg_output_url", "outputUrl"], "").trim();
+  const img = pick(row, ["mg_image_url", "imageUrl"], "").trim();
+  const vid = pick(row, ["mg_video_url", "videoUrl"], "").trim();
+
+  const url = vid || (isVideoUrl(out) ? out : "") || img || out;
+  return url;
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -145,7 +231,13 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
-  const [recentOnly, setRecentOnly] = useState(false);
+  const [aspectFilterStep, setAspectFilterStep] = useState(1);
+
+  const activeAspectFilter = aspectFilterStep === 0 ? null : ASPECT_OPTIONS[aspectFilterStep - 1];
+  const cycleAspectFilter = () => {
+    setAspectFilterStep((prev) => (prev + 1) % (ASPECT_OPTIONS.length + 1));
+  };
+  const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "All";
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
 
@@ -309,53 +401,28 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   // -----------------------------------------
   const likedUrlSet = useMemo(() => {
     const s = new Set<string>();
-
-    const hasKey = (obj: any, key: string) =>
-      obj && Object.prototype.hasOwnProperty.call(obj, key);
-
     for (const f of feedbacks) {
-      // Only treat as feedback when record type is present and is "feedback"
-      const recTypeRaw = String(pick(f, ["mg_record_type", "recordType"], "") || "").toLowerCase();
-      if (recTypeRaw && recTypeRaw !== "feedback") continue;
-
-      const payload = (f as any)?.mg_payload ?? (f as any)?.payload ?? null;
-      const payloadComment =
-        typeof payload?.comment === "string" ? payload.comment.trim() : null;
-
-      const commentFieldPresent = hasKey(f, "mg_comment") || hasKey(f, "comment");
-      const commentValue = commentFieldPresent ? pick(f, ["mg_comment", "comment"], "") : null;
-      const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
-
-      // ✅ Like only if we explicitly received an empty comment
-      const isLike =
-        (payloadComment !== null && payloadComment === "") ||
-        (commentTrim !== null && commentTrim === "");
-
-      if (!isLike) continue;
-
-      const out = pick(f, ["mg_output_url", "outputUrl"], "").trim();
-      const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
-      const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
-
-      const url = vid || (isVideoUrl(out) ? out : "") || img || out;
-      const key = normalizeMediaUrl(url);
-      if (key) s.add(key);
+      const likeUrl = normalizeMediaUrl(findLikeUrl(f));
+      if (likeUrl) s.add(likeUrl);
     }
-
     return s;
   }, [feedbacks]);
 
   const { items, activeCount } = useMemo(() => {
     // ✅ Merge both: generations + feedbacks
-    const allRows = [...(generations || []), ...(feedbacks || [])];
+    const baseRows: Array<{ row: Row; source: "generation" | "feedback" }> = [
+      ...(generations || []).map((g) => ({ row: g, source: "generation" as const })),
+      ...(feedbacks || []).map((f) => ({ row: f, source: "feedback" as const })),
+    ];
 
     // 1) Map rows into UI items (only keep rows that have a URL)
-    let base = allRows
-      .map((g, idx) => {
+    let base = baseRows
+      .map(({ row: g, source }, idx) => {
         const id = pick(g, ["mg_id", "id"], `row_${idx}`);
         const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
 
         const payload = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
+        const meta = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
         const gptMeta = (g as any)?.gpt ?? null;
 
         const prompt =
@@ -368,6 +435,9 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
         const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
         const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
+        const aspectRaw =
+          pick(g, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
+          pick(meta, ["aspectRatio", "aspect_ratio"], "");
 
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
@@ -388,32 +458,54 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         // Prefer video first
         const url = (videoUrl || imageUrl || out).trim();
         const isMotion = Boolean(videoUrl);
+        const aspectRatio =
+          normalizeAspectRatio(aspectRaw) ||
+          normalizeAspectRatio(
+            typeof payload?.aspect_ratio === "string"
+              ? payload.aspect_ratio
+              : typeof payload?.aspectRatio === "string"
+                ? payload.aspectRatio
+                : ""
+          );
 
-        const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) : false;
+        const likeUrl = source === "feedback" ? findLikeUrl(g) : "";
+        const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) || !!likeUrl : false;
 
-        return { id, createdAt, prompt, url, liked, isMotion };
+        return { id, createdAt, prompt, url, liked, isMotion, aspectRatio, source, sourceRank: source === "generation" ? 2 : 1 };
       })
       .filter((x) => x.url);
 
     // 2) Newest first
     base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
-    // 3) ✅ Deduplicate by URL so you don’t see the same media twice
-    const seen = new Set<string>();
-    base = base.filter((it) => {
+    // 3) ✅ Deduplicate by URL so you don’t see the same media twice (prefer generation rows)
+    const merged = new Map<string, typeof base[number]>();
+    for (const it of base) {
       const key = normalizeMediaUrl(it.url);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, it);
+        continue;
+      }
+
+      const preferred = existing.sourceRank >= it.sourceRank ? existing : it;
+      const other = preferred === existing ? it : existing;
+      const next = { ...preferred };
+      if (other.liked && !next.liked) next.liked = true;
+      if (!next.aspectRatio && other.aspectRatio) next.aspectRatio = other.aspectRatio;
+
+      merged.set(key, next);
+    }
+
+    base = Array.from(merged.values());
 
     // 4) Add size classes and dimming flags
     const out = base.map((it, idx) => {
       const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
       const matchesLiked = !likedOnly || it.liked;
-      const matchesRecent = !recentOnly || idx < 60;
+      const matchesAspect = !activeAspectFilter || it.aspectRatio === activeAspectFilter.ratio;
 
-      const dimmed = !(matchesMotion && matchesLiked && matchesRecent);
+      const dimmed = !(matchesMotion && matchesLiked && matchesAspect);
 
       let sizeClass = "profile-card--tall";
       if (idx % 13 === 0) sizeClass = "profile-card--hero";
@@ -425,7 +517,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     const activeCount = out.filter((it) => !it.dimmed).length;
 
     return { items: out, activeCount };
-  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
+  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter]);
 
 
   const onTogglePrompt = (id: string) => {
@@ -454,101 +546,102 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         </div>
       ) : null}
       <div className="profile-shell">
-        {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
-        <div className="profile-topbar">
-          <div /> {/* keep spacing exactly (space-between) */}
-        <div className="profile-topbar-right">
-          {onBackToStudio ? (
-            <button className="profile-toplink" type="button" onClick={onBackToStudio}>
-              Back to studio
-            </button>
-          ) : (
-            <a className="profile-toplink" href="/studio">
-              Back to studio
-            </a>
-          )}
-          <span className="profile-topsep">|</span>
-          <a
-            className="profile-toplink"
-            href="https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Get more Matchas
-          </a>
-        </div>
-      </div>
+        <div className="profile-header-fixed">
+          {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
+          <div className="profile-topbar">
+            <div /> {/* keep spacing exactly (space-between) */}
+            <div className="profile-topbar-right">
+              {onBackToStudio ? (
+                <button className="profile-toplink" type="button" onClick={onBackToStudio}>
+                  Back to studio
+                </button>
+              ) : (
+                <a className="profile-toplink" href="/studio">
+                  Back to studio
+                </a>
+              )}
+              <span className="profile-topsep">|</span>
+              <a
+                className="profile-toplink"
+                href="https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Get more Matchas
+              </a>
+            </div>
+          </div>
 
-      {/* ✅ Meta strip (row 2) — Email + Credits + Expiration + Logout (not underlined) */}
-      <div className="profile-meta-strip">
-        <div className="profile-kv">
-          <span className="profile-k">Email</span>
-          <span className="profile-v">{email || "—"}</span>
-        </div>
+          {/* ✅ Meta strip (row 2) — Email + Credits + Expiration + Logout (not underlined) */}
+          <div className="profile-meta-strip">
+            <div className="profile-kv">
+              <span className="profile-k">Email</span>
+              <span className="profile-v">{email || "—"}</span>
+            </div>
 
-        <div className="profile-kv">
-          <span className="profile-k">Credits</span>
-          <span className="profile-v">{credits === null ? "—" : credits}</span>
-        </div>
+            <div className="profile-kv">
+              <span className="profile-k">Credits</span>
+              <span className="profile-v">{credits === null ? "—" : credits}</span>
+            </div>
 
-        <div className="profile-kv">
-          <span className="profile-k">Expiration</span>
-          <span className="profile-v">{expiresAt ? fmtDate(expiresAt) : "—"}</span>
-        </div>
+            <div className="profile-kv">
+              <span className="profile-k">Expiration</span>
+              <span className="profile-v">{expiresAt ? fmtDate(expiresAt) : "—"}</span>
+            </div>
 
-        <div className="profile-kv">
-          <button className="profile-logout-meta" onClick={logout} type="button">
-            Logout
-          </button>
-        </div>
-      </div>
+            <div className="profile-kv">
+              <button className="profile-logout-meta" onClick={logout} type="button">
+                Logout
+              </button>
+            </div>
+          </div>
 
-      {/* Archive head */}
-      <div className="profile-archive-head">
-        <div>
-          <div className="profile-archive-title">Archive</div>
+          {/* Archive head */}
+          <div className="profile-archive-head">
+            <div>
+              <div className="profile-archive-title">Archive</div>
 
-          <div className="profile-archive-sub">
-            {historyErr ? (
-              <span className="profile-error">{historyErr}</span>
-            ) : loadingHistory ? (
-              "Loading stills and shots…"
-            ) : items.length ? (
-              `${activeCount} creation${activeCount === 1 ? "" : "s"}`
-            ) : (
-              "No creations yet."
-            )}
+              <div className="profile-archive-sub">
+                {historyErr ? (
+                  <span className="profile-error">{historyErr}</span>
+                ) : loadingHistory ? (
+                  "Loading stills and shots…"
+                ) : items.length ? (
+                  `${activeCount} creation${activeCount === 1 ? "" : "s"}`
+                ) : (
+                  "No creations yet."
+                )}
+              </div>
+            </div>
+
+            {/* ✅ Filters (NO Session, NO Creation) */}
+            <div className="profile-filters">
+              <button
+                type="button"
+                className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
+                onClick={cycleMotion}
+              >
+                {motionLabel}
+              </button>
+
+              <button
+                type="button"
+                className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
+                onClick={() => setLikedOnly((v) => !v)}
+              >
+                Liked
+              </button>
+
+              <button
+                type="button"
+                className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`}
+                onClick={cycleAspectFilter}
+              >
+                {aspectFilterLabel}
+              </button>
+            </div>
           </div>
         </div>
-
-        {/* ✅ Filters (NO Session, NO Creation) */}
-        <div className="profile-filters">
-          <button
-            type="button"
-            className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
-            onClick={cycleMotion}
-          >
-            {motionLabel}
-          </button>
-
-
-          <button
-            type="button"
-            className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
-            onClick={() => setLikedOnly((v) => !v)}
-          >
-            Liked
-          </button>
-
-          <button
-            type="button"
-            className={`profile-filter-pill ${recentOnly ? "active" : ""}`}
-            onClick={() => setRecentOnly((v) => !v)}
-          >
-            Recent
-          </button>
-        </div>
-      </div>
 
       {/* Grid */}
       <div className="profile-grid">

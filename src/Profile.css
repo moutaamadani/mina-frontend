@@ -13,6 +13,14 @@
   padding: 24px 40px 64px;
 }
 
+.profile-header-fixed {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--mina-bg);
+  padding-bottom: 10px;
+}
+
 /* Top bar */
 .profile-topbar {
   display: flex;

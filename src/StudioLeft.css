@@ -598,23 +598,40 @@
 }
 
 /* ------------------------------------------
-   Profile button bottom-left
+   Footer links
 ------------------------------------------ */
-.studio-profile-float {
-  position: absolute;
-  left: 64px;
-  bottom: 24px;
+.studio-footer-links {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
   font-size: 12px;
   font-weight: 500;
-  opacity: 0.7;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid rgba(8, 10, 0, 0.05);
+}
+
+.studio-footer-link {
+  color: inherit;
+  opacity: 0.75;
   text-decoration: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
-.studio-profile-float:hover {
-  opacity: 0.9;
+.studio-footer-link--tutorial {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
-.studio-profile-float:active {
+.studio-footer-link:hover {
+  opacity: 0.95;
+}
+
+.studio-footer-link:active {
   opacity: 0.6;
 }
 
@@ -624,11 +641,6 @@
 @media (max-width: 960px) {
   .studio-left {
     padding: 80px 20px 32px;
-  }
-
-  .studio-profile-float {
-    left: 20px;
-    bottom: 18px;
   }
 }
 
