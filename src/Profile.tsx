@@ -105,7 +105,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
   const [credits, setCredits] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [rawHistoryPayload, setRawHistoryPayload] = useState<any>(null);
+  //DEBUGGer const [rawHistoryPayload, setRawHistoryPayload] = useState<any>(null);
 
   // Filters (ONLY these)
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
@@ -227,7 +227,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         return;
       }
 // DEBUG: keep the raw backend response for inspection
-setRawHistoryPayload(json);
+//setRawHistoryPayload(json);
 
       setGenerations(Array.isArray(json.generations) ? json.generations : []);
       setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
@@ -435,23 +435,6 @@ setRawHistoryPayload(json);
       <div className="profile-archive-head">
         <div>
           <div className="profile-archive-title">Archive</div>
-          {rawHistoryPayload ? (
-            <pre
-              style={{
-                marginTop: 8,
-                padding: 10,
-                maxHeight: 260,
-                overflow: "auto",
-                background: "#0b0b0b",
-                color: "#9ef",
-                fontSize: 11,
-                borderRadius: 6,
-                opacity: 0.85,
-              }}
-            >
-              {JSON.stringify(rawHistoryPayload, null, 2)}
-            </pre>
-          ) : null}
 
           <div className="profile-archive-sub">
             {historyErr ? (
