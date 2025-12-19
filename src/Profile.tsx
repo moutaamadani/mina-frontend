@@ -31,6 +31,17 @@ function isVideoUrl(url: string) {
   return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov") || u.endsWith(".m4v");
 }
 
+function isImageUrl(url: string) {
+  const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return (
+    u.endsWith(".jpg") ||
+    u.endsWith(".jpeg") ||
+    u.endsWith(".png") ||
+    u.endsWith(".gif") ||
+    u.endsWith(".webp")
+  );
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -63,6 +74,17 @@ function buildDownloadName(url: string) {
   const base = "Mina_v3_prompt";
   const ext = guessDownloadExt(url, ".png");
   return base.endsWith(ext) ? base : `${base}${ext}`;
+}
+
+function triggerDownload(url: string, id?: string | null) {
+  if (!url) return;
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = buildDownloadName(url);
+  if (id) a.setAttribute("data-id", id);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 const normalizeBase = (raw?: string | null) => {
@@ -105,6 +127,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
   const [credits, setCredits] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
   //DEBUGGer const [rawHistoryPayload, setRawHistoryPayload] = useState<any>(null);
 
   // Filters (ONLY these)
@@ -119,6 +142,13 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const [recentOnly, setRecentOnly] = useState(false);
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
+
+  const openLightbox = (url: string | null, isMotion: boolean) => {
+    if (!url) return;
+    setLightbox({ url, isMotion });
+  };
+
+  const closeLightbox = () => setLightbox(null);
 
   // Pull session + passId from the shared auth context so we reuse the same
   // token/AuthGate pass id instead of re-checking Supabase on this screen.
@@ -256,100 +286,132 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase, propPassId, ctxPassId, authCtx?.accessToken]);
 
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeLightbox();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
+
+  // -----------------------------------------
+  // Likes: only count as "liked" when we have
+  // an EXPLICIT empty comment field.
+  // (If comment field is missing, it is NOT a like.)
+  // -----------------------------------------
   const likedUrlSet = useMemo(() => {
-  const s = new Set<string>();
+    const s = new Set<string>();
 
-  for (const f of feedbacks) {
-    const comment = pick(f, ["mg_comment", "comment"], "").trim();
-    // your “like” convention was: comment == ""
-    if (comment !== "") continue;
+    const hasKey = (obj: any, key: string) =>
+      obj && Object.prototype.hasOwnProperty.call(obj, key);
 
-    const out = pick(f, ["mg_output_url", "outputUrl"], "").trim();
-    const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
-    const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
+    for (const f of feedbacks) {
+      // Only treat as feedback when record type is present and is "feedback"
+      const recTypeRaw = String(pick(f, ["mg_record_type", "recordType"], "") || "").toLowerCase();
+      if (recTypeRaw && recTypeRaw !== "feedback") continue;
 
-    const url = vid || (isVideoUrl(out) ? out : "") || img || out;
-    if (url) s.add(url);
-  }
+      const payload = (f as any)?.mg_payload ?? (f as any)?.payload ?? null;
+      const payloadComment =
+        typeof payload?.comment === "string" ? payload.comment.trim() : null;
 
-  return s;
-}, [feedbacks]);
+      const commentFieldPresent = hasKey(f, "mg_comment") || hasKey(f, "comment");
+      const commentValue = commentFieldPresent ? pick(f, ["mg_comment", "comment"], "") : null;
+      const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
+
+      // ✅ Like only if we explicitly received an empty comment
+      const isLike =
+        (payloadComment !== null && payloadComment === "") ||
+        (commentTrim !== null && commentTrim === "");
+
+      if (!isLike) continue;
+
+      const out = pick(f, ["mg_output_url", "outputUrl"], "").trim();
+      const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
+      const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
+
+      const url = vid || (isVideoUrl(out) ? out : "") || img || out;
+      if (url) s.add(url);
+    }
+
+    return s;
+  }, [feedbacks]);
 
 
   const items = useMemo(() => {
-  // ✅ Merge both: generations + feedbacks
-  const allRows = [...(generations || []), ...(feedbacks || [])];
+    // ✅ Merge both: generations + feedbacks
+    const allRows = [...(generations || []), ...(feedbacks || [])];
 
-  // 1) Map rows into UI items (only keep rows that have a URL)
-  let base = allRows
-    .map((g, idx) => {
-      const id = pick(g, ["mg_id", "id"], `row_${idx}`);
-      const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
-      const prompt = pick(g, ["mg_prompt", "prompt"], "") || "";
+    // 1) Map rows into UI items (only keep rows that have a URL)
+    let base = allRows
+      .map((g, idx) => {
+        const id = pick(g, ["mg_id", "id"], `row_${idx}`);
+        const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
+        const prompt = pick(g, ["mg_prompt", "prompt"], "") || "";
 
-      const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
-      const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
-      const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
-      
-      const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
-      const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
-      
-      // ✅ Strong video signal even when URL has no .mp4 extension
-      const looksVideo =
-        Boolean(vid) ||
-        contentType.includes("video") ||
-        kindHint.includes("motion") ||
-        kindHint.includes("video") ||
-        isVideoUrl(out) ||
-        isVideoUrl(vid);
-      
-      // If it looks like video but videoUrl field is empty, use outputUrl as the video source.
-      const videoUrl = vid || (looksVideo ? out : "");
-      const imageUrl = img || (!looksVideo ? out : "");
-      
-      // Prefer video first
-      const url = (videoUrl || imageUrl || out).trim();
-      const isMotion = Boolean(videoUrl) || looksVideo || isVideoUrl(url);
+        const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
+        const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
+        const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
 
+        const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
+        const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
 
-      const liked = url ? likedUrlSet.has(url) : false;
+        // ✅ Only render as video when we have an actual video URL.
+        const looksVideoMeta =
+          contentType.includes("video") ||
+          kindHint.includes("motion") ||
+          kindHint.includes("video");
 
-      return { id, createdAt, prompt, url, liked, isMotion };
-    })
-    .filter((x) => x.url);
+        const looksImage = isImageUrl(out) || isImageUrl(img);
 
-  // 2) Newest first
-  base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        // Prefer explicit video fields, then outputUrl if it clearly looks like video or metadata says motion/video
+        // and the URL is not obviously an image.
+        const videoUrl = vid || (isVideoUrl(out) ? out : looksVideoMeta && !looksImage ? out : "");
+        const imageUrl = img || (!videoUrl ? out : "");
 
-  // 3) ✅ Deduplicate by URL so you don’t see the same media twice
-  const seen = new Set<string>();
-  base = base.filter((it) => {
-    if (seen.has(it.url)) return false;
-    seen.add(it.url);
-    return true;
-  });
+        // Prefer video first
+        const url = (videoUrl || imageUrl || out).trim();
+        const isMotion = Boolean(videoUrl);
 
-  // 4) Apply your existing filters
-  let out = base;
+        const liked = url ? likedUrlSet.has(url) : false;
 
-  if (motion === "still") out = out.filter((x) => !x.isMotion);
-  if (motion === "motion") out = out.filter((x) => x.isMotion);
+        return { id, createdAt, prompt, url, liked, isMotion };
+      })
+      .filter((x) => x.url);
 
-  if (likedOnly) out = out.filter((x) => x.liked);
+    // 2) Newest first
+    base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
-  if (recentOnly) out = out.slice(0, 60);
+    // 3) ✅ Deduplicate by URL so you don’t see the same media twice
+    const seen = new Set<string>();
+    base = base.filter((it) => {
+      if (seen.has(it.url)) return false;
+      seen.add(it.url);
+      return true;
+    });
 
-  // 5) Add your size classes AFTER sorting (stable layout)
-  out = out.map((it, idx) => {
-    let sizeClass = "profile-card--tall";
-    if (idx % 13 === 0) sizeClass = "profile-card--hero";
-    else if (idx % 9 === 0) sizeClass = "profile-card--wide";
-    else if (idx % 7 === 0) sizeClass = "profile-card--mini";
-    return { ...it, sizeClass };
-  });
+    // 4) Apply your existing filters
+    let out = base;
 
-  return out;
-}, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
+    if (motion === "still") out = out.filter((x) => !x.isMotion);
+    if (motion === "motion") out = out.filter((x) => x.isMotion);
+
+    if (likedOnly) out = out.filter((x) => x.liked);
+
+    if (recentOnly) out = out.slice(0, 60);
+
+    // 5) Add your size classes AFTER sorting (stable layout)
+    out = out.map((it, idx) => {
+      let sizeClass = "profile-card--tall";
+      if (idx % 13 === 0) sizeClass = "profile-card--hero";
+      else if (idx % 9 === 0) sizeClass = "profile-card--wide";
+      else if (idx % 7 === 0) sizeClass = "profile-card--mini";
+      return { ...it, sizeClass };
+    });
+
+    return out;
+  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
 
 
   const onTogglePrompt = (id: string) => {
@@ -363,32 +425,20 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     window.location.reload();
   };
 
-  const triggerDownload = (url: string, id: string) => {
-    if (!url) return;
-    const filename = buildDownloadName(url);
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Download failed with ${res.status}`);
-        return res.blob();
-      })
-      .then((blob) => {
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-      })
-      .catch(() => {
-        /* ignore download failure so UI stays responsive */
-      });
-  };
-
   return (
     <>
       <TopLoadingBar active={loadingHistory} />
+      {lightbox ? (
+        <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
+          <div className="profile-lightbox-media">
+            {lightbox.isMotion ? (
+              <video src={lightbox.url} autoPlay loop muted playsInline />
+            ) : (
+              <img src={lightbox.url} alt="" loading="lazy" />
+            )}
+          </div>
+        </div>
+      ) : null}
       <div className="profile-shell">
         {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
         <div className="profile-topbar">
@@ -502,21 +552,34 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                   Download
                 </button>
 
-                <span className={`profile-card-liked ${it.liked ? "" : "ghost"}`}>Liked</span>
+                {it.liked ? <span className="profile-card-liked">Liked</span> : null}
               </div>
 
               <div
                 className="profile-card-media"
                 role="button"
                 tabIndex={0}
-                onClick={() => triggerDownload(it.url, it.id)}
+                onClick={() => openLightbox(it.url, it.isMotion)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") triggerDownload(it.url, it.id);
+                  if (e.key === "Enter" || e.key === " ") openLightbox(it.url, it.isMotion);
                 }}
               >
                 {it.url ? (
                   it.isMotion ? (
-                    <video src={it.url} controls playsInline />
+                    <video
+                      src={it.url}
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      onMouseEnter={(e) => {
+                        e.currentTarget.play().catch(() => {});
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.pause();
+                        e.currentTarget.currentTime = 0;
+                      }}
+                    />
                   ) : (
                     <img src={it.url} alt="" loading="lazy" />
                   )
