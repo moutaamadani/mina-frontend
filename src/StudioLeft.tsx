@@ -238,43 +238,43 @@ const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string; t
     key: "expand",
     label: "Expand",
     seed: "Subtle expansion, calm luxury vibe.",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Expand.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/expand.png",
   },
   {
     key: "melt",
     label: "Melt",
     seed: "Slow, asmr, melting motion—soft drips, luxury macro feel.",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Melt.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/melt.png",
   },
   {
     key: "drop",
     label: "Drop",
     seed: "Falling in slow rhythm—minimal, ASMR, drops.",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Drop.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/drop.png",
   },
   {
     key: "satisfying",
     label: "Satisfying",
     seed: "Slime video, satisfying, smooth, satisfying, motion loop—micro movements, clean, premium.",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/satisfying.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/satisfying.png",
   },
   {
     key: "slow_motion",
     label: "Slow motion",
     seed: "Ultra slow motion, 1000fps, asmr, premium calm.",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Slow%20motion.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/slow-motion.png",
   },
   {
     key: "fix_camera",
     label: "Still camera",
     seed: "fix camera",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/fix%20camera.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/fix-camera.png",
   },
   {
     key: "loop",
     label: "Perfect loop",
     seed: "perfect loop",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/perfect_loop.png",
+    thumb: "https://assets.faltastudio.com/Website%20Assets/Movement%20styles/perfect-look.png",
   },
 ];
 
@@ -455,11 +455,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         ? selectedMotionCards[0].label
         : `${selectedMotionCards.length} styles`;
 
-  const renderPillIcon = (src: string, fallback: React.ReactNode, isPlus?: boolean) => (
+  const renderPillIcon = (
+    src: string,
+    fallback: React.ReactNode,
+    isPlus?: boolean,
+    options?: { plain?: boolean }
+  ) => (
     <span
       className={classNames(
         "studio-pill-icon",
-        src ? "studio-pill-icon-thumb" : "studio-pill-icon-mark",
+        src ? (options?.plain ? "studio-pill-icon-plain" : "studio-pill-icon-thumb") : "studio-pill-icon-mark",
         !src && isPlus && "studio-pill-icon--plus"
       )}
       aria-hidden="true"
@@ -481,11 +486,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCreditsOk = props.motionCreditsOk ?? true;
   const motionBlockReason = props.motionBlockReason || null;
 
-  const typeForMeLabel = !props.motionHasImage
-    ? "Add an image"
-    : !motionCreditsOk
-      ? "Buy more credits"
-      : "Type for me";
+  const typeForMeLabel = "Type for me";
 
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
@@ -697,7 +698,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                               motionSuggesting || motionGenerating || !motionHasImage || !motionCreditsOk
                             }
                           >
-                            {renderPillIcon(TYPE_FOR_ME_ICON, "✎")}
+                            {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
                             <span className="studio-pill-main">{typeForMeLabel}</span>
                           </button>
 
