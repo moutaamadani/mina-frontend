@@ -160,25 +160,28 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
 
-      // Prefer the lightweight /history/trimmed endpoint when available; fall
-      // back to the full history payload to preserve compatibility with older
-      // backends.
+      // Try /history/trimmed first (for credits), then /history/pass/:passId,
+      // then the generic /history endpoint. This ensures we actually fetch
+      // the user’s history.
       const hitHistory = async (url: string) => {
         const res = await fetch(url, { method: "GET", headers });
         const text = await res.text();
         return { res, text } as const;
       };
 
-      const attempts = [`${apiBase}/history/trimmed`, `${apiBase}/history`];
-
+      const attempts: string[] = [`${apiBase}/history/trimmed`];
       if (passId) {
         attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
       }
+      attempts.push(`${apiBase}/history`);
 
       let resp: Response | null = null;
       let text = "";
       let json: any = null;
       let success = false;
+      // Hold the credits from earlier attempts (e.g. /history/trimmed) in case
+      // later calls with real history data don’t include them.
+      let creditsFromAny: any = null;
 
       for (const url of attempts) {
         const attempt = await hitHistory(url);
@@ -191,8 +194,12 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           json = null;
         }
 
+        // Record credits if present.
+        if (json?.credits) creditsFromAny = json.credits;
         const hasGenerations = Array.isArray(json?.generations);
-        if (resp.ok && (json?.ok || hasGenerations)) {
+        const hasFeedbacks = Array.isArray(json?.feedbacks);
+        // Only succeed if we actually received history arrays.
+        if (resp.ok && (hasGenerations || hasFeedbacks)) {
           success = true;
           break;
         }
@@ -221,10 +228,13 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       setGenerations(Array.isArray(json.generations) ? json.generations : []);
       setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
 
-      const bal = json?.credits?.balance;
+      // Prefer credits from the current response, but fall back to any we saved
+      // earlier (e.g. from /history/trimmed).
+      const creditsObj = json?.credits ?? creditsFromAny;
+      const bal = creditsObj?.balance;
       setCredits(Number.isFinite(Number(bal)) ? Number(bal) : null);
 
-      const exp = json?.credits?.expiresAt ?? null;
+      const exp = creditsObj?.expiresAt ?? null;
       setExpiresAt(exp ? String(exp) : null);
     } catch (e: any) {
       setHistoryErr(e?.message || String(e));
