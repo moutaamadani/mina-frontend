@@ -84,7 +84,9 @@ const resolveApiBase = (override?: string | null) => {
     return `${window.location.origin}/api`;
   }
 
-  return "https://mina-editorial-ai-api.onrender.com";
+  // Default to the deployed API base (including /api) so history endpoints
+  // resolve correctly even when env vars are missing.
+  return "https://mina-editorial-ai-api.onrender.com/api";
 };
 
 type ProfileProps = {
@@ -141,49 +143,87 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   async function fetchHistory() {
     setHistoryErr("");
     setLoadingHistory(true);
+
     try {
       if (!apiBase) {
         setHistoryErr("Missing VITE_MINA_API_BASE_URL (or VITE_API_BASE_URL).");
         return;
       }
 
-      // Reuse the token/pass id provided by AuthGate whenever possible so we
-      // don't wait on another Supabase round trip.
+      // Reuse token from AuthGate if possible
       const { data } = await supabase.auth.getSession();
       const token = authCtx?.accessToken || data.session?.access_token || null;
 
-      const passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
+      // 1) Try all known places for passId
+      let passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
+
+      // 2) If missing, ask backend /me to issue (or return) the canonical passId
+      if (!passId) {
+        try {
+          const meHeaders: Record<string, string> = { Accept: "application/json" };
+          if (token) meHeaders.Authorization = `Bearer ${token}`;
+
+          // If the browser had an older id, send it so backend can keep continuity
+          const incoming = (localStorage.getItem("minaPassId") || "").trim();
+          if (incoming) meHeaders["X-Mina-Pass-Id"] = incoming;
+
+          const meRes = await fetch(`${apiBase}/me`, { method: "GET", headers: meHeaders });
+          const meJson = await meRes.json().catch(() => null);
+
+          const nextPassId = String(meJson?.passId || "").trim();
+          if (nextPassId) {
+            passId = nextPassId;
+            localStorage.setItem("minaPassId", nextPassId);
+          }
+        } catch {
+          // ignore /me failure and continue (history will likely be empty without passId)
+        }
+      }
 
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
 
-      // Try the primary /history endpoint first; if it fails, fall back to
-      // /history/pass/:id to stay compatible with either backend flavor.
       const hitHistory = async (url: string) => {
         const res = await fetch(url, { method: "GET", headers });
         const text = await res.text();
         return { res, text } as const;
       };
 
-      let { res: resp, text } = await hitHistory(`${apiBase}/history`);
+      const attempts = [`${apiBase}/history/trimmed`, `${apiBase}/history`];
 
-      if (!resp.ok && passId) {
-        const fallback = await hitHistory(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
-        resp = fallback.res;
-        text = fallback.text;
-      }
+      // If we have passId, also try the pass endpoint
+      if (passId) attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
 
+      let resp: Response | null = null;
+      let text = "";
       let json: any = null;
-      try {
-        json = text ? JSON.parse(text) : null;
-      } catch {
-        json = null;
+      let success = false;
+
+      for (const url of attempts) {
+        const attempt = await hitHistory(url);
+        resp = attempt.res;
+        text = attempt.text;
+
+        try {
+          json = text ? JSON.parse(text) : null;
+        } catch {
+          json = null;
+        }
+
+        const hasGenerations = Array.isArray(json?.generations);
+        if (resp.ok && (json?.ok || hasGenerations)) {
+          success = true;
+          break;
+        }
       }
 
-      const hasGenerations = Array.isArray(json?.generations);
+      if (!resp) {
+        setHistoryErr("History failed: empty response");
+        return;
+      }
 
-      if (!resp.ok || (!json?.ok && !hasGenerations)) {
+      if (!success) {
         setHistoryErr(
           json?.message ||
             json?.error ||

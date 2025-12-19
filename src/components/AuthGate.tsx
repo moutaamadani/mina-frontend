@@ -20,8 +20,26 @@ type AuthGateProps = {
   children: React.ReactNode;
 };
 
-const API_BASE_URL =
-  import.meta.env.VITE_MINA_API_BASE_URL || "https://mina-editorial-ai-api.onrender.com";
+const normalizeBase = (raw?: string | null) => {
+  if (!raw) return "";
+  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+};
+
+const API_BASE_URL = (() => {
+  const envBase = normalizeBase(
+    import.meta.env.VITE_MINA_API_BASE_URL ||
+      (import.meta as any).env?.VITE_API_BASE_URL ||
+      (import.meta as any).env?.VITE_BACKEND_URL
+  );
+  if (envBase) return envBase;
+
+  if (typeof window !== "undefined") {
+    if (window.location.origin.includes("localhost")) return "http://localhost:3000";
+    return `${window.location.origin}/api`;
+  }
+
+  return "https://mina-editorial-ai-api.onrender.com/api";
+})();
 
 // MEGA identity storage (single identity)
 const PASS_ID_STORAGE_KEY = "minaPassId";
