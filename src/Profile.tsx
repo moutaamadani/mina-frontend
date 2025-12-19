@@ -143,47 +143,26 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   async function fetchHistory() {
     setHistoryErr("");
     setLoadingHistory(true);
-
     try {
       if (!apiBase) {
         setHistoryErr("Missing VITE_MINA_API_BASE_URL (or VITE_API_BASE_URL).");
         return;
       }
 
-      // Reuse token from AuthGate if possible
+      // Reuse the token/pass id provided by AuthGate whenever possible so we
+      // don't wait on another Supabase round trip.
       const { data } = await supabase.auth.getSession();
       const token = authCtx?.accessToken || data.session?.access_token || null;
 
-      // 1) Try all known places for passId
-      let passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
-
-      // 2) If missing, ask backend /me to issue (or return) the canonical passId
-      if (!passId) {
-        try {
-          const meHeaders: Record<string, string> = { Accept: "application/json" };
-          if (token) meHeaders.Authorization = `Bearer ${token}`;
-
-          // If the browser had an older id, send it so backend can keep continuity
-          const incoming = (localStorage.getItem("minaPassId") || "").trim();
-          if (incoming) meHeaders["X-Mina-Pass-Id"] = incoming;
-
-          const meRes = await fetch(`${apiBase}/me`, { method: "GET", headers: meHeaders });
-          const meJson = await meRes.json().catch(() => null);
-
-          const nextPassId = String(meJson?.passId || "").trim();
-          if (nextPassId) {
-            passId = nextPassId;
-            localStorage.setItem("minaPassId", nextPassId);
-          }
-        } catch {
-          // ignore /me failure and continue (history will likely be empty without passId)
-        }
-      }
+      const passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
 
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
 
+      // Prefer the lightweight /history/trimmed endpoint when available; fall
+      // back to the full history payload to preserve compatibility with older
+      // backends.
       const hitHistory = async (url: string) => {
         const res = await fetch(url, { method: "GET", headers });
         const text = await res.text();
@@ -192,8 +171,9 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
       const attempts = [`${apiBase}/history/trimmed`, `${apiBase}/history`];
 
-      // If we have passId, also try the pass endpoint
-      if (passId) attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
+      if (passId) {
+        attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
+      }
 
       let resp: Response | null = null;
       let text = "";
@@ -222,6 +202,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         setHistoryErr("History failed: empty response");
         return;
       }
+
+      const hasGenerations = Array.isArray(json?.generations);
 
       if (!success) {
         setHistoryErr(

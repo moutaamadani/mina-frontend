@@ -32,7 +32,7 @@ const API_BASE_URL = (() => {
     return `${window.location.origin}/api`;
   }
 
-  return "https://mina-editorial-ai-api.onrender.com/api";
+  return "https://mina-editorial-ai-api.onrender.com";
 })();
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
