@@ -82,10 +82,10 @@
   transition: transform 520ms cubic-bezier(0.16, 1, 0.3, 1), object-fit 0ms linear 0ms;
 }
 
-/* Click toggles to contain (keep full-size surface) */
+/* Click toggles to contain (scale down centered) */
 .studio-output-frame.is-contain .studio-output-media {
   object-fit: contain;
-  transform: scale(1);
+  transform: scale(0.92);
 }
 
 /* Dots overlay inside the image surface */
