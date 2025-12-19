@@ -290,19 +290,27 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
       const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
       const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
-
-      // Prefer explicit video, otherwise detect if output_url is a video, otherwise image/output.
-      const url = vid || (isVideoUrl(out) ? out : "") || img || out;
-
-      const kindHint = String(
-        pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")
-      ).toLowerCase();
-
-      const isMotion =
+      
+      const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
+      const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
+      
+      // ✅ Strong video signal even when URL has no .mp4 extension
+      const looksVideo =
+        Boolean(vid) ||
+        contentType.includes("video") ||
         kindHint.includes("motion") ||
         kindHint.includes("video") ||
-        Boolean(vid) ||
-        isVideoUrl(url);
+        isVideoUrl(out) ||
+        isVideoUrl(vid);
+      
+      // If it looks like video but videoUrl field is empty, use outputUrl as the video source.
+      const videoUrl = vid || (looksVideo ? out : "");
+      const imageUrl = img || (!looksVideo ? out : "");
+      
+      // Prefer video first
+      const url = (videoUrl || imageUrl || out).trim();
+      const isMotion = Boolean(videoUrl) || looksVideo || isVideoUrl(url);
+
 
       const liked = url ? likedUrlSet.has(url) : false;
 
