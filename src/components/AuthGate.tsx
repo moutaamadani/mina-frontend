@@ -167,10 +167,6 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
 /**
  * Lead capture (non-blocking). Optional.
  * Includes passId so backend can link Shopify id to MEGA customer row if you want.
- *
- * Guarded by a short-lived localStorage cache so we don't repeatedly hit the
- * endpoint (and accidentally trigger unique violations) for the same
- * email/passId tuple during a session.
  */
 async function syncShopifyWelcome(
   email: string | null | undefined,
@@ -182,17 +178,6 @@ async function syncShopifyWelcome(
   if (!API_BASE_URL || !clean) return null;
   if (typeof window === "undefined") return null;
 
-  const cacheKey = "minaShopifySync:last";
-  try {
-    const cachedRaw = window.localStorage.getItem(cacheKey);
-    const cached = cachedRaw ? JSON.parse(cachedRaw) : null;
-    if (cached && cached.email === clean && cached.passId === (passId || null)) {
-      return null;
-    }
-  } catch {
-    // ignore cache read errors
-  }
-
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
@@ -201,12 +186,9 @@ async function syncShopifyWelcome(
     if (userId) payload.userId = userId;
     if (passId) payload.passId = passId;
 
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (passId) headers["X-Mina-Pass-Id"] = passId;
-
     const res = await fetch(`${API_BASE_URL}/auth/shopify-sync`, {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
@@ -222,12 +204,6 @@ async function syncShopifyWelcome(
         : typeof json.id === "string"
         ? json.id
         : null;
-
-    try {
-      window.localStorage.setItem(cacheKey, JSON.stringify({ email: clean, passId: passId || null }));
-    } catch {
-      // ignore cache write errors
-    }
 
     return shopifyCustomerId;
   } catch {
