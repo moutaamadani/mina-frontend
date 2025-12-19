@@ -70,16 +70,6 @@ const normalizeBase = (raw?: string | null) => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
-const addDefaultApiPath = (base: string) => {
-  const normalized = normalizeBase(base);
-  if (!normalized) return "";
-
-  // If the base already includes /api anywhere in the path, keep it as-is.
-  if (/\bapi\b/i.test(new URL(normalized, "http://dummy.local").pathname)) return normalized;
-
-  return `${normalized}/api`;
-};
-
 const resolveApiBase = (override?: string | null) => {
   const envBase = normalizeBase(
     override ||
@@ -87,8 +77,7 @@ const resolveApiBase = (override?: string | null) => {
       (import.meta as any).env?.VITE_API_BASE_URL ||
       (import.meta as any).env?.VITE_BACKEND_URL
   );
-
-  if (envBase) return addDefaultApiPath(envBase);
+  if (envBase) return envBase;
 
   if (typeof window !== "undefined") {
     if (window.location.origin.includes("localhost")) return "http://localhost:3000";

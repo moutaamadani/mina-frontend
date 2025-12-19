@@ -16,16 +16,6 @@ const normalizeBase = (raw?: string | null) => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
-const addDefaultApiPath = (base: string) => {
-  const normalized = normalizeBase(base);
-  if (!normalized) return "";
-
-  // Preserve provided paths that already include /api.
-  if (/\bapi\b/i.test(new URL(normalized, "http://dummy.local").pathname)) return normalized;
-
-  return `${normalized}/api`;
-};
-
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied. On SSR builds
 // (no window), we retain the Render URL as a last resort to keep dev usable.
@@ -35,7 +25,7 @@ const API_BASE_URL = (() => {
       (import.meta as any).env?.VITE_API_BASE_URL ||
       (import.meta as any).env?.VITE_BACKEND_URL
   );
-  if (envBase) return addDefaultApiPath(envBase);
+  if (envBase) return envBase;
 
   if (typeof window !== "undefined") {
     if (window.location.origin.includes("localhost")) return "http://localhost:3000";
