@@ -114,7 +114,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 6px 10px 6px 6px;
 
   background: rgba(8, 10, 0, 0.02);
   cursor: pointer;
@@ -175,6 +175,11 @@
   background: rgba(8, 10, 0, 0.06);
 }
 
+.studio-pill-icon-plain {
+  border-radius: 0;
+  overflow: hidden;
+}
+
 .studio-pill-icon-mark {
   font-weight: 700;
   font-size: 12px;
@@ -195,6 +200,12 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.studio-pill-icon-plain img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .studio-pill-icon--plus {
@@ -520,17 +531,8 @@
   width: 110px;
 }
 
-/* ✅ NEW: motion style selection uses GREEN, never black */
 .studio-motion-style-card .studio-motion-style-thumb {
-  background: rgba(8, 10, 0, 0.05);
-}
-
-.studio-motion-style-card.active .studio-style-thumb {
-  outline: 1px solid #BED796;
-}
-
-.studio-motion-style-card.active .studio-motion-style-label {
-  color: #BED796;
+  background: rgba(8, 10, 0, 0.1);
 }
 
 /* ------------------------------------------
@@ -648,25 +650,6 @@
     line-height: 1.08;
   }
 }
-/* =====================================================================
-   Motion style cards: green highlight and single-line labels
-   ===================================================================== */
-
-/* active motion cards get a green outline */
-.studio-motion-style-card.active .studio-style-thumb {
-  outline: 1px solid #BED796; /* green accent */
-}
-
-/* active motion card labels turn green */
-.studio-motion-style-card.active .studio-motion-style-label {
-  color: #BED796;
-}
-
-/* motion card thumb uses subtle grey background */
-.studio-motion-style-card .studio-motion-style-thumb {
-  background: rgba(8, 10, 0, 0.05);
-}
-
 /* force motion style labels to a single line with ellipsis */
 .studio-motion-style-label {
   padding-top: 6px;
