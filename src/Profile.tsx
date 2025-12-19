@@ -257,61 +257,92 @@ setRawHistoryPayload(json);
   }, [apiBase, propPassId, ctxPassId, authCtx?.accessToken]);
 
   const likedUrlSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const f of feedbacks) {
-      const comment = pick(f, ["mg_comment", "comment"], "").trim();
-      // your “like” convention was: comment == ""
-      if (comment !== "") continue;
+  const s = new Set<string>();
 
-      const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
-      const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
-      const url = img || vid;
-      if (url) s.add(url);
-    }
-    return s;
-  }, [feedbacks]);
+  for (const f of feedbacks) {
+    const comment = pick(f, ["mg_comment", "comment"], "").trim();
+    // your “like” convention was: comment == ""
+    if (comment !== "") continue;
+
+    const out = pick(f, ["mg_output_url", "outputUrl"], "").trim();
+    const img = pick(f, ["mg_image_url", "imageUrl"], "").trim();
+    const vid = pick(f, ["mg_video_url", "videoUrl"], "").trim();
+
+    const url = vid || (isVideoUrl(out) ? out : "") || img || out;
+    if (url) s.add(url);
+  }
+
+  return s;
+}, [feedbacks]);
+
 
   const items = useMemo(() => {
-    const mapped = (generations || []).map((g, idx) => {
+  // ✅ Merge both: generations + feedbacks
+  const allRows = [...(generations || []), ...(feedbacks || [])];
+
+  // 1) Map rows into UI items (only keep rows that have a URL)
+  let base = allRows
+    .map((g, idx) => {
       const id = pick(g, ["mg_id", "id"], `row_${idx}`);
-      const createdAt = pick(g, ["mg_created_at", "createdAt", "mg_event_at"], "") || "";
+      const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
       const prompt = pick(g, ["mg_prompt", "prompt"], "") || "";
 
-      const img = pick(g, ["mg_image_url", "imageUrl", "mg_output_url", "outputUrl"], "").trim();
+      const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
+      const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
       const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
 
-      const url = vid || img; // prefer video when present
-      const motionLike =
-        String(pick(g, ["mg_result_type", "resultType", "type"], "")).toLowerCase().includes("motion") ||
-        String(pick(g, ["mg_result_type", "resultType", "type"], "")).toLowerCase().includes("video") ||
+      // Prefer explicit video, otherwise detect if output_url is a video, otherwise image/output.
+      const url = vid || (isVideoUrl(out) ? out : "") || img || out;
+
+      const kindHint = String(
+        pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")
+      ).toLowerCase();
+
+      const isMotion =
+        kindHint.includes("motion") ||
+        kindHint.includes("video") ||
         Boolean(vid) ||
         isVideoUrl(url);
 
       const liked = url ? likedUrlSet.has(url) : false;
 
-      // keep your “sizes” vibe (minimal deterministic pattern)
-      let sizeClass = "profile-card--tall";
-      if (idx % 13 === 0) sizeClass = "profile-card--hero";
-      else if (idx % 9 === 0) sizeClass = "profile-card--wide";
-      else if (idx % 7 === 0) sizeClass = "profile-card--mini";
+      return { id, createdAt, prompt, url, liked, isMotion };
+    })
+    .filter((x) => x.url);
 
-      return { id, createdAt, prompt, url, liked, isMotion: motionLike, sizeClass };
-    });
+  // 2) Newest first
+  base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
-    // newest first
-    mapped.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  // 3) ✅ Deduplicate by URL so you don’t see the same media twice
+  const seen = new Set<string>();
+  base = base.filter((it) => {
+    if (seen.has(it.url)) return false;
+    seen.add(it.url);
+    return true;
+  });
 
-    let out = mapped;
+  // 4) Apply your existing filters
+  let out = base;
 
-    if (motion === "still") out = out.filter((x) => !x.isMotion);
-    if (motion === "motion") out = out.filter((x) => x.isMotion);
+  if (motion === "still") out = out.filter((x) => !x.isMotion);
+  if (motion === "motion") out = out.filter((x) => x.isMotion);
 
-    if (likedOnly) out = out.filter((x) => x.liked);
+  if (likedOnly) out = out.filter((x) => x.liked);
 
-    if (recentOnly) out = out.slice(0, 60);
+  if (recentOnly) out = out.slice(0, 60);
 
-    return out;
-  }, [generations, likedUrlSet, motion, likedOnly, recentOnly]);
+  // 5) Add your size classes AFTER sorting (stable layout)
+  out = out.map((it, idx) => {
+    let sizeClass = "profile-card--tall";
+    if (idx % 13 === 0) sizeClass = "profile-card--hero";
+    else if (idx % 9 === 0) sizeClass = "profile-card--wide";
+    else if (idx % 7 === 0) sizeClass = "profile-card--mini";
+    return { ...it, sizeClass };
+  });
+
+  return out;
+}, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
+
 
   const onTogglePrompt = (id: string) => {
     setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
