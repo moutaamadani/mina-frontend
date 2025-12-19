@@ -6,10 +6,12 @@
 // 3) Context + hooks: share passId through the tree.
 // 4) Storage helpers: safe localStorage wrappers.
 // 5) PassId helpers: generate, persist, and normalize identifiers.
-// 6) Backend helpers: ensure passId with API + optional Shopify sync.
-// 7) UI helpers: inbox links for email domains.
-// 8) Component: AuthGate that renders children once passId/session is ready.
+// 6) Auth callback helpers: detect/clean OAuth callback params safely.
+// 7) Backend helpers: ensure passId with API + optional Shopify sync.
+// 8) UI helpers: inbox links for email domains.
+// 9) Component: AuthGate that renders children once passId/session is ready.
 // -----------------------------------------------------------------------------
+
 // [PART 1] Imports
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -25,7 +27,6 @@ const API_BASE_URL =
 
 // MEGA identity storage (single identity)
 const PASS_ID_STORAGE_KEY = "minaPassId";
-
 
 // baseline users label (optional)
 const BASELINE_USERS = 3700;
@@ -104,6 +105,97 @@ function generateLocalPassId(): string {
 }
 
 // --------------------
+// Auth callback helpers
+// --------------------
+type AuthCallbackParams = {
+  code: string | null;
+  error: string | null;
+  errorCode: string | null;
+  errorDescription: string | null;
+  hasCallbackParams: boolean;
+};
+
+/**
+ * Supabase may append params in query OR hash. Your example had both.
+ * We support:
+ * - ?code=...
+ * - ?error=...&error_code=...&error_description=...
+ * - #error=...&error_code=...&error_description=...
+ */
+function readAuthCallbackParams(): AuthCallbackParams {
+  try {
+    if (typeof window === "undefined") {
+      return { code: null, error: null, errorCode: null, errorDescription: null, hasCallbackParams: false };
+    }
+
+    const url = new URL(window.location.href);
+
+    // Query params
+    const q = url.searchParams;
+
+    // Hash params ONLY if it looks like key=value&key=value (not hash-router "#/route")
+    const rawHash = url.hash?.startsWith("#") ? url.hash.slice(1) : "";
+    const hashLooksLikeParams = rawHash.includes("=") && !rawHash.startsWith("/");
+    const h = hashLooksLikeParams ? new URLSearchParams(rawHash) : null;
+
+    const get = (k: string) => q.get(k) ?? h?.get(k) ?? null;
+
+    const code = get("code");
+    const error = get("error");
+    const errorCode = get("error_code");
+    const errorDescription = get("error_description");
+
+    const hasCallbackParams = !!(code || error || errorCode || errorDescription);
+
+    return { code, error, errorCode, errorDescription, hasCallbackParams };
+  } catch {
+    return { code: null, error: null, errorCode: null, errorDescription: null, hasCallbackParams: false };
+  }
+}
+
+function clearAuthCallbackParamsFromUrl() {
+  try {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+
+    // Remove from query
+    const keys = ["code", "error", "error_code", "error_description"];
+    keys.forEach((k) => url.searchParams.delete(k));
+
+    // Remove from hash only if it looks like params (not "#/route")
+    const rawHash = url.hash?.startsWith("#") ? url.hash.slice(1) : "";
+    const hashLooksLikeParams = rawHash.includes("=") && !rawHash.startsWith("/");
+    if (hashLooksLikeParams) {
+      const hp = new URLSearchParams(rawHash);
+      keys.forEach((k) => hp.delete(k));
+      const rest = hp.toString();
+      url.hash = rest ? `#${rest}` : "";
+    }
+
+    window.history.replaceState({}, document.title, url.toString());
+  } catch {
+    // ignore
+  }
+}
+
+function formatAuthCallbackError(p: AuthCallbackParams): string {
+  const desc = (p.errorDescription || "").replace(/\+/g, " ").trim();
+  const code = (p.errorCode || "").trim();
+  const err = (p.error || "").trim();
+
+  // Nice special-case for your reported issue
+  if (code === "flow_state_not_found") {
+    return "Sign-in session expired (flow state not found). Please try logging in again.";
+  }
+
+  if (desc) return desc;
+  if (code) return `Sign-in failed (${code}).`;
+  if (err) return `Sign-in failed (${err}).`;
+  return "Sign-in failed. Please try again.";
+}
+
+// --------------------
 // Supabase token helper
 // --------------------
 async function getSupabaseAccessToken(): Promise<string | null> {
@@ -163,7 +255,6 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
   }
 }
 
-
 /**
  * Lead capture (non-blocking). Optional.
  * Includes passId so backend can link Shopify id to MEGA customer row if you want.
@@ -215,7 +306,7 @@ async function syncShopifyWelcome(
 
 // --------------------
 // UI helpers (optional label)
-/// --------------------
+// --------------------
 function getInboxHref(email: string | null): string {
   if (!email) return "mailto:";
   const parts = email.split("@");
@@ -265,6 +356,13 @@ export function AuthGate({ children }: AuthGateProps) {
 
   const [googleOpening, setGoogleOpening] = useState(false);
 
+  // ✅ OAuth callback guard state (prevents churn during redirect handling)
+  const [handlingAuthCallback, setHandlingAuthCallback] = useState<boolean>(() => {
+    const p = readAuthCallbackParams();
+    return p.hasCallbackParams;
+  });
+  const [authCallbackError, setAuthCallbackError] = useState<string | null>(null);
+
   // optional stats
   const [newUsers, setNewUsers] = useState<number | null>(null);
   const displayedUsers = BASELINE_USERS + (newUsers ?? 0);
@@ -274,40 +372,52 @@ export function AuthGate({ children }: AuthGateProps) {
    * ✅ The only place we decide/repair passId.
    * Order:
    * 1) localStorage
-   * 2) restore from mega_customers (if authed)
-   * 3) backend /me canonicalize/link
-   * 4) local generation fallback (guaranteed)
-   * 5) persist to localStorage + mega_customers (if authed)
+   * 2) (optional) backend /me canonicalize/link (skip during auth callback)
+   * 3) local generation fallback (guaranteed)
+   * 4) persist to localStorage
    */
-  const refreshPassId = useCallback(async (userId?: string | null, userEmail?: string | null) => {
-    const uid = (userId || "").trim() || null;
-    const uemail = normalizeEmail(userEmail);
+  const refreshPassId = useCallback(
+    async (
+      userId?: string | null,
+      userEmail?: string | null,
+      opts?: { skipBackend?: boolean }
+    ) => {
+      const uid = (userId || "").trim() || null;
+      const uemail = normalizeEmail(userEmail);
 
-    // 1) local
-    let candidate = readStoredPassId();
+      // 1) local
+      let candidate = readStoredPassId();
 
-    // 3) backend canonicalize/link
-    const canonical = await ensurePassIdViaBackend(candidate);
-    candidate = canonical?.trim() || candidate;
+      // 2) backend canonicalize/link (ONLY if allowed)
+      if (!opts?.skipBackend) {
+        const canonical = await ensurePassIdViaBackend(candidate);
+        candidate = canonical?.trim() || candidate;
+      }
 
-    // 4) guaranteed fallback
-    const finalPid = candidate?.trim() ? candidate.trim() : generateLocalPassId();
+      // 3) guaranteed fallback
+      const finalPid = candidate?.trim() ? candidate.trim() : generateLocalPassId();
 
-    // persist localStorage
-    persistPassIdLocal(finalPid);
+      // 4) persist localStorage
+      persistPassIdLocal(finalPid);
 
-    // update state once (no stale comparisons)
-    setPassId((prev) => (prev === finalPid ? prev : finalPid));
+      // update state once (no stale comparisons)
+      setPassId((prev) => (prev === finalPid ? prev : finalPid));
 
-    return finalPid;
-  }, []);
+      // silence unused vars (uid/uemail) kept for future linking logic if needed
+      void uid;
+      void uemail;
+
+      return finalPid;
+    },
+    []
+  );
 
   // Mount app only when authenticated AND passId is ready
   const hasUserId = !!session?.user?.id;
   const hasPassId = typeof passId === "string" && passId.trim().length > 0;
   const isAuthed = hasUserId && hasPassId;
 
-  const authLoading = initializing || loading || googleOpening || (hasUserId && !hasPassId);
+  const authLoading = initializing || loading || googleOpening || handlingAuthCallback || (hasUserId && !hasPassId);
 
   // PassId context wrapper
   const gatedChildren = useMemo(() => {
@@ -318,33 +428,59 @@ export function AuthGate({ children }: AuthGateProps) {
     );
   }, [accessToken, authLoading, children, initializing, passId, session]);
 
-
-
   // Init + auth listener
   useEffect(() => {
     let mounted = true;
 
     const init = async () => {
       try {
+        // ✅ Handle auth callback FIRST and do not churn storage/network while it’s happening.
+        const cb = readAuthCallbackParams();
+        if (cb.hasCallbackParams && mounted) {
+          setHandlingAuthCallback(true);
+          setAuthCallbackError(cb.error || cb.errorCode || cb.errorDescription ? formatAuthCallbackError(cb) : null);
+        }
+
+        // If we have a code param, exchange it explicitly before calling getSession()
+        if (cb.code) {
+          try {
+            await supabase.auth.exchangeCodeForSession(cb.code);
+          } catch (e: any) {
+            if (mounted) {
+              setAuthCallbackError(e?.message || "Failed to finish sign-in. Please try again.");
+            }
+          }
+        }
+
+        // Now safely read the session
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
 
         const s = data.session ?? null;
         setSession(s);
         setAccessToken(s?.access_token || null);
-        const pidPromise = refreshPassId(s?.user?.id ?? null, s?.user?.email ?? null);
 
-        const pid = await Promise.race([
-          pidPromise,
-          new Promise<string>((resolve) => {
-            window.setTimeout(() => resolve(generateLocalPassId()), 4000);
-          }),
-        ]);
+        // ✅ Ensure we always have a local passId quickly (NO backend call here).
+        const pidLocal = (readStoredPassId() || generateLocalPassId()).trim();
+        persistPassIdLocal(pidLocal);
+        setPassId((prev) => (prev === pidLocal ? prev : pidLocal));
 
-        persistPassIdLocal(pid);
-        setPassId((prev) => (prev === pid ? prev : pid));
+        // ✅ After session exists, link/canonicalize passId via backend (but NEVER during callback parsing).
+        // Note: we do it async, non-blocking.
+        if (s?.user?.id && !cb.hasCallbackParams) {
+          void refreshPassId(s.user.id, s.user.email ?? null, { skipBackend: false });
+        }
+
+        // ✅ Clean callback params from URL so we don't re-trigger
+        if (cb.hasCallbackParams) {
+          clearAuthCallbackParamsFromUrl();
+        }
       } finally {
-        if (mounted) setInitializing(false);
+        if (mounted) {
+          setHandlingAuthCallback(false);
+          setInitializing(false);
+          setGoogleOpening(false);
+        }
       }
     };
 
@@ -353,6 +489,11 @@ export function AuthGate({ children }: AuthGateProps) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // IMPORTANT:
+      // - Ignore INITIAL_SESSION because init() already set state safely.
+      // - Avoid any passId backend linking during the callback window.
+      if (event === "INITIAL_SESSION") return;
+
       setSession(newSession ?? null);
       setAccessToken(newSession?.access_token || null);
 
@@ -362,10 +503,9 @@ export function AuthGate({ children }: AuthGateProps) {
         setSentTo(null);
         setEmailMode(false);
         setError(null);
-        setGoogleOpening(false);
 
-        // keep continuity (anon pass)
-        void refreshPassId(null, null);
+        // keep continuity (anon pass) — local only, no backend
+        void refreshPassId(null, null, { skipBackend: true });
         return;
       }
 
@@ -374,7 +514,8 @@ export function AuthGate({ children }: AuthGateProps) {
           const uid = newSession?.user?.id ?? null;
           const uemail = newSession?.user?.email ?? null;
 
-          const pid = await refreshPassId(uid, uemail);
+          // Link/canonicalize now that sign-in is complete
+          const pid = await refreshPassId(uid, uemail, { skipBackend: false });
 
           // optional lead capture
           if (uemail) void syncShopifyWelcome(uemail, uid || undefined, pid);
@@ -382,7 +523,11 @@ export function AuthGate({ children }: AuthGateProps) {
         return;
       }
 
-      void refreshPassId(newSession?.user?.id ?? null, newSession?.user?.email ?? null);
+      // Other events: refresh local pass quickly; backend only if not in callback mode
+      const cb = readAuthCallbackParams();
+      void refreshPassId(newSession?.user?.id ?? null, newSession?.user?.email ?? null, {
+        skipBackend: cb.hasCallbackParams,
+      });
     });
 
     return () => {
@@ -425,7 +570,7 @@ export function AuthGate({ children }: AuthGateProps) {
     setError(null);
     setLoading(true);
 
-    const pid = passId ?? readStoredPassId() ?? generateLocalPassId();
+    const pid = (passId ?? readStoredPassId() ?? generateLocalPassId()).trim();
     persistPassIdLocal(pid);
     setPassId((prev) => (prev === pid ? prev : pid));
 
@@ -449,6 +594,9 @@ export function AuthGate({ children }: AuthGateProps) {
 
   // Google OAuth
   const handleGoogleLogin = async () => {
+    // ✅ prevent double-starts
+    if (googleOpening || loading || initializing || handlingAuthCallback) return;
+
     setError(null);
     setGoogleOpening(true);
 
@@ -464,6 +612,58 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   };
 
+  // ✅ During auth callback, DO NOT mount the app (avoid any churn while Supabase settles)
+  if (handlingAuthCallback) {
+    return (
+      <>
+        <TopLoadingBar active />
+        <div className="mina-auth-shell">
+          <div className="mina-auth-left">
+            <div className="mina-auth-card">
+              <div className="mina-auth-actions">
+                <div className="mina-auth-stack">
+                  <div className="fade-overlay auth-panel auth-panel--check visible">
+                    <p className="mina-auth-text">
+                      Finishing sign-in…
+                      {authCallbackError ? (
+                        <>
+                          <br />
+                          <span style={{ display: "inline-block", marginTop: 10 }}>
+                            <strong>{authCallbackError}</strong>
+                          </span>
+                        </>
+                      ) : null}
+                    </p>
+
+                    {authCallbackError ? (
+                      <button
+                        type="button"
+                        className="mina-auth-link mina-auth-main"
+                        style={{ marginTop: 12 }}
+                        onClick={() => {
+                          clearAuthCallbackParamsFromUrl();
+                          setHandlingAuthCallback(false);
+                          setAuthCallbackError(null);
+                          setGoogleOpening(false);
+                        }}
+                      >
+                        Back to login
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mina-auth-footer">{displayedUsersLabel}</div>
+          </div>
+
+          <div className="mina-auth-right" />
+        </div>
+      </>
+    );
+  }
+
   // ✅ Mount app when initializing or when ready; only show auth UI once we know
   // there's no session so the studio shell never disappears mid-check.
   if (initializing || hasUserId || isAuthed) {
@@ -474,7 +674,6 @@ export function AuthGate({ children }: AuthGateProps) {
       </>
     );
   }
-
 
   // Login UI (only when we know there's no active session)
   const trimmed = email.trim();
@@ -528,7 +727,12 @@ export function AuthGate({ children }: AuthGateProps) {
                 <div className="mina-auth-actions">
                   <div className="mina-auth-stack">
                     <div className={"fade-overlay auth-panel auth-panel--google " + (emailMode ? "hidden" : "visible")}>
-                      <button type="button" className="mina-auth-link mina-auth-main" onClick={handleGoogleLogin}>
+                      <button
+                        type="button"
+                        className="mina-auth-link mina-auth-main"
+                        onClick={handleGoogleLogin}
+                        disabled={googleOpening || loading || initializing || handlingAuthCallback}
+                      >
                         {googleOpening ? "Opening Google…" : "Login with Google"}
                       </button>
 
@@ -540,7 +744,7 @@ export function AuthGate({ children }: AuthGateProps) {
                             setEmailMode(true);
                             setError(null);
                           }}
-                          disabled={loading}
+                          disabled={loading || googleOpening}
                         >
                           Use email instead
                         </button>
