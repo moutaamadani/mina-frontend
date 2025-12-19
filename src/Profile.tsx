@@ -48,6 +48,76 @@ function normalizeMediaUrl(url: string) {
   return base || url;
 }
 
+type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
+
+const ASPECT_OPTIONS: { key: AspectKey; ratio: string; label: string; iconUrl: string }[] = [
+  {
+    key: "9-16",
+    ratio: "9:16",
+    label: "9:16",
+    iconUrl:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/tiktokreels_icon_e116174c-afc7-4174-9cf0-f24a07c8517b.svg?v=1765425956",
+  },
+  {
+    key: "3-4",
+    ratio: "3:4",
+    label: "3:4",
+    iconUrl:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/post_icon_f646fcb5-03be-4cf5-b25c-b1ec38f6794e.svg?v=1765425956",
+  },
+  {
+    key: "2-3",
+    ratio: "2:3",
+    label: "2:3",
+    iconUrl:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/Printing_icon_c7252c7d-863e-4efb-89c4-669261119d61.svg?v=1765425956",
+  },
+  {
+    key: "1-1",
+    ratio: "1:1",
+    label: "1:1",
+    iconUrl:
+      "https://cdn.shopify.com/s/files/1/0678/9254/3571/files/square_icon_901d47a8-44a8-4ab9-b412-2224e97fd9d9.svg?v=1765425956",
+  },
+];
+
+function normalizeAspectRatio(raw: string | null | undefined) {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+
+  const direct = trimmed.replace("/", ":");
+  if (direct.includes(":")) {
+    const [a, b] = direct.split(":").map((p) => p.trim());
+    if (a && b) {
+      const candidate = `${a}:${b}`;
+      const match = ASPECT_OPTIONS.find((opt) => opt.ratio === candidate);
+      if (match) return match.ratio;
+    }
+  }
+
+  const re = /([0-9.]+)\s*[xX:\/ ]\s*([0-9.]+)/;
+  const m = trimmed.match(re);
+  if (m) {
+    const w = parseFloat(m[1]);
+    const h = parseFloat(m[2]);
+    if (Number.isFinite(w) && Number.isFinite(h) && h > 0) {
+      const val = w / h;
+      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = { opt: null, diff: Infinity };
+      for (const opt of ASPECT_OPTIONS) {
+        const [aw, ah] = opt.ratio.split(":").map((p) => parseFloat(p));
+        if (!Number.isFinite(aw) || !Number.isFinite(ah) || ah === 0) continue;
+        const ratio = aw / ah;
+        const diff = Math.abs(ratio - val);
+        if (diff < best.diff) best = { opt, diff };
+      }
+      if (best.opt) return best.opt.ratio;
+    }
+  }
+
+  return "";
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -145,7 +215,14 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
-  const [recentOnly, setRecentOnly] = useState(false);
+  const [aspectFilterStep, setAspectFilterStep] = useState(0);
+
+  const activeAspectFilter = aspectFilterStep === 0 ? null : ASPECT_OPTIONS[aspectFilterStep - 1];
+  const cycleAspectFilter = () => {
+    setAspectFilterStep((prev) => (prev + 1) % (ASPECT_OPTIONS.length + 1));
+  };
+  const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "All";
+  const aspectFilterIcon = activeAspectFilter?.iconUrl || ASPECT_OPTIONS[0].iconUrl;
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
 
@@ -356,6 +433,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const createdAt = pick(g, ["mg_event_at", "mg_created_at", "createdAt"], "") || "";
 
         const payload = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
+        const meta = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
         const gptMeta = (g as any)?.gpt ?? null;
 
         const prompt =
@@ -368,6 +446,9 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
         const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
         const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
+        const aspectRaw =
+          pick(g, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
+          pick(meta, ["aspectRatio", "aspect_ratio"], "");
 
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
@@ -388,10 +469,19 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         // Prefer video first
         const url = (videoUrl || imageUrl || out).trim();
         const isMotion = Boolean(videoUrl);
+        const aspectRatio =
+          normalizeAspectRatio(aspectRaw) ||
+          normalizeAspectRatio(
+            typeof payload?.aspect_ratio === "string"
+              ? payload.aspect_ratio
+              : typeof payload?.aspectRatio === "string"
+                ? payload.aspectRatio
+                : ""
+          );
 
         const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) : false;
 
-        return { id, createdAt, prompt, url, liked, isMotion };
+        return { id, createdAt, prompt, url, liked, isMotion, aspectRatio };
       })
       .filter((x) => x.url);
 
@@ -399,21 +489,31 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
     // 3) ✅ Deduplicate by URL so you don’t see the same media twice
-    const seen = new Set<string>();
-    base = base.filter((it) => {
+    const merged = new Map<string, typeof base[number]>();
+    for (const it of base) {
       const key = normalizeMediaUrl(it.url);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, it);
+        continue;
+      }
+
+      const next = { ...existing };
+      if (it.liked && !existing.liked) next.liked = true;
+      if (!existing.aspectRatio && it.aspectRatio) next.aspectRatio = it.aspectRatio;
+
+      merged.set(key, next);
+    }
+
+    base = Array.from(merged.values());
 
     // 4) Add size classes and dimming flags
     const out = base.map((it, idx) => {
       const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
       const matchesLiked = !likedOnly || it.liked;
-      const matchesRecent = !recentOnly || idx < 60;
+      const matchesAspect = !activeAspectFilter || it.aspectRatio === activeAspectFilter.ratio;
 
-      const dimmed = !(matchesMotion && matchesLiked && matchesRecent);
+      const dimmed = !(matchesMotion && matchesLiked && matchesAspect);
 
       let sizeClass = "profile-card--tall";
       if (idx % 13 === 0) sizeClass = "profile-card--hero";
@@ -425,7 +525,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     const activeCount = out.filter((it) => !it.dimmed).length;
 
     return { items: out, activeCount };
-  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, recentOnly]);
+  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter]);
 
 
   const onTogglePrompt = (id: string) => {
@@ -542,10 +642,13 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
           <button
             type="button"
-            className={`profile-filter-pill ${recentOnly ? "active" : ""}`}
-            onClick={() => setRecentOnly((v) => !v)}
+            className={`profile-filter-pill profile-filter-pill--ratio ${activeAspectFilter ? "active" : ""}`}
+            onClick={cycleAspectFilter}
           >
-            Recent
+            <span className="profile-filter-icon">
+              <img src={aspectFilterIcon} alt="" />
+            </span>
+            <span className="profile-filter-label">{aspectFilterLabel}</span>
           </button>
         </div>
       </div>

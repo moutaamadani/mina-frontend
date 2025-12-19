@@ -618,6 +618,30 @@
   opacity: 0.6;
 }
 
+.studio-help-links {
+  position: absolute;
+  left: 64px;
+  bottom: 6px;
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.studio-help-link {
+  color: inherit;
+  opacity: 0.7;
+  text-decoration: none;
+}
+
+.studio-help-link:hover {
+  opacity: 0.95;
+}
+
+.studio-help-link:active {
+  opacity: 0.6;
+}
+
 /* ------------------------------------------
    Responsive
 ------------------------------------------ */
@@ -629,6 +653,11 @@
   .studio-profile-float {
     left: 20px;
     bottom: 18px;
+  }
+
+  .studio-help-links {
+    left: 20px;
+    bottom: 2px;
   }
 }
 

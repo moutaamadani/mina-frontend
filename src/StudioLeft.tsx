@@ -531,15 +531,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           ? "Animate"
           : "Create";
 
+  const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
+
   const createDisabled =
     createState === "creating" ||
     createState === "uploading" ||
-    (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
-    (!isMotion && (!canCreateStill || !imageCreditsOk));
+    (createState === "describe_more"
+      ? wantsMatcha
+        ? false
+        : isMotion
+          ? !hasMotionHandler || motionSuggesting || !motionCreditsOk
+          : !canCreateStill
+      : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
+        (!isMotion && (!canCreateStill || !imageCreditsOk)));
 
   const handleCreateClick = () => {
-    const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
-
     if (createState === "ready") {
       if (isMotion) {
         props.onCreateMotion?.();
@@ -1128,6 +1134,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       <button type="button" className="studio-profile-float" onClick={onGoProfile}>
         Profile
       </button>
+
+      <div className="studio-help-links">
+        <a className="studio-help-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
+          Need help?
+        </a>
+        <a
+          className="studio-help-link"
+          href="https://www.faltastudio.com/pages/tutorial"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Tutorial
+        </a>
+      </div>
     </div>
   );
 };
