@@ -158,32 +158,52 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
 
-      // Try the primary /history endpoint first; if it fails, fall back to
-      // /history/pass/:id to stay compatible with either backend flavor.
+      // Prefer the lightweight /history/trimmed endpoint when available; fall
+      // back to the full history payload to preserve compatibility with older
+      // backends.
       const hitHistory = async (url: string) => {
         const res = await fetch(url, { method: "GET", headers });
         const text = await res.text();
         return { res, text } as const;
       };
 
-      let { res: resp, text } = await hitHistory(`${apiBase}/history`);
+      const attempts = [`${apiBase}/history/trimmed`, `${apiBase}/history`];
 
-      if (!resp.ok && passId) {
-        const fallback = await hitHistory(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
-        resp = fallback.res;
-        text = fallback.text;
+      if (passId) {
+        attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
       }
 
+      let resp: Response | null = null;
+      let text = "";
       let json: any = null;
-      try {
-        json = text ? JSON.parse(text) : null;
-      } catch {
-        json = null;
+      let success = false;
+
+      for (const url of attempts) {
+        const attempt = await hitHistory(url);
+        resp = attempt.res;
+        text = attempt.text;
+
+        try {
+          json = text ? JSON.parse(text) : null;
+        } catch {
+          json = null;
+        }
+
+        const hasGenerations = Array.isArray(json?.generations);
+        if (resp.ok && (json?.ok || hasGenerations)) {
+          success = true;
+          break;
+        }
+      }
+
+      if (!resp) {
+        setHistoryErr("History failed: empty response");
+        return;
       }
 
       const hasGenerations = Array.isArray(json?.generations);
 
-      if (!resp.ok || (!json?.ok && !hasGenerations)) {
+      if (!success) {
         setHistoryErr(
           json?.message ||
             json?.error ||
