@@ -629,6 +629,12 @@
   opacity: 0.6;
 }
 
+.studio-footer-link--disabled {
+  opacity: 0.2;
+  pointer-events: none;
+  cursor: default;
+}
+
 @media (max-width: 900px) {
   .studio-row--pills {
     flex-wrap: nowrap;
@@ -652,7 +658,7 @@
 
 @media (max-width: 480px) {
   .studio-left {
-    padding: 72px 20px 24px;
+    padding: 10px;
   }
 
   .studio-plusbox,

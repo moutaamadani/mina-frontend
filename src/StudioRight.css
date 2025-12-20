@@ -133,6 +133,7 @@
 .studio-feedback-input--compact {
   flex: 1 1 auto;
   height: 26px;
+  min-width: 0;
 
   border: 0;
   outline: none;
@@ -219,21 +220,21 @@
   .studio-feedback-bar {
     position: sticky;
     bottom: 0;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     padding: 16px 20px 18px;
     background: var(--mina-bg);
-    flex-wrap: wrap;
     box-shadow: 0 -1px 0 rgba(8, 10, 0, 0.06);
   }
 
   .studio-feedback-input--compact {
-    width: 100%;
+    width: auto;
     height: auto;
   }
 
   .studio-feedback-actions {
-    width: 100%;
+    width: auto;
     justify-content: flex-end;
+    flex-shrink: 0;
   }
 }

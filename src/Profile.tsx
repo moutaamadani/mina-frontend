@@ -781,6 +781,7 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                     <video
                       ref={(el) => registerVideoEl(it.id, el)}
                       src={it.url}
+                      autoPlay
                       muted
                       loop
                       playsInline

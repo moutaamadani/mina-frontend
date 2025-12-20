@@ -310,6 +310,17 @@ video {
   color: rgba(8, 10, 0, 0.4);
 }
 
+.mina-auth-help {
+  margin-left: 10px;
+  font-weight: 700;
+  color: rgba(8, 10, 0, 0.6);
+  text-decoration: none;
+}
+
+.mina-auth-help:hover {
+  opacity: 0.85;
+}
+
 /* auth copy */
 
 .mina-auth-title {
@@ -1399,6 +1410,12 @@ video {
     align-items: center;
     padding: 16px 20px 24px;
     background: var(--mina-bg);
+  }
+}
+
+@media (max-width: 480px) {
+  .studio-left {
+    padding: 10px;
   }
 }
 

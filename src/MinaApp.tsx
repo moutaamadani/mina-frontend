@@ -2895,7 +2895,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
                   onClick={handleDownloadCurrentStill}
                   disabled={!currentStill && !currentMotion}
                 >
-                  Download
+                  Download with logo
                 </button>
               </>
             )}
@@ -2983,14 +2983,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
                 Need help?
               </a>
-              <a
-                className="studio-footer-link"
-                href="https://mina.faltastudio.com"
-                target="_blank"
-                rel="noreferrer"
-              >
-                Tutorial
-              </a>
+              <span className="studio-footer-link studio-footer-link--disabled">Tutorial</span>
             </div>
           </div>
         ) : (
