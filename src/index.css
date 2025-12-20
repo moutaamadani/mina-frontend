@@ -1124,7 +1124,8 @@ video {
     right: 0;
     padding: 16px 20px;
     background: var(--mina-bg);
-    z-index: 6;
+    z-index: 12;
+    box-shadow: 0 1px 0 rgba(8, 10, 0, 0.06);
   }
 
   .studio-body--two-col {
@@ -1370,11 +1371,12 @@ video {
   }
 
   .studio-right-surface {
-    min-height: 100vh;
+    min-height: 0;
+    height: auto;
   }
 
   .studio-right {
-    min-height: 60vh;
+    min-height: 0;
   }
 
   .studio-footer-links {
@@ -1388,6 +1390,7 @@ video {
     right: 0;
     padding: 16px 20px;
     background: var(--mina-bg);
+    box-shadow: 0 1px 0 rgba(8, 10, 0, 0.06);
   }
 
   .studio-mobile-footer {
