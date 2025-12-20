@@ -1424,42 +1424,6 @@ const fetchCredits = async () => {
   }
 };
 
-// ------------------------------------------------------------------------
-// Credits: apply server balance safely
-// If generate returns a suspicious 0, keep previous and refetch /credits/balance.
-// ------------------------------------------------------------------------
-const applyCreditsFromResponse = (resp?: { balance: any; cost?: any }) => {
-  if (!resp) return;
-
-  const parsed = Number(resp.balance);
-  const prevBalance = creditsCacheRef.current[currentPassId || ""]?.balance ?? credits?.balance;
-
-  // If server gave a valid non-negative number, accept it,
-  // BUT avoid overwriting a known positive balance with 0 (common “anonymous” symptom).
-  const looksValid = Number.isFinite(parsed) && parsed >= 0;
-
-  const suspiciousZero =
-    looksValid &&
-    parsed === 0 &&
-    typeof prevBalance === "number" &&
-    Number.isFinite(prevBalance) &&
-    prevBalance > 0;
-
-  if (!looksValid || suspiciousZero) {
-    // Keep UI stable, then refetch the truth
-    creditsDirtyRef.current = true;
-    void fetchCredits();
-    return;
-  }
-
-  setCredits((prev) => ({ balance: parsed, meta: prev?.meta }));
-  if (currentPassId) {
-    creditsCacheRef.current[currentPassId] = { balance: parsed, meta: creditsCacheRef.current[currentPassId]?.meta };
-    creditsCacheAtRef.current[currentPassId] = Date.now();
-    creditsDirtyRef.current = false;
-  }
-};
-
 const ensureSession = async (): Promise<string | null> => {
   if (sessionId) return sessionId;
   if (!API_BASE_URL || !currentPassId) return null;
@@ -1903,8 +1867,13 @@ const handleGenerateStill = async () => {
 
     setLastStillPrompt(item.prompt);
 
-    // Update credits (safe)
-    applyCreditsFromResponse(data.credits);
+    // Update credits
+    if (data.credits?.balance !== undefined) {
+      setCredits((prev) => ({
+        balance: data.credits!.balance,
+        meta: prev?.meta,
+      }));
+    }
   } catch (err: any) {
     setStillError(err?.message || "Unexpected error generating still.");
   } finally {
@@ -2083,8 +2052,12 @@ const handleGenerateMotion = async () => {
 
     setActiveMediaKind("motion");
 
-    // Update credits (safe)
-    applyCreditsFromResponse(data.credits);
+    if (data.credits?.balance !== undefined) {
+      setCredits((prev) => ({
+        balance: data.credits!.balance,
+        meta: prev?.meta,
+      }));
+    }
   } catch (err: any) {
     setMotionError(err?.message || "Unexpected error generating motion.");
   } finally {
