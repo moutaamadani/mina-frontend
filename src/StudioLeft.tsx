@@ -1138,12 +1138,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           Need help?
         </a>
         <a
-          className="studio-footer-link studio-footer-link--tutorial"
+          className="studio-footer-link"
           href="https://www.faltastudio.com/pages/tutorial"
           target="_blank"
           rel="noreferrer"
-          aria-disabled="true"
-          onClick={(e) => e.preventDefault()}
         >
           Tutorial
         </a>

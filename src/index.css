@@ -558,7 +558,7 @@ video {
 }
 
 /* ===========================================================
-   3. STUDIO LAYOUT (50/50)
+   3. STUDIO LAYOUT
    =========================================================== */
 
 .mina-studio-root {
@@ -574,7 +574,7 @@ video {
 .studio-frame {
   position: relative;
   width: 100%;
-  max-width: 1440px;
+  max-width: none;
 }
 
 /* header overlay over both columns */
@@ -622,6 +622,10 @@ video {
   grid-template-columns: 1fr 1fr;
   height: 100vh;
   height: 100dvh;
+}
+
+.studio-mobile-footer {
+  display: none;
 }
 
 /* left / right columns */
@@ -1114,9 +1118,13 @@ video {
 
 @media (max-width: 960px) {
   .studio-header-overlay {
-    top: 16px;
-    left: 20px;
-    right: 20px;
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 20px;
+    background: var(--mina-bg);
+    z-index: 6;
   }
 
   .studio-body--two-col {
@@ -1133,7 +1141,7 @@ video {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: 80px 24px 40px;
+    padding: 80px 20px 40px;
   }
 
   .profile-editorial-shell {
@@ -1331,6 +1339,7 @@ video {
   flex: 0 0 40%;
   max-width: 40%;
   min-width: 0;
+  padding: 0;
 }
 
 @media (max-width: 900px) {
@@ -1357,16 +1366,36 @@ video {
   }
 
   .studio-right {
+    padding: 0;
+  }
+
+  .studio-right-surface {
+    min-height: 100vh;
+  }
+
+  .studio-right {
     min-height: 60vh;
   }
 
   .studio-footer-links {
-    width: 100%;
-    justify-content: flex-start;
+    display: none;
+  }
+
+  .studio-header-overlay {
     position: sticky;
-    bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 20px;
     background: var(--mina-bg);
-    padding-bottom: 10px;
+  }
+
+  .studio-mobile-footer {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    padding: 16px 20px 24px;
+    background: var(--mina-bg);
   }
 }
 
