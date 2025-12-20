@@ -352,7 +352,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stillError,
     onCreateStill,
 
-    motionHasImage,
+    motionHasImage: motionHasImageProp,
     motionGenerating,
     motionError,
     onCreateMotion,
@@ -370,6 +370,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   } = props;
 
   const imageCreditsOk = imageCreditsOkProp ?? true;
+  const motionHasImage = !!motionHasImageProp;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
