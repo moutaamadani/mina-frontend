@@ -608,7 +608,6 @@
   font-weight: 500;
   margin-top: auto;
   padding-top: 8px;
-  border-top: 1px solid rgba(8, 10, 0, 0.05);
 }
 
 .studio-footer-link {
@@ -622,17 +621,20 @@
   font: inherit;
 }
 
-.studio-footer-link--tutorial {
-  opacity: 0.4;
-  pointer-events: none;
-}
-
 .studio-footer-link:hover {
   opacity: 0.95;
 }
 
 .studio-footer-link:active {
   opacity: 0.6;
+}
+
+@media (max-width: 900px) {
+  .studio-row--pills {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 6px;
+  }
 }
 
 /* ------------------------------------------
@@ -642,11 +644,15 @@
   .studio-left {
     padding: 80px 20px 32px;
   }
+
+  .studio-footer-links {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {
   .studio-left {
-    padding: 72px 16px 24px;
+    padding: 72px 20px 24px;
   }
 
   .studio-plusbox,

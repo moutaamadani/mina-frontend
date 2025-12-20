@@ -231,13 +231,13 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
-  const [aspectFilterStep, setAspectFilterStep] = useState(1);
+  const [aspectFilterStep, setAspectFilterStep] = useState(0);
 
   const activeAspectFilter = aspectFilterStep === 0 ? null : ASPECT_OPTIONS[aspectFilterStep - 1];
   const cycleAspectFilter = () => {
     setAspectFilterStep((prev) => (prev + 1) % (ASPECT_OPTIONS.length + 1));
   };
-  const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "All";
+  const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "Ratio";
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
 
@@ -432,6 +432,10 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           pick(g, ["mg_prompt", "prompt"], "") ||
           "";
 
+        const likeUrl = source === "feedback" ? findLikeUrl(g) : "";
+        const isLikeOnly = source === "feedback" && !!likeUrl;
+        if (isLikeOnly) return null;
+
         const out = pick(g, ["mg_output_url", "outputUrl"], "").trim();
         const img = pick(g, ["mg_image_url", "imageUrl"], "").trim();
         const vid = pick(g, ["mg_video_url", "videoUrl"], "").trim();
@@ -468,12 +472,11 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                 : ""
           );
 
-        const likeUrl = source === "feedback" ? findLikeUrl(g) : "";
         const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) || !!likeUrl : false;
 
         return { id, createdAt, prompt, url, liked, isMotion, aspectRatio, source, sourceRank: source === "generation" ? 2 : 1 };
       })
-      .filter((x) => x.url);
+      .filter((x): x is NonNullable<typeof x> => Boolean(x && x.url));
 
     // 2) Newest first
     base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
