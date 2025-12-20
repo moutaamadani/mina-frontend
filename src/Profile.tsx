@@ -3,11 +3,11 @@
 // Mina — Profile (Archive)
 // - Mina-style header (logo left, Back to Studio right, Logout far right)
 // - Meta row (pass + email + stats)
-// - Archive grid, "infinite" reveal (10/page, client-side)
-// - Click item => download (no new tab)
+// - Archive grid
+// - Click item => open lightbox (no new tab)
 // - Prompt line + tiny "view more"
-// - Date + Delete with confirm
-// - Filters (motion/type / creation/platform / liked / recent / session) => non-matching dim to 10%
+// - Filters (motion / liked / aspect) => non-matching dim
+// - Video autoplay via IntersectionObserver (plays only most-visible)
 // =============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,26 +51,10 @@ function normalizeMediaUrl(url: string) {
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
 const ASPECT_OPTIONS: { key: AspectKey; ratio: string; label: string }[] = [
-  {
-    key: "2-3",
-    ratio: "2:3",
-    label: "2:3",
-  },
-  {
-    key: "1-1",
-    ratio: "1:1",
-    label: "1:1",
-  },
-  {
-    key: "9-16",
-    ratio: "9:16",
-    label: "9:16",
-  },
-  {
-    key: "3-4",
-    ratio: "3:4",
-    label: "3:4",
-  },
+  { key: "2-3", ratio: "2:3", label: "2:3" },
+  { key: "1-1", ratio: "1:1", label: "1:1" },
+  { key: "9-16", ratio: "9:16", label: "9:16" },
+  { key: "3-4", ratio: "3:4", label: "3:4" },
 ];
 
 function normalizeAspectRatio(raw: string | null | undefined) {
@@ -130,8 +114,7 @@ function findLikeUrl(row: Row) {
   const img = pick(row, ["mg_image_url", "imageUrl"], "").trim();
   const vid = pick(row, ["mg_video_url", "videoUrl"], "").trim();
 
-  const url = vid || (isVideoUrl(out) ? out : "") || img || out;
-  return url;
+  return vid || (isVideoUrl(out) ? out : "") || img || out;
 }
 
 function fmtDate(iso: string | null) {
@@ -162,7 +145,6 @@ function guessDownloadExt(url: string, fallbackExt: string) {
 }
 
 function buildDownloadName(url: string) {
-  // Always use our branded filename so downloads are consistent.
   const base = "Mina_v3_prompt";
   const ext = guessDownloadExt(url, ".png");
   return base.endsWith(ext) ? base : `${base}${ext}`;
@@ -198,8 +180,6 @@ const resolveApiBase = (override?: string | null) => {
     return `${window.location.origin}/api`;
   }
 
-  // Default to the deployed API base (including /api) so history endpoints
-  // resolve correctly even when env vars are missing.
   return "https://mina-editorial-ai-api.onrender.com/api";
 };
 
@@ -220,23 +200,18 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   const [credits, setCredits] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
-  //DEBUGGer const [rawHistoryPayload, setRawHistoryPayload] = useState<any>(null);
 
   // Filters (ONLY these)
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
   const cycleMotion = () => {
     setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
   };
-
   const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
   const [aspectFilterStep, setAspectFilterStep] = useState(0);
-
   const activeAspectFilter = aspectFilterStep === 0 ? null : ASPECT_OPTIONS[aspectFilterStep - 1];
-  const cycleAspectFilter = () => {
-    setAspectFilterStep((prev) => (prev + 1) % (ASPECT_OPTIONS.length + 1));
-  };
+  const cycleAspectFilter = () => setAspectFilterStep((prev) => (prev + 1) % (ASPECT_OPTIONS.length + 1));
   const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "Ratio";
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
@@ -245,19 +220,14 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     if (!url) return;
     setLightbox({ url, isMotion });
   };
-
   const closeLightbox = () => setLightbox(null);
 
-  // Pull session + passId from the shared auth context so we reuse the same
-  // token/AuthGate pass id instead of re-checking Supabase on this screen.
   const authCtx = useAuthContext();
   const ctxPassId = usePassId();
 
   const apiBase = useMemo(() => resolveApiBase(apiBaseUrl), [apiBaseUrl]);
 
   useEffect(() => {
-    // Prefer the email already known by AuthGate; fall back to a direct
-    // Supabase session check if the context is still warming up.
     if (authCtx?.session?.user?.email) {
       setEmail(String(authCtx.session.user.email));
       return;
@@ -269,98 +239,16 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
     });
   }, [authCtx?.session]);
 
-  // =============================================================
-// Grid video autoplay (IntersectionObserver)
-// - Plays ONLY when visible
-// - To avoid heavy CPU, plays only the MOST visible video
-// =============================================================
-const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  // =========================================
+  // Video refs (used by IntersectionObserver)
+  // =========================================
+  const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
 
-const registerVideoEl = useCallback((id: string, el: HTMLVideoElement | null) => {
-  const m = videoElsRef.current;
-  if (el) m.set(id, el);
-  else m.delete(id);
-}, []);
-
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (!("IntersectionObserver" in window)) return;
-
-  const els = videoElsRef.current;
-  const visible = new Map<HTMLVideoElement, number>();
-
-  const pauseAll = () => {
-    els.forEach((v) => {
-      try {
-        v.pause();
-      } catch {}
-    });
-  };
-
-  const playMostVisible = () => {
-    let best: HTMLVideoElement | null = null;
-    let bestRatio = 0;
-
-    visible.forEach((ratio, v) => {
-      if (ratio > bestRatio) {
-        bestRatio = ratio;
-        best = v;
-      }
-    });
-
-    els.forEach((v) => {
-      const shouldPlay = best === v;
-      try {
-        // enforce autoplay-safe flags (helps Safari)
-        v.muted = true;
-        (v as any).playsInline = true;
-
-        if (shouldPlay) {
-          if (v.paused) v.play().catch(() => {});
-        } else {
-          if (!v.paused) v.pause();
-        }
-      } catch {
-        // ignore
-      }
-    });
-  };
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        const v = e.target as HTMLVideoElement;
-        const ratio = e.intersectionRatio || 0;
-
-        // Only count as "visible" once it's meaningfully on screen
-        if (e.isIntersecting && ratio >= 0.35) visible.set(v, ratio);
-        else visible.delete(v);
-      }
-      playMostVisible();
-    },
-    {
-      root: null,
-      rootMargin: "200px 0px 200px 0px",
-      threshold: [0, 0.35, 0.7, 1],
-    }
-  );
-
-  // Observe current video nodes
-  els.forEach((v) => observer.observe(v));
-
-  const onVis = () => {
-    if (document.hidden) pauseAll();
-    else playMostVisible();
-  };
-  document.addEventListener("visibilitychange", onVis);
-
-  return () => {
-    document.removeEventListener("visibilitychange", onVis);
-    observer.disconnect();
-    pauseAll();
-  };
-}, [items]);
-
+  const registerVideoEl = useCallback((id: string, el: HTMLVideoElement | null) => {
+    const m = videoElsRef.current;
+    if (el) m.set(id, el);
+    else m.delete(id);
+  }, []);
 
   async function fetchHistory() {
     setHistoryErr("");
@@ -371,8 +259,6 @@ useEffect(() => {
         return;
       }
 
-      // Reuse the token/pass id provided by AuthGate whenever possible so we
-      // don't wait on another Supabase round trip.
       const { data } = await supabase.auth.getSession();
       const token = authCtx?.accessToken || data.session?.access_token || null;
 
@@ -382,28 +268,20 @@ useEffect(() => {
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
 
-      // Try /history/trimmed first (for credits), then /history/pass/:passId,
-      // then the generic /history endpoint. This ensures we actually fetch
-      // the user’s history.
       const hitHistory = async (url: string) => {
         const res = await fetch(url, { method: "GET", headers });
         const text = await res.text();
         return { res, text } as const;
       };
 
-      // Try /history/pass/:passId first (main MEGA source).
-      // If that fails, fall back to the generic /history endpoint.
       const attempts: string[] = [];
       if (passId) attempts.push(`${apiBase}/history/pass/${encodeURIComponent(passId)}`);
       attempts.push(`${apiBase}/history`);
-
 
       let resp: Response | null = null;
       let text = "";
       let json: any = null;
       let success = false;
-      // Hold the credits from earlier attempts (e.g. /history/trimmed) in case
-      // later calls with real history data don’t include them.
       let creditsFromAny: any = null;
 
       for (const url of attempts) {
@@ -417,11 +295,9 @@ useEffect(() => {
           json = null;
         }
 
-        // Record credits if present.
         if (json?.credits) creditsFromAny = json.credits;
         const hasGenerations = Array.isArray(json?.generations);
         const hasFeedbacks = Array.isArray(json?.feedbacks);
-        // Only succeed if we actually received history arrays.
         if (resp.ok && (hasGenerations || hasFeedbacks)) {
           success = true;
           break;
@@ -432,8 +308,6 @@ useEffect(() => {
         setHistoryErr("History failed: empty response");
         return;
       }
-
-      const hasGenerations = Array.isArray(json?.generations);
 
       if (!success) {
         setHistoryErr(
@@ -447,14 +321,10 @@ useEffect(() => {
         setExpiresAt(null);
         return;
       }
-// DEBUG: keep the raw backend response for inspection
-//setRawHistoryPayload(json);
 
       setGenerations(Array.isArray(json.generations) ? json.generations : []);
       setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
 
-      // Prefer credits from the current response, but fall back to any we saved
-      // earlier (e.g. from /history/trimmed).
       const creditsObj = json?.credits ?? creditsFromAny;
       const bal = creditsObj?.balance;
       setCredits(Number.isFinite(Number(bal)) ? Number(bal) : null);
@@ -487,11 +357,7 @@ useEffect(() => {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lightbox]);
 
-  // -----------------------------------------
-  // Likes: only count as "liked" when we have
-  // an EXPLICIT empty comment field.
-  // (If comment field is missing, it is NOT a like.)
-  // -----------------------------------------
+  // Likes set
   const likedUrlSet = useMemo(() => {
     const s = new Set<string>();
     for (const f of feedbacks) {
@@ -502,13 +368,11 @@ useEffect(() => {
   }, [feedbacks]);
 
   const { items, activeCount } = useMemo(() => {
-    // ✅ Merge both: generations + feedbacks
     const baseRows: Array<{ row: Row; source: "generation" | "feedback" }> = [
       ...(generations || []).map((g) => ({ row: g, source: "generation" as const })),
       ...(feedbacks || []).map((f) => ({ row: f, source: "feedback" as const })),
     ];
 
-    // 1) Map rows into UI items (only keep rows that have a URL)
     let base = baseRows
       .map(({ row: g, source }, idx) => {
         const id = pick(g, ["mg_id", "id"], `row_${idx}`);
@@ -539,22 +403,17 @@ useEffect(() => {
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
 
-        // ✅ Only render as video when we have an actual video URL.
         const looksVideoMeta =
-          contentType.includes("video") ||
-          kindHint.includes("motion") ||
-          kindHint.includes("video");
+          contentType.includes("video") || kindHint.includes("motion") || kindHint.includes("video");
 
         const looksImage = isImageUrl(out) || isImageUrl(img);
 
-        // Prefer explicit video fields, then outputUrl if it clearly looks like video or metadata says motion/video
-        // and the URL is not obviously an image.
         const videoUrl = vid || (isVideoUrl(out) ? out : looksVideoMeta && !looksImage ? out : "");
         const imageUrl = img || (!videoUrl ? out : "");
 
-        // Prefer video first
         const url = (videoUrl || imageUrl || out).trim();
         const isMotion = Boolean(videoUrl);
+
         const aspectRatio =
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
@@ -567,14 +426,22 @@ useEffect(() => {
 
         const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) || !!likeUrl : false;
 
-        return { id, createdAt, prompt, url, liked, isMotion, aspectRatio, source, sourceRank: source === "generation" ? 2 : 1 };
+        return {
+          id,
+          createdAt,
+          prompt,
+          url,
+          liked,
+          isMotion,
+          aspectRatio,
+          source,
+          sourceRank: source === "generation" ? 2 : 1,
+        };
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x && x.url));
 
-    // 2) Newest first
     base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
-    // 3) ✅ Deduplicate by URL so you don’t see the same media twice (prefer generation rows)
     const merged = new Map<string, typeof base[number]>();
     for (const it of base) {
       const key = normalizeMediaUrl(it.url);
@@ -595,7 +462,6 @@ useEffect(() => {
 
     base = Array.from(merged.values());
 
-    // 4) Add size classes and dimming flags
     const out = base.map((it, idx) => {
       const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
       const matchesLiked = !likedOnly || it.liked;
@@ -607,23 +473,99 @@ useEffect(() => {
       if (idx % 13 === 0) sizeClass = "profile-card--hero";
       else if (idx % 9 === 0) sizeClass = "profile-card--wide";
       else if (idx % 7 === 0) sizeClass = "profile-card--mini";
+
       return { ...it, sizeClass, dimmed };
     });
 
     const activeCount = out.filter((it) => !it.dimmed).length;
-
     return { items: out, activeCount };
   }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter]);
 
+  // =============================================================
+  // Grid video autoplay (IntersectionObserver)
+  // - Plays ONLY when visible
+  // - To avoid heavy CPU, plays only the MOST visible video
+  // =============================================================
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!("IntersectionObserver" in window)) return;
+
+    const els = videoElsRef.current;
+    const visible = new Map<HTMLVideoElement, number>();
+
+    const pauseAll = () => {
+      els.forEach((v) => {
+        try {
+          v.pause();
+        } catch {}
+      });
+    };
+
+    const playMostVisible = () => {
+      let best: HTMLVideoElement | null = null;
+      let bestRatio = 0;
+
+      visible.forEach((ratio, v) => {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = v;
+        }
+      });
+
+      els.forEach((v) => {
+        const shouldPlay = best === v;
+        try {
+          // Autoplay-safe for mobile/Safari
+          v.muted = true;
+
+          if (shouldPlay) {
+            if (v.paused) v.play().catch(() => {});
+          } else {
+            if (!v.paused) v.pause();
+          }
+        } catch {}
+      });
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const v = e.target as HTMLVideoElement;
+          const ratio = e.intersectionRatio || 0;
+
+          if (e.isIntersecting && ratio >= 0.35) visible.set(v, ratio);
+          else visible.delete(v);
+        }
+        playMostVisible();
+      },
+      {
+        root: null,
+        rootMargin: "200px 0px 200px 0px",
+        threshold: [0, 0.35, 0.7, 1],
+      }
+    );
+
+    els.forEach((v) => observer.observe(v));
+
+    const onVis = () => {
+      if (document.hidden) pauseAll();
+      else playMostVisible();
+    };
+    document.addEventListener("visibilitychange", onVis);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      observer.disconnect();
+      pauseAll();
+    };
+  }, [items]);
 
   const onTogglePrompt = (id: string) => {
     setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const logout = () => {
-    supabase.auth.signOut().catch(() => {
-      /* ignore sign-out errors so the page can reset instantly */
-    });
+    supabase.auth.signOut().catch(() => {});
     window.location.reload();
   };
 
@@ -641,11 +583,11 @@ useEffect(() => {
           </div>
         </div>
       ) : null}
+
       <div className="profile-shell">
         <div className="profile-header-fixed">
-          {/* ✅ Top bar (row 1) — NO LOGO LEFT */}
           <div className="profile-topbar">
-            <div /> {/* keep spacing exactly (space-between) */}
+            <div />
             <div className="profile-topbar-right">
               {onBackToStudio ? (
                 <button className="profile-toplink" type="button" onClick={onBackToStudio}>
@@ -668,7 +610,6 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* ✅ Meta strip (row 2) — Email + Credits + Expiration + Logout (not underlined) */}
           <div className="profile-meta-strip">
             <div className="profile-kv">
               <span className="profile-k">Email</span>
@@ -692,11 +633,9 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Archive head */}
           <div className="profile-archive-head">
             <div>
               <div className="profile-archive-title">Archive</div>
-
               <div className="profile-archive-sub">
                 {historyErr ? (
                   <span className="profile-error">{historyErr}</span>
@@ -710,7 +649,6 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* ✅ Filters (NO Session, NO Creation) */}
             <div className="profile-filters">
               <button
                 type="button"
@@ -739,39 +677,36 @@ useEffect(() => {
           </div>
         </div>
 
-      {/* Grid */}
-      <div className="profile-grid">
-        {items.map((it) => {
-          const expanded = Boolean(expandedPromptIds[it.id]);
-          const showViewMore = (it.prompt || "").length > 90;
+        <div className="profile-grid">
+          {items.map((it) => {
+            const expanded = Boolean(expandedPromptIds[it.id]);
+            const showViewMore = (it.prompt || "").length > 90;
 
-          return (
-            <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
-              <div className="profile-card-top">
-                <button
-                  className="profile-card-show"
-                  type="button"
-                  onClick={() => triggerDownload(it.url, it.id)}
-                  disabled={!it.url}
+            return (
+              <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
+                <div className="profile-card-top">
+                  <button
+                    className="profile-card-show"
+                    type="button"
+                    onClick={() => triggerDownload(it.url, it.id)}
+                    disabled={!it.url}
+                  >
+                    Download
+                  </button>
+                  {it.liked ? <span className="profile-card-liked">Liked</span> : null}
+                </div>
+
+                <div
+                  className="profile-card-media"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openLightbox(it.url, it.isMotion)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") openLightbox(it.url, it.isMotion);
+                  }}
                 >
-                  Download
-                </button>
-
-                {it.liked ? <span className="profile-card-liked">Liked</span> : null}
-              </div>
-
-              <div
-                className="profile-card-media"
-                role="button"
-                tabIndex={0}
-                onClick={() => openLightbox(it.url, it.isMotion)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") openLightbox(it.url, it.isMotion);
-                }}
-              >
-                {it.url ? (
-                  it.isMotion ? (
-                   it.isMotion ? (
+                  {it.url ? (
+                    it.isMotion ? (
                       <video
                         ref={(el) => registerVideoEl(it.id, el)}
                         src={it.url}
@@ -781,39 +716,32 @@ useEffect(() => {
                         preload="metadata"
                       />
                     ) : (
-
-                    <img src={it.url} alt="" loading="lazy" />
-                  )
-                ) : (
-                  <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
-                )}
-              </div>
-
-              <div className="profile-card-promptline">
-                <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
-                  {it.prompt || ""}
+                      <img src={it.url} alt="" loading="lazy" />
+                    )
+                  ) : (
+                    <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
+                  )}
                 </div>
 
-                {showViewMore ? (
-                  <button
-                    className="profile-card-viewmore"
-                    type="button"
-                    onClick={() => onTogglePrompt(it.id)}
-                  >
-                    {expanded ? "less" : "more"}
-                  </button>
-                ) : null}
-              </div>
+                <div className="profile-card-promptline">
+                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>{it.prompt || ""}</div>
 
-              <div className="profile-card-bottom">
-                <div className="profile-card-date">{fmtDateTime(it.createdAt || null)}</div>
-                <div />
+                  {showViewMore ? (
+                    <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
+                      {expanded ? "less" : "more"}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="profile-card-bottom">
+                  <div className="profile-card-date">{fmtDateTime(it.createdAt || null)}</div>
+                  <div />
+                </div>
               </div>
-            </div>
-          );
-        })}
-        <div className="profile-grid-sentinel" />
-      </div>
+            );
+          })}
+          <div className="profile-grid-sentinel" />
+        </div>
       </div>
     </>
   );
