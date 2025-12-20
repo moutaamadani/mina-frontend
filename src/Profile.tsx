@@ -728,4 +728,4 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
       </div>
     </>
   );
-}( and can we add hove state that makes other not hovered creation low opacity at 0.8
+}
