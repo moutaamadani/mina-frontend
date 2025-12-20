@@ -2938,6 +2938,22 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               onGoProfile={() => setActiveTab("profile")}
             />
             {renderStudioRight()}
+            <div className="studio-mobile-footer">
+              <button type="button" className="studio-footer-link" onClick={() => setActiveTab("profile")}>
+                Profile
+              </button>
+              <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
+                Need help?
+              </a>
+              <a
+                className="studio-footer-link"
+                href="https://www.faltastudio.com/pages/tutorial"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Tutorial
+              </a>
+            </div>
           </div>
         ) : (
             <Profile

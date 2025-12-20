@@ -624,6 +624,10 @@ video {
   height: 100dvh;
 }
 
+.studio-mobile-footer {
+  display: none;
+}
+
 /* left / right columns */
 
 .studio-left,
@@ -1361,12 +1365,24 @@ video {
   }
 
   .studio-footer-links {
-    width: 100%;
-    justify-content: flex-start;
+    display: none;
+  }
+
+  .studio-header-overlay {
     position: sticky;
-    bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 20px;
     background: var(--mina-bg);
-    padding-bottom: 10px;
+  }
+
+  .studio-mobile-footer {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    padding: 16px 20px 24px;
+    background: var(--mina-bg);
   }
 }
 

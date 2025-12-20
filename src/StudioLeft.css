@@ -608,7 +608,6 @@
   font-weight: 500;
   margin-top: auto;
   padding-top: 8px;
-  border-top: 1px solid rgba(8, 10, 0, 0.05);
 }
 
 .studio-footer-link {
@@ -620,11 +619,6 @@
   padding: 0;
   cursor: pointer;
   font: inherit;
-}
-
-.studio-footer-link--tutorial {
-  opacity: 0.4;
-  pointer-events: none;
 }
 
 .studio-footer-link:hover {
@@ -641,6 +635,10 @@
 @media (max-width: 960px) {
   .studio-left {
     padding: 80px 20px 32px;
+  }
+
+  .studio-footer-links {
+    display: none;
   }
 }
 
