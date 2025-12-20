@@ -2857,7 +2857,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
                   onClick={handleDownloadCurrentStill}
                   disabled={!currentStill && !currentMotion}
                 >
-                  Download with logo
+                  Download
                 </button>
               </>
             )}
