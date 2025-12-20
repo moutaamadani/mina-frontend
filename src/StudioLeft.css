@@ -686,3 +686,36 @@
   text-overflow: ellipsis;
 }
 
+/* =============================================================
+   Mobile layout fix: stack columns + prevent horizontal overflow
+   ============================================================= */
+
+@media (max-width: 960px) {
+  /* If your studio body is flex row, stack it */
+  .studio-body--two-col {
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  /* Make both panes full width */
+  .studio-left,
+  .studio-right {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  /* Prevent children from forcing wider-than-screen layouts */
+  .studio-left * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Pills row: keep scrolling inside the row, not the page */
+  .studio-row--pills {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
