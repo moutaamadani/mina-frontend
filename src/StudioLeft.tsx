@@ -352,7 +352,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stillError,
     onCreateStill,
 
-    motionHasImage,
+    motionHasImage: motionHasImageProp,
     motionGenerating,
     motionError,
     onCreateMotion,
@@ -370,6 +370,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   } = props;
 
   const imageCreditsOk = imageCreditsOkProp ?? true;
+  const motionHasImage = !!motionHasImageProp;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -503,7 +504,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCreditsOk = props.motionCreditsOk ?? true;
   const motionBlockReason = props.motionBlockReason || null;
 
-  const typeForMeLabel = "Type for me";
+  const typeForMeLabel = motionSuggesting ? "Typing…" : "Type for me";
 
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
@@ -519,7 +520,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const createLabel =
     createState === "creating"
       ? isMotion
-        ? "Animating…"
+        ? motionSuggesting
+          ? "Typing…"
+          : "Animating…"
         : "Creating…"
     : createState === "uploading"
       ? "Uploading…"
@@ -540,7 +543,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? wantsMatcha
         ? false
         : isMotion
-          ? !hasMotionHandler || motionSuggesting || !motionCreditsOk
+          ? !hasMotionHandler || motionSuggesting || !motionCreditsOk || !motionHasImage || !canCreateMotion
           : !canCreateStill
       : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
         (!isMotion && (!canCreateStill || !imageCreditsOk)));

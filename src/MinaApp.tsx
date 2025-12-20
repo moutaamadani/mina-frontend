@@ -929,7 +929,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
     : animateImage?.url && isHttpUrl(animateImage.url)
       ? animateImage.url
       : "";
-  const motionReferenceImageUrl = animateImageHttp || latestStill?.url || "";
+  const motionReferenceImageUrl = animateImageHttp || currentStill?.url || latestStill?.url || "";
 
   const personalityThinking = useMemo(
     () =>
