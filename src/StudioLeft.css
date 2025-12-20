@@ -648,17 +648,18 @@
 ------------------------------------------ */
 @media (max-width: 960px) {
   .studio-left {
-    padding: 80px 20px 32px;
+    padding: 20px 20px 20px;
   }
 
   .studio-footer-links {
     display: none;
+    font-size: 11px;
   }
 }
 
 @media (max-width: 480px) {
   .studio-left {
-    padding: 10px;
+    padding: 20px;
   }
 
   .studio-plusbox,
