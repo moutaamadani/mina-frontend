@@ -1118,9 +1118,13 @@ video {
 
 @media (max-width: 960px) {
   .studio-header-overlay {
-    top: 16px;
-    left: 20px;
-    right: 20px;
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 16px 20px;
+    background: var(--mina-bg);
+    z-index: 6;
   }
 
   .studio-body--two-col {
@@ -1137,7 +1141,7 @@ video {
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding: 80px 24px 40px;
+    padding: 80px 20px 40px;
   }
 
   .profile-editorial-shell {
@@ -1326,14 +1330,14 @@ video {
 }
 
 .studio-left {
-  flex: 0 0 60%;
-  max-width: 60%;
+  flex: 0 0 40%;
+  max-width: 40%;
   min-width: 0;
 }
 
 .studio-right {
-  flex: 0 0 40%;
-  max-width: 40%;
+  flex: 0 0 60%;
+  max-width: 60%;
   min-width: 0;
   padding: 0;
 }
