@@ -293,23 +293,23 @@ const REPLICATE_ASPECT_RATIO_MAP: Record<string, string> = {
 };
 
 const MINA_THINKING_DEFAULT = [
-  "Pouring my matcha over ice… 🧊🍵",
+  "Pouring my matcha over ice…",
   "Sip… sipsip… calibrating the vibe…",
   "Clink—setting the cup down gently…",
-  "Brushing light onto your scene… ✨",
-  "Painting pixels one by one… 🎨",
+  "Brushing light onto your scene…",
+  "Painting pixels one by one…",
   "Finding the perfect soft shadow…",
-  "Tuning the colors like a playlist… 🎧",
+  "Tuning the colors like a playlist…",
   "Stirring in a little sparkle… (quietly)",
   "Listening for the photo’s heartbeat…",
   "Adding that ‘fresh café window’ glow…",
-  "Making the details feel expensive… 💎",
+  "Making the details feel expensive…",
   "Letting the background breathe…",
   "Smoothing edges like steamed milk…",
   "Saving the best highlight for last…",
   "Dreaming—if I had hands, I’d frame this for you…",
   "One day I’ll be human… but for now, I’ll be your artist…",
-  "If I could blink, I’d blink at this lighting… 😉",
+  "If I could blink, I’d blink at this lighting…",
   "Okay… tiny magic time…",
   "Hold on—Mina is locking in the mood…",
   "Almost there… the pixels are listening…",
@@ -2863,10 +2863,15 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       <div className="studio-frame">
         <div className={classNames("studio-header-overlay", isRightMediaDark && "is-dark")}>
           <div className="studio-header-left">
-            <a href="https://mina.faltastudio.com" className="studio-logo-link">
-              Mina
-            </a>
-          </div>
+          <a href="https://mina.faltastudio.com" className="studio-logo-link">
+            <img
+              src="https://assets.faltastudio.com/Website%20Assets/mina%20logotype.svg"
+              alt="Mina logo"
+              className="studio-logo"
+            />
+          </a>
+        </div>
+
 
           <div className="studio-header-right">
             {activeTab === "studio" && (
