@@ -574,7 +574,7 @@ video {
 .studio-frame {
   position: relative;
   width: 100%;
-  max-width: 1440px;
+  max-width: none;
 }
 
 /* header overlay over both columns */
@@ -1326,15 +1326,16 @@ video {
 }
 
 .studio-left {
-  flex: 1 1 0;
-  max-width: 50%;
+  flex: 0 0 60%;
+  max-width: 60%;
   min-width: 0;
 }
 
 .studio-right {
-  flex: 1 1 0;
-  max-width: 50%;
+  flex: 0 0 40%;
+  max-width: 40%;
   min-width: 0;
+  padding: 0;
 }
 
 @media (max-width: 900px) {
@@ -1358,6 +1359,14 @@ video {
     max-width: 100%;
     width: 100%;
     padding: 72px 20px 32px;
+  }
+
+  .studio-right {
+    padding: 0;
+  }
+
+  .studio-right-surface {
+    min-height: 100vh;
   }
 
   .studio-right {
