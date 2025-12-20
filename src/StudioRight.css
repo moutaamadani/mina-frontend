@@ -133,6 +133,7 @@
 .studio-feedback-input--compact {
   flex: 1 1 auto;
   height: 26px;
+  min-width: 0;
 
   border: 0;
   outline: none;
@@ -186,4 +187,54 @@
 
   font-size: 11px;
   color: rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 900px) {
+  .studio-right {
+    overflow: visible;
+  }
+
+  .studio-right-surface {
+    flex: 0 0 auto;
+    height: auto;
+  }
+
+  .studio-output-click {
+    height: auto;
+  }
+
+  .studio-output-frame {
+    height: auto;
+  }
+
+  .studio-output-media {
+    height: auto;
+    object-fit: contain;
+  }
+
+  .studio-dots-row {
+    position: static;
+    padding: 12px 0 4px;
+  }
+
+  .studio-feedback-bar {
+    position: sticky;
+    bottom: 0;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px 18px;
+    background: var(--mina-bg);
+    box-shadow: 0 -1px 0 rgba(8, 10, 0, 0.06);
+  }
+
+  .studio-feedback-input--compact {
+    width: auto;
+    height: auto;
+  }
+
+  .studio-feedback-actions {
+    width: auto;
+    justify-content: flex-end;
+    flex-shrink: 0;
+  }
 }

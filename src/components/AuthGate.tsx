@@ -655,7 +655,12 @@ export function AuthGate({ children }: AuthGateProps) {
               </div>
             </div>
 
-            <div className="mina-auth-footer">{displayedUsersLabel}</div>
+            <div className="mina-auth-footer">
+              {displayedUsersLabel}
+              <a className="mina-auth-help" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
+                Need help?
+              </a>
+            </div>
           </div>
 
           <div className="mina-auth-right" />
@@ -813,7 +818,12 @@ export function AuthGate({ children }: AuthGateProps) {
             )}
           </div>
 
-          <div className="mina-auth-footer">{displayedUsersLabel}</div>
+          <div className="mina-auth-footer">
+            {displayedUsersLabel}
+            <a className="mina-auth-help" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
+              Need help?
+            </a>
+          </div>
         </div>
 
         <div className="mina-auth-right" />

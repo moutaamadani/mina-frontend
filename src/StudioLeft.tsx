@@ -1137,14 +1137,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
           Need help?
         </a>
-        <a
-          className="studio-footer-link"
-          href="https://www.faltastudio.com/pages/tutorial"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Tutorial
-        </a>
+        <span className="studio-footer-link studio-footer-link--disabled">Tutorial</span>
       </div>
     </div>
   );

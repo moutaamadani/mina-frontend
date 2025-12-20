@@ -680,17 +680,11 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                   it.isMotion ? (
                     <video
                       src={it.url}
+                      autoPlay
                       muted
                       loop
                       playsInline
                       preload="metadata"
-                      onMouseEnter={(e) => {
-                        e.currentTarget.play().catch(() => {});
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.pause();
-                        e.currentTarget.currentTime = 0;
-                      }}
                     />
                   ) : (
                     <img src={it.url} alt="" loading="lazy" />
