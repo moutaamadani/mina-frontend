@@ -1731,30 +1731,42 @@ const fetchHistory = async () => {
     const gens = history?.generations || [];
     const feedbacks = history?.feedbacks || [];
 
-    // Normalize + migrate ONLY the first visible chunk so Profile stays fast.
-    // Everything non-assets becomes assets via storeRemoteToR2.
-    const MIGRATE_FIRST_N = Math.max(30, visibleHistoryCount);
+    // Fast normalization:
+    // - ALWAYS strip signed query (cheap, no network)
+    // - ONLY storeRemoteToR2 when it's a Replicate URL (slow)
+    const isVideoUrl = (url: string) => {
+      const base = (url || "").split("?")[0].split("#")[0].toLowerCase();
+      return base.endsWith(".mp4") || base.endsWith(".webm") || base.endsWith(".mov") || base.endsWith(".m4v");
+    };
 
-    const updated = await Promise.all(
-      gens.map(async (g, idx) => {
-        const original = g.outputUrl || "";
-        const stripped = stripSignedQuery(original);
+    const strippedGens = gens.map((g) => {
+      const original = g.outputUrl || "";
+      const stable = stripSignedQuery(original);
+      return stable && stable !== original ? { ...g, outputUrl: stable } : g;
+    });
 
-        // Fast path
-        if (isAssetsUrl(stripped)) return { ...g, outputUrl: stripped };
+    const hasReplicate = strippedGens.some((g) => isReplicateUrl(g.outputUrl || ""));
 
-        // Only migrate the first N on load (avoid huge delays)
-        if (idx >= MIGRATE_FIRST_N) return { ...g, outputUrl: stripped || original };
+    const updated = hasReplicate
+      ? await Promise.all(
+          strippedGens.map(async (g) => {
+            const url = g.outputUrl || "";
+            if (!url) return g;
 
-        try {
-          const kind = isVideoUrl(stripped) ? "motions" : "generations";
-          const assetsUrl = await ensureAssetsUrl(stripped || original, kind);
-          return { ...g, outputUrl: assetsUrl || stripped || original };
-        } catch {
-          return { ...g, outputUrl: stripped || original };
-        }
-      })
-    );
+            // ✅ only do the expensive store when needed
+            if (!isReplicateUrl(url)) return g;
+
+            try {
+              const kind = isVideoUrl(url) ? "motions" : "generations";
+              const r2 = await storeRemoteToR2(url, kind);
+              const stable = stripSignedQuery(r2);
+              return stable ? { ...g, outputUrl: stable } : g;
+            } catch {
+              return g;
+            }
+          })
+        )
+      : strippedGens;
 
     historyCacheRef.current[currentPassId] = { generations: updated, feedbacks };
     historyDirtyRef.current = false;
