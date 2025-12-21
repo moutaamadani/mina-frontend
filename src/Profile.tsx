@@ -124,13 +124,6 @@ function fmtDate(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
-function fmtDateTime(iso: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString();
-}
-
 function guessDownloadExt(url: string, fallbackExt: string) {
   const lower = url.toLowerCase();
   if (lower.endsWith(".mp4")) return ".mp4";
@@ -199,6 +192,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
   const [credits, setCredits] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
 
   // Filters (ONLY these)
@@ -222,10 +217,79 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   };
   const closeLightbox = () => setLightbox(null);
 
+  const deleteItem = async (id: string) => {
+    if (!apiBase) return;
+    setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
+    setDeletingIds((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = authCtx?.accessToken || data.session?.access_token || null;
+      const passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
+
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (passId) headers["X-Mina-Pass-Id"] = passId;
+
+      const paths: string[] = [];
+      if (passId) {
+        paths.push(
+          `${apiBase}/history/pass/${encodeURIComponent(passId)}/${encodeURIComponent(id)}`,
+          `${apiBase}/history/${encodeURIComponent(id)}?passId=${encodeURIComponent(passId)}`
+        );
+      }
+      paths.push(`${apiBase}/history/${encodeURIComponent(id)}`);
+
+      let lastStatus = 0;
+      let lastText = "";
+
+      for (const url of paths) {
+        const res = await fetch(url, {
+          method: "DELETE",
+          headers,
+        });
+
+        if (res.ok) {
+          removeItemLocally(id);
+          return;
+        }
+
+        lastStatus = res.status;
+        lastText = await res.text();
+      }
+
+      const msg = lastText?.trim()
+        ? `Delete failed (${lastStatus}): ${lastText.slice(0, 180)}`
+        : `Delete failed (status ${lastStatus || "unknown"})`;
+      throw new Error(msg);
+    } catch (e: any) {
+      setDeleteErrors((prev) => ({ ...prev, [id]: e?.message || "Delete failed" }));
+    } finally {
+      setDeletingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
+
   const authCtx = useAuthContext();
   const ctxPassId = usePassId();
 
   const apiBase = useMemo(() => resolveApiBase(apiBaseUrl), [apiBaseUrl]);
+
+  const removeItemLocally = useCallback(
+    (id: string) => {
+      setGenerations((prev) => prev.filter((g, idx) => pick(g, ["mg_id", "id"], `row_${idx}`) !== id));
+      setFeedbacks((prev) => prev.filter((f, idx) => pick(f, ["mg_id", "id"], `row_${idx}`) !== id));
+      setExpandedPromptIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    },
+    [setGenerations, setFeedbacks, setExpandedPromptIds]
+  );
 
   useEffect(() => {
     if (authCtx?.session?.user?.email) {
@@ -617,12 +681,12 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
             </div>
 
             <div className="profile-kv">
-              <span className="profile-k">Credits</span>
+              <span className="profile-k">Matchas</span>
               <span className="profile-v">{credits === null ? "—" : credits}</span>
             </div>
 
             <div className="profile-kv">
-              <span className="profile-k">Expiration</span>
+              <span className="profile-k">Best before</span>
               <span className="profile-v">{expiresAt ? fmtDate(expiresAt) : "—"}</span>
             </div>
 
@@ -681,6 +745,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           {items.map((it) => {
             const expanded = Boolean(expandedPromptIds[it.id]);
             const showViewMore = (it.prompt || "").length > 90;
+            const deleting = Boolean(deletingIds[it.id]);
+            const deleteErr = deleteErrors[it.id];
 
             return (
               <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
@@ -734,8 +800,20 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                 </div>
 
                 <div className="profile-card-bottom">
-                  <div className="profile-card-date">{fmtDateTime(it.createdAt || null)}</div>
-                  <div />
+                  <button
+                    className="profile-card-delete"
+                    type="button"
+                    disabled={deleting}
+                    onClick={() => {
+                      if (deleting) return;
+                      if (!window.confirm("Delete this creation?")) return;
+                      void deleteItem(it.id);
+                    }}
+                  >
+                    {deleting ? "Deleting…" : "Delete"}
+                  </button>
+
+                  {deleteErr ? <span className="profile-card-delete-error">{deleteErr}</span> : <div />}
                 </div>
               </div>
             );

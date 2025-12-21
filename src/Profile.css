@@ -347,6 +347,11 @@
   opacity: 0.85;
 }
 
+.profile-card-delete-error {
+  font-size: 10px;
+  color: #b30000;
+}
+
 .profile-card-confirm {
   display: inline-flex;
   align-items: baseline;

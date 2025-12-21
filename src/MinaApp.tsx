@@ -2865,7 +2865,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
           <div className="studio-header-left">
           <a href="https://mina.faltastudio.com" className="studio-logo-link">
             <img
-              src="https://assets.faltastudio.com/Website%20Assets/mina%20logotype.svg"
+              src="https://assets.faltastudio.com/Website%20Assets/Black_Logo_mina.svg"
               alt="Mina logo"
               className="studio-logo"
             />
