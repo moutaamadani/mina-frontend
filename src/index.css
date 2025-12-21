@@ -298,7 +298,8 @@ video {
 }
 
 .mina-auth-brand img {
-  height: 18px;
+  height: 26px;
+  width: auto;
   display: block;
 }
 
@@ -560,6 +561,10 @@ video {
   .mina-auth-brand {
     left: 20px;
     top: 16px;
+  }
+
+  .mina-auth-brand img {
+    height: 22px;
   }
 
   .mina-auth-footer {
@@ -1070,8 +1075,9 @@ video {
 }
 
 .profile-card-prompt {
-  font-size: 15px;
-  line-height: 1.35;
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgba(8, 10, 0, 0.65);
 }
 
 .profile-card-submeta {

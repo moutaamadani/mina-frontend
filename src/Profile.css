@@ -321,32 +321,6 @@
   cursor: pointer;
 }
 
-.profile-card-bottom {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.profile-card-date {
-  font-size: 11px;
-  color: rgba(8, 10, 0, 0.45);
-}
-
-.profile-card-delete {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(8, 10, 0, 0.65);
-  cursor: pointer;
-}
-
-.profile-card-delete:hover {
-  opacity: 0.85;
-}
-
 .profile-card-confirm {
   display: inline-flex;
   align-items: baseline;

@@ -695,7 +695,7 @@ export function AuthGate({ children }: AuthGateProps) {
         <div className="mina-auth-left">
           <div className="mina-auth-brand">
             <img
-              src="https://assets.faltastudio.com/Website%20Assets/mina%20logotype.svg"
+              src="https://assets.faltastudio.com/Website%20Assets/Black_Logo_mina.svg"
               alt="Mina_logotype"
             />
           </div>

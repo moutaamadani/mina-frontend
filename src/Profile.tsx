@@ -124,13 +124,6 @@ function fmtDate(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
-function fmtDateTime(iso: string | null) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString();
-}
-
 function guessDownloadExt(url: string, fallbackExt: string) {
   const lower = url.toLowerCase();
   if (lower.endsWith(".mp4")) return ".mp4";
@@ -617,12 +610,12 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
             </div>
 
             <div className="profile-kv">
-              <span className="profile-k">Credits</span>
+              <span className="profile-k">Matchas</span>
               <span className="profile-v">{credits === null ? "—" : credits}</span>
             </div>
 
             <div className="profile-kv">
-              <span className="profile-k">Expiration</span>
+              <span className="profile-k">Best before</span>
               <span className="profile-v">{expiresAt ? fmtDate(expiresAt) : "—"}</span>
             </div>
 
@@ -731,11 +724,6 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                       {expanded ? "less" : "more"}
                     </button>
                   ) : null}
-                </div>
-
-                <div className="profile-card-bottom">
-                  <div className="profile-card-date">{fmtDateTime(it.createdAt || null)}</div>
-                  <div />
                 </div>
               </div>
             );
