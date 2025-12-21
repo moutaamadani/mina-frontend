@@ -43,6 +43,7 @@ const MMA_ENABLED =
   String(import.meta.env.VITE_MMA_ENABLED || "").toLowerCase() === "1";
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
+const RECREATE_DRAFT_KEY = "mina_recreate_draft_v1";
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
@@ -841,6 +842,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const uploadsRef = useRef(uploads);
   const customStyleHeroThumbRef = useRef<string | null>(customStyleHeroThumb);
   const customStyleImagesRef = useRef<CustomStyleImage[]>(customStyleImages);
+  const applyingRecreateDraftRef = useRef(false);
 
   // MMA SSE connection (close on new run / unmount)
   const mmaEsRef = useRef<EventSource | null>(null);
@@ -869,6 +871,8 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   }, [customStyleImages]);
 
   useEffect(() => {
+    if (applyingRecreateDraftRef.current) return;
+
     const currentBrief = brief;
     if (animateMode) {
       setStillBrief(currentBrief);
@@ -2845,6 +2849,119 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       describeMoreTimeoutRef.current = window.setTimeout(() => setShowDescribeMore(true), 1200);
     }
   };
+
+  const applyRecreateDraft = useCallback(
+    (draft: any) => {
+      if (!draft || typeof draft !== "object") return;
+
+      const mode = String(draft.mode || "").toLowerCase();
+      const briefText = String(draft.brief || "").trim();
+      if (!briefText) return;
+
+      // Map aspect ratio → aspectIndex
+      const ratioRaw =
+        String(draft?.settings?.aspect_ratio || draft?.settings?.aspectRatio || draft?.aspect_ratio || "").trim() ||
+        "";
+      const ratioNormalized = ratioRaw.includes("/") ? ratioRaw.replace("/", ":") : ratioRaw;
+      const idx = ASPECT_OPTIONS.findIndex((o) => o.ratio === ratioNormalized);
+      if (idx >= 0) setAspectIndex(idx);
+
+      // Style keys + vision
+      const nextStyleKeys =
+        (draft?.settings?.stylePresetKeys || draft?.inputs?.stylePresetKeys || []) as any;
+      if (Array.isArray(nextStyleKeys) && nextStyleKeys.length) {
+        setStylePresetKeys(nextStyleKeys.map(String));
+      }
+
+      const vision =
+        draft?.settings?.minaVisionEnabled ?? draft?.inputs?.minaVisionEnabled;
+      if (typeof vision === "boolean") setMinaVisionEnabled(vision);
+
+      // Assets → uploads buckets
+      const assets = (draft.assets || {}) as any;
+      const pickStr = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = assets?.[k];
+          if (typeof v === "string" && v.trim()) return v.trim();
+        }
+        return "";
+      };
+      const pickArr = (...keys: string[]) => {
+        for (const k of keys) {
+          const v = assets?.[k];
+          if (Array.isArray(v)) return v.filter((x) => typeof x === "string" && x.startsWith("http"));
+        }
+        return [];
+      };
+
+      // still refs
+      const productUrl = pickStr("productImageUrl", "product_image_url");
+      const logoUrl = pickStr("logoImageUrl", "logo_image_url");
+      const inspUrls = pickArr("styleImageUrls", "style_image_urls", "inspiration_image_urls");
+
+      // motion frames
+      const startUrl = pickStr("kling_start_image_url", "start_image_url", "startImageUrl");
+      const endUrl = pickStr("kling_end_image_url", "end_image_url", "endImageUrl");
+
+      const mkUrlItem = (panel: UploadPanelKey, url: string) => ({
+        id: `${panel}_recreate_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        kind: "url" as const,
+        url,
+        remoteUrl: url,
+        uploading: false,
+      });
+
+      applyingRecreateDraftRef.current = true;
+
+      // Set mode first
+      const wantMotion = mode === "motion" || mode === "video";
+      setAnimateMode(wantMotion);
+
+      // Fill text for the correct mode + textarea
+      if (wantMotion) {
+        setMotionDescription(briefText);
+      } else {
+        setStillBrief(briefText);
+      }
+      setBrief(briefText);
+
+      // Uploads
+      setUploads((prev) => ({
+        ...prev,
+        product: wantMotion
+          ? [startUrl || productUrl].filter(Boolean).slice(0, 1).map((u) => mkUrlItem("product", u))
+              .concat(endUrl ? [mkUrlItem("product", endUrl)] : [])
+          : (productUrl ? [mkUrlItem("product", productUrl)] : []),
+        logo: logoUrl ? [mkUrlItem("logo", logoUrl)] : [],
+        inspiration: inspUrls.slice(0, 4).map((u) => mkUrlItem("inspiration", u)),
+      }));
+
+      setActivePanel("product");
+      setUiStage((s) => (s < 3 ? 3 : s));
+
+      // release guard next tick
+      window.setTimeout(() => {
+        applyingRecreateDraftRef.current = false;
+      }, 0);
+    },
+    [setAnimateMode, setBrief, setStillBrief, setMotionDescription, setUploads, setStylePresetKeys, setMinaVisionEnabled]
+  );
+
+  useEffect(() => {
+    if (activeTab !== "studio") return;
+
+    try {
+      const raw = window.localStorage.getItem(RECREATE_DRAFT_KEY);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw);
+      window.localStorage.removeItem(RECREATE_DRAFT_KEY);
+
+      applyRecreateDraft(draft);
+    } catch {
+      // ignore
+    }
+  }, [activeTab, applyRecreateDraft]);
   // ========================================================================
   // [PART 12 END]
   // ========================================================================
