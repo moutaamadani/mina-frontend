@@ -192,6 +192,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
   const [credits, setCredits] = useState<number | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
 
   // Filters (ONLY these)
@@ -215,10 +217,56 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
   };
   const closeLightbox = () => setLightbox(null);
 
+  const deleteItem = async (id: string) => {
+    if (!apiBase) return;
+    setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
+    setDeletingIds((prev) => ({ ...prev, [id]: true }));
+
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = authCtx?.accessToken || data.session?.access_token || null;
+      const passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
+
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      if (passId) headers["X-Mina-Pass-Id"] = passId;
+
+      const res = await fetch(`${apiBase}/history/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers,
+      });
+
+      if (!res.ok) throw new Error(`Delete failed (status ${res.status})`);
+
+      removeItemLocally(id);
+    } catch (e: any) {
+      setDeleteErrors((prev) => ({ ...prev, [id]: e?.message || "Delete failed" }));
+    } finally {
+      setDeletingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+  };
+
   const authCtx = useAuthContext();
   const ctxPassId = usePassId();
 
   const apiBase = useMemo(() => resolveApiBase(apiBaseUrl), [apiBaseUrl]);
+
+  const removeItemLocally = useCallback(
+    (id: string) => {
+      setGenerations((prev) => prev.filter((g, idx) => pick(g, ["mg_id", "id"], `row_${idx}`) !== id));
+      setFeedbacks((prev) => prev.filter((f, idx) => pick(f, ["mg_id", "id"], `row_${idx}`) !== id));
+      setExpandedPromptIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    },
+    [setGenerations, setFeedbacks, setExpandedPromptIds]
+  );
 
   useEffect(() => {
     if (authCtx?.session?.user?.email) {
@@ -674,6 +722,8 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           {items.map((it) => {
             const expanded = Boolean(expandedPromptIds[it.id]);
             const showViewMore = (it.prompt || "").length > 90;
+            const deleting = Boolean(deletingIds[it.id]);
+            const deleteErr = deleteErrors[it.id];
 
             return (
               <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
