@@ -39,6 +39,9 @@ const API_BASE_URL = (() => {
   return "https://mina-editorial-ai-api.onrender.com";
 })();
 
+const MMA_ENABLED =
+  String(import.meta.env.VITE_MMA_ENABLED || "").toLowerCase() === "1";
+
 const LIKE_STORAGE_KEY = "minaLikedMap";
 // ============================================================================
 // [PART 1 END]
@@ -1379,156 +1382,100 @@ const apiFetch = async (path: string, init: RequestInit = {}) => {
   }
 };
 
-// ============================================================================
-// MMA helpers (create -> SSE -> fetch final)
-// ============================================================================
+type MmaCreateResponse = { generation_id: string; status: string; sse_url: string };
+type MmaStreamState = { status: string; scanLines: string[] };
 
-const parseMaybeJson = (raw: string) => {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+const mmaStreamRef = useRef<EventSource | null>(null);
+
+useEffect(() => {
+  return () => {
+    try {
+      mmaStreamRef.current?.close();
+    } catch {}
+    mmaStreamRef.current = null;
+  };
+}, []);
+
+const mmaCreateAndWait = async (
+  createPath: string,
+  body: any,
+  onProgress?: (s: MmaStreamState) => void
+): Promise<{ generationId: string }> => {
+  // create
+  const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => null);
+    throw new Error(errJson?.message || `MMA create failed (${res.status})`);
   }
-};
+  const created = (await res.json()) as MmaCreateResponse;
+  const generationId = created.generation_id;
 
-const buildMmaOverlay = (status: string, scanLines: string[], extra?: string) => {
-  const head = `Mina Mind • ${status}`;
-  const tail = scanLines.slice(-6); // keep short
-  const parts = [head, ...tail];
-  if (extra && extra.trim()) parts.push("", extra.trim());
-  return parts.join("\n").trim();
-};
-
-const closeMmaSse = () => {
-  try {
-    mmaEsRef.current?.close();
-  } catch {
-    // ignore
-  }
-  mmaEsRef.current = null;
-};
-
-const openMmaSse = (
-  ssePath: string,
-  onStatus: (status: string) => void,
-  onScanLine: (line: string) => void,
-  onDone: (status: string) => void
-) => {
-  closeMmaSse();
-
-  // NOTE: EventSource can't send Authorization headers.
-  // Your backend /mma/stream/:id should be public (or use cookie auth).
-  const url = `${API_BASE_URL}${ssePath.startsWith("/") ? ssePath : `/${ssePath}`}`;
-  const es = new EventSource(url);
-  mmaEsRef.current = es;
-
-  const handleStatus = (raw: any) => {
-    const s = typeof raw === "string" ? raw : raw?.status;
-    if (typeof s === "string" && s.trim()) onStatus(s.trim());
-  };
-
-  const handleScan = (raw: any) => {
-    const line = raw?.line || raw?.scan_line || raw?.scanLine || raw;
-    if (typeof line === "string" && line.trim()) onScanLine(line.trim());
-  };
-
-  es.addEventListener("init", (e: MessageEvent) => {
-    const d = parseMaybeJson(String(e.data || "")) || {};
-    if (Array.isArray(d.scanLines)) d.scanLines.forEach((x: any) => handleScan(x));
-    if (d.status) handleStatus(d.status);
-  });
-
-  es.addEventListener("status", (e: MessageEvent) => {
-    const d = parseMaybeJson(String(e.data || "")) ?? String(e.data || "");
-    handleStatus(d);
-  });
-
-  es.addEventListener("scan_line", (e: MessageEvent) => {
-    const d = parseMaybeJson(String(e.data || "")) ?? String(e.data || "");
-    handleScan(d);
-  });
-
-  es.addEventListener("done", (e: MessageEvent) => {
-    const d = parseMaybeJson(String(e.data || "")) ?? String(e.data || "");
-    const s = typeof d === "string" ? d : d?.status;
-    onDone(typeof s === "string" && s.trim() ? s.trim() : "done");
-    closeMmaSse();
-  });
-
-  // Fallback: some SSE servers send everything as "message"
-  es.onmessage = (e) => {
-    const d = parseMaybeJson(String(e.data || "")) ?? null;
-    if (!d) return;
-    if (d.type === "status") handleStatus(d);
-    if (d.type === "scan_line") handleScan(d);
-    if (d.type === "done") {
-      onDone(d.status || "done");
-      closeMmaSse();
-    }
-  };
-
-  es.onerror = () => {
-    // Don't hard-fail; we'll still poll the generation endpoint.
-  };
-};
-
-const fetchMmaGeneration = async (generationId: string): Promise<MmaGenerationResponse | null> => {
-  const res = await apiFetch(`/mma/generations/${encodeURIComponent(generationId)}`);
-  if (!res.ok) return null;
-  return (await res.json().catch(() => null)) as MmaGenerationResponse | null;
-};
-
-const waitForMmaDone = async (
-  generationId: string,
-  sseUrl: string,
-  timeoutMs: number,
-  onProgress: (status: string, scanLines: string[]) => void
-): Promise<MmaGenerationResponse> => {
-  const started = Date.now();
-  let status = "queued";
+  // stream
+  const sseUrl = `${API_BASE_URL}${created.sse_url}`;
   const scanLines: string[] = [];
+  let status = created.status || "queued";
 
-  const update = () => onProgress(status, scanLines);
+  // close any previous stream
+  try {
+    mmaStreamRef.current?.close();
+  } catch {}
+  mmaStreamRef.current = new EventSource(sseUrl);
 
-  // Best effort SSE (plus replay)
-  if (sseUrl) {
-    openMmaSse(
-      sseUrl,
-      (s) => {
-        status = s;
-        update();
-      },
-      (line) => {
-        scanLines.push(line);
-        update();
-      },
-      (s) => {
-        status = s || status;
-        update();
+  await new Promise<void>((resolve, reject) => {
+    const es = mmaStreamRef.current!;
+    const cleanup = () => {
+      try {
+        es.close();
+      } catch {}
+      if (mmaStreamRef.current === es) mmaStreamRef.current = null;
+    };
+
+    es.addEventListener("status", (ev: any) => {
+      try {
+        const data = JSON.parse(ev.data || "{}");
+        status = data.status || status;
+        onProgress?.({ status, scanLines: [...scanLines] });
+      } catch {}
+    });
+
+    es.addEventListener("scan_line", (ev: any) => {
+      try {
+        const data = JSON.parse(ev.data || "{}");
+        const text = String(data.text || "");
+        if (text) scanLines.push(text);
+        onProgress?.({ status, scanLines: [...scanLines] });
+      } catch {}
+    });
+
+    es.addEventListener("done", (ev: any) => {
+      try {
+        const data = JSON.parse(ev.data || "{}");
+        const finalStatus = data.status || "done";
+        cleanup();
+        if (finalStatus === "error") reject(new Error("MMA pipeline failed."));
+        else resolve();
+      } catch {
+        cleanup();
+        resolve();
       }
-    );
-  }
+    });
 
-  // Poll until done/error (works even if SSE fails)
-  while (true) {
-    if (Date.now() - started > timeoutMs) {
-      closeMmaSse();
-      throw new Error("MMA_TIMEOUT");
-    }
+    es.onerror = () => {
+      // If SSE drops, we still try to resolve by fetching generation after a short delay
+      window.setTimeout(() => {
+        cleanup();
+        resolve();
+      }, 900);
+    };
+  });
 
-    const g = await fetchMmaGeneration(generationId);
-    if (g?.status) status = g.status;
+  return { generationId };
+};
 
-    update();
-
-    if (status === "done" || status === "error") {
-      closeMmaSse();
-      return g || { generation_id: generationId, status };
-    }
-
-    // eslint-disable-next-line no-await-in-loop
-    await new Promise((r) => setTimeout(r, 1500));
-  }
+const mmaFetchResult = async (generationId: string) => {
+  const res = await apiFetch(`/mma/generations/${encodeURIComponent(generationId)}`);
+  if (!res.ok) throw new Error(`MMA fetch failed (${res.status})`);
+  return await res.json();
 };
 
 const handleCheckHealth = async () => {
@@ -1953,9 +1900,67 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
     const trimmed = stillBrief.trim();
     if (trimmed.length < 40) return;
 
-    setStillGenerating(true);
-    setStillError(null);
-    setMinaOverrideText("Mina Mind • queued");
+    if (MMA_ENABLED) {
+      const mmaBody = {
+        passId: currentPassId,
+        assets: {
+          productImageUrl: payload.productImageUrl || "",
+          logoImageUrl: payload.logoImageUrl || "",
+          styleImageUrls: payload.styleImageUrls || [],
+        },
+        inputs: {
+          brief: trimmed,
+          tone,
+          platform: currentAspect.platformKey,
+          aspect_ratio: safeAspectRatio,
+          stylePresetKeys: stylePresetKeysForApi,
+          minaVisionEnabled,
+        },
+        settings: {},
+        feedback: {},
+        prompts: {},
+      };
+
+      const { generationId } = await mmaCreateAndWait(
+        "/mma/still/create",
+        mmaBody,
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || "";
+          const overlay = `${status.toUpperCase()}\n${last}`.trim();
+          if (overlay) setMinaOverrideText(overlay);
+        }
+      );
+
+      const result = await mmaFetchResult(generationId);
+      const url = result?.outputs?.seedream_image_url;
+      if (!url) throw new Error("MMA returned no image URL.");
+
+      historyDirtyRef.current = true;
+      creditsDirtyRef.current = true;
+
+      const item: StillItem = {
+        id: generationId,
+        url,
+        createdAt: new Date().toISOString(),
+        prompt: result?.prompt || trimmed,
+        aspectRatio: currentAspect.ratio,
+      };
+
+      setStillItems((prev) => {
+        const next = [item, ...prev];
+        setStillIndex(0);
+        return next;
+      });
+
+      setActiveMediaKind("still");
+      setLastStillPrompt(item.prompt);
+      return; // ✅ stop here (skip old /editorial/generate)
+    }
+
+    const res = await apiFetch("/editorial/generate", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
 
     if (!API_BASE_URL) {
       setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
@@ -2162,9 +2167,84 @@ const handleSuggestMotion = async () => {
   const handleGenerateMotion = async () => {
     if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
-    setMotionGenerating(true);
-    setMotionError(null);
-    setMinaOverrideText("Mina Mind • queued");
+  try {
+    if (MMA_ENABLED) {
+      // Kling images: start + optional end (2nd upload)
+      const klingImgs = uploads.product
+        .map((u) => u.remoteUrl || u.url)
+        .filter((u) => isHttpUrl(u))
+        .slice(0, 2);
+
+      const mmaBody = {
+        passId: currentPassId,
+        assets: {
+          kling_images: klingImgs.length ? klingImgs : [motionReferenceImageUrl].filter(Boolean),
+          start_image_url: klingImgs[0] || motionReferenceImageUrl,
+          end_image_url: klingImgs[1] || "",
+        },
+        inputs: {
+          motionDescription: motionTextTrimmed,
+          tone,
+          platform: animateAspectOption.platformKey,
+          aspect_ratio: animateAspectOption.ratio,
+          stylePresetKeys: stylePresetKeysForApi,
+          minaVisionEnabled,
+        },
+        settings: {},
+        feedback: {},
+        prompts: {},
+      };
+
+      const { generationId } = await mmaCreateAndWait(
+        "/mma/video/animate",
+        mmaBody,
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || "";
+          const overlay = `${status.toUpperCase()}\n${last}`.trim();
+          if (overlay) setMinaOverrideText(overlay);
+        }
+      );
+
+      const result = await mmaFetchResult(generationId);
+      const url = result?.outputs?.kling_video_url;
+      if (!url) throw new Error("MMA returned no video URL.");
+
+      historyDirtyRef.current = true;
+      creditsDirtyRef.current = true;
+
+      const item: MotionItem = {
+        id: generationId,
+        url,
+        createdAt: new Date().toISOString(),
+        prompt: result?.prompt || motionTextTrimmed,
+      };
+
+      setMotionItems((prev) => {
+        const next = [item, ...prev];
+        setMotionIndex(0);
+        return next;
+      });
+
+      setActiveMediaKind("motion");
+      return; // ✅ stop here (skip old /motion/generate)
+    }
+
+    const res = await apiFetch("/motion/generate", {
+      method: "POST",
+      body: JSON.stringify({
+        passId: currentPassId,
+        sessionId: sid,
+        lastImageUrl: motionReferenceImageUrl,
+        motionDescription: motionTextTrimmed,
+        tone,
+        platform: animateAspectOption.platformKey,
+        minaVisionEnabled,
+        stylePresetKey: primaryStyleKeyForApi,
+        stylePresetKeys: stylePresetKeysForApi,
+        motionStyles: motionStyleKeys,
+        aspectRatio: animateAspectOption.ratio,
+      }),
+    });
 
     if (!currentPassId) {
       setMotionError("Missing Pass ID for MEGA session.");
@@ -2459,7 +2539,12 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 
   const capForPanel = (panel: UploadPanelKey) => {
     if (panel === "inspiration") return 4;
-    return 1; // product + logo
+    if (panel === "product") {
+      // ✅ Kling can take 2 images (start + end) in MMA animate mode
+      if (MMA_ENABLED && animateMode) return 2;
+      return 1;
+    }
+    return 1; // logo
   };
 
   const pickTargetPanel = (): UploadPanelKey =>
