@@ -775,23 +775,6 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                     </button>
                   ) : null}
                 </div>
-
-                <div className="profile-card-bottom">
-                  <button
-                    className="profile-card-delete"
-                    type="button"
-                    disabled={deleting}
-                    onClick={() => {
-                      if (deleting) return;
-                      if (!window.confirm("Delete this creation?")) return;
-                      void deleteItem(it.id);
-                    }}
-                  >
-                    {deleting ? "Deleting…" : "Delete"}
-                  </button>
-
-                  {deleteErr ? <span className="profile-card-delete-error">{deleteErr}</span> : <div />}
-                </div>
               </div>
             );
           })}
