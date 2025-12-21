@@ -378,7 +378,7 @@ const STYLE_PRESETS = [
 ] as const;
 
 const PANEL_LIMITS: Record<UploadPanelKey, number> = {
-  product: 1,
+  product: 2, // ✅ allow 2 frames (start/end) for Kling
   logo: 1,
   inspiration: 4,
 };
@@ -2170,17 +2170,17 @@ const handleSuggestMotion = async () => {
   try {
     if (MMA_ENABLED) {
       // Kling images: start + optional end (2nd upload)
-      const klingImgs = uploads.product
-        .map((u) => u.remoteUrl || u.url)
-        .filter((u) => isHttpUrl(u))
-        .slice(0, 2);
+      const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+      const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
+
+      const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
+      const endFrame = isHttpUrl(frame1) ? frame1 : "";
 
       const mmaBody = {
         passId: currentPassId,
         assets: {
-          kling_images: klingImgs.length ? klingImgs : [motionReferenceImageUrl].filter(Boolean),
-          start_image_url: klingImgs[0] || motionReferenceImageUrl,
-          end_image_url: klingImgs[1] || "",
+          kling_start_image_url: startFrame,
+          kling_end_image_url: endFrame || null,
         },
         inputs: {
           motionDescription: motionTextTrimmed,
@@ -2539,12 +2539,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 
   const capForPanel = (panel: UploadPanelKey) => {
     if (panel === "inspiration") return 4;
-    if (panel === "product") {
-      // ✅ Kling can take 2 images (start + end) in MMA animate mode
-      if (MMA_ENABLED && animateMode) return 2;
-      return 1;
-    }
-    return 1; // logo
+    if (panel === "product") return animateMode ? 2 : 1; // ✅ only 2 when animating
+    return 1;
   };
 
   const pickTargetPanel = (): UploadPanelKey =>
