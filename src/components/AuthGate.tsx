@@ -75,14 +75,6 @@ function lsSet(key: string, value: string) {
   }
 }
 
-function readStoredPassId(): string | null {
-  return lsGet(PASS_ID_STORAGE_KEY);
-}
-
-function persistPassIdLocal(passId: string) {
-  lsSet(PASS_ID_STORAGE_KEY, passId);
-}
-
 function normalizeEmail(email?: string | null) {
   const e = (email || "").trim().toLowerCase();
   return e || null;
@@ -92,16 +84,32 @@ function normalizeEmail(email?: string | null) {
 // PassId generation fallback
 // --------------------
 function generateLocalPassId(): string {
+  let id = "";
   try {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
+      id = crypto.randomUUID();
     }
-  } catch {
-    // ignore
+  } catch {}
+  if (!id) {
+    id = `${Date.now()}_${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`;
   }
-  return `pass_${Date.now()}_${Math.random().toString(16).slice(2)}${Math.random()
-    .toString(16)
-    .slice(2)}`;
+  return `pass:anon:${id}`;
+}
+
+function normalizePassId(raw?: string | null): string | null {
+  const s = (raw || "").trim();
+  if (!s) return null;
+  if (s.startsWith("pass:")) return s;
+  return `pass:anon:${s}`;
+}
+
+function readStoredPassId(): string | null {
+  return normalizePassId(lsGet(PASS_ID_STORAGE_KEY));
+}
+
+function persistPassIdLocal(passId: string) {
+  const norm = normalizePassId(passId) || generateLocalPassId();
+  lsSet(PASS_ID_STORAGE_KEY, norm);
 }
 
 // --------------------
