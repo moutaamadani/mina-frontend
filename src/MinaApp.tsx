@@ -1731,16 +1731,27 @@ const fetchHistory = async () => {
     const gens = history?.generations || [];
     const feedbacks = history?.feedbacks || [];
 
-    // Normalize links into stable R2 (but never drop items if that fails)
+    // Normalize + migrate ONLY the first visible chunk so Profile stays fast.
+    // Everything non-assets becomes assets via storeRemoteToR2.
+    const MIGRATE_FIRST_N = Math.max(30, visibleHistoryCount);
+
     const updated = await Promise.all(
-      gens.map(async (g) => {
-        const original = g.outputUrl;
+      gens.map(async (g, idx) => {
+        const original = g.outputUrl || "";
+        const stripped = stripSignedQuery(original);
+
+        // Fast path
+        if (isAssetsUrl(stripped)) return { ...g, outputUrl: stripped };
+
+        // Only migrate the first N on load (avoid huge delays)
+        if (idx >= MIGRATE_FIRST_N) return { ...g, outputUrl: stripped || original };
+
         try {
-          const r2 = await storeRemoteToR2(original, "generations");
-          const stable = stripSignedQuery(r2);
-          return { ...g, outputUrl: stable || original };
+          const kind = isVideoUrl(stripped) ? "motions" : "generations";
+          const assetsUrl = await ensureAssetsUrl(stripped || original, kind);
+          return { ...g, outputUrl: assetsUrl || stripped || original };
         } catch {
-          return { ...g, outputUrl: original };
+          return { ...g, outputUrl: stripped || original };
         }
       })
     );
@@ -1903,6 +1914,41 @@ async function uploadFileToR2(panel: UploadPanelKey, file: File): Promise<string
   const stable = normalizeNonExpiringUrl(rawUrl);
   if (!stable.startsWith("http")) throw new Error("Upload returned invalid URL");
   return stable;
+}
+
+// ==============================
+// URL policy: only show assets.faltastudio.com
+// ==============================
+const ASSETS_HOST = "assets.faltastudio.com";
+
+function isAssetsUrl(url: string) {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    return h === ASSETS_HOST || h.endsWith(`.${ASSETS_HOST}`);
+  } catch {
+    return false;
+  }
+}
+
+function isVideoUrl(url: string) {
+  const base = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return base.endsWith(".mp4") || base.endsWith(".webm") || base.endsWith(".mov") || base.endsWith(".m4v");
+}
+
+/**
+ * Ensure we ONLY ever render permanent assets URLs.
+ * - If already assets → return fast
+ * - Otherwise → storeRemoteToR2() then stripSignedQuery()
+ */
+async function ensureAssetsUrl(url: string, kind: "generations" | "motions") {
+  const stable = stripSignedQuery(url || "");
+  if (!stable) return "";
+  if (isAssetsUrl(stable)) return stable;
+
+  // Convert *any* non-assets URL into an assets URL
+  const stored = await storeRemoteToR2(stable, kind);
+  const storedStable = stripSignedQuery(stored);
+  return storedStable || stable;
 }
 
 async function storeRemoteToR2(url: string, kind: string): Promise<string> {
@@ -2109,10 +2155,7 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
       const rawUrl = final.outputs?.seedream_image_url || "";
       if (!rawUrl) throw new Error("MMA returned no image URL.");
 
-      const stableUrl = normalizeNonExpiringUrl(rawUrl);
-
-      // Optional: if some URL is still replicate-delivery, store it
-      const finalUrl = isReplicateUrl(stableUrl) ? await storeRemoteToR2(stableUrl, "generations") : stableUrl;
+      const url = await ensureAssetsUrl(rawUrl, "generations");
 
       const promptText = (final.prompt || trimmed).trim();
       setMinaOverrideText(buildMmaOverlay("done", [], `Prompt:\n${promptText.slice(0, 380)}${promptText.length > 380 ? "…" : ""}`));
@@ -2123,7 +2166,7 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 
       const item: StillItem = {
         id: generationId,
-        url: finalUrl,
+        url,
         createdAt: new Date().toISOString(),
         prompt: promptText,
         aspectRatio: currentAspect.ratio,
@@ -2372,8 +2415,7 @@ const handleSuggestMotion = async () => {
     const rawUrl = final.outputs?.kling_video_url || "";
     if (!rawUrl) throw new Error("MMA returned no video URL.");
 
-    const stableUrl = normalizeNonExpiringUrl(rawUrl);
-    const finalUrl = isReplicateUrl(stableUrl) ? await storeRemoteToR2(stableUrl, "motions") : stableUrl;
+    const url = await ensureAssetsUrl(rawUrl, "motions");
 
     const promptText = (final.prompt || motionTextTrimmed).trim();
     setMinaOverrideText(buildMmaOverlay("done", [], `Prompt:\n${promptText.slice(0, 380)}${promptText.length > 380 ? "…" : ""}`));
@@ -2384,7 +2426,7 @@ const handleSuggestMotion = async () => {
 
     const item: MotionItem = {
       id: generationId,
-      url: finalUrl,
+      url,
       createdAt: new Date().toISOString(),
       prompt: promptText,
     };
