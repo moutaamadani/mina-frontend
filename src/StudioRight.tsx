@@ -9,6 +9,35 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./StudioRight.css";
 
+async function downloadToDisk(url: string, filename: string) {
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`download_failed_${res.status}`);
+
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(objUrl);
+  } catch (e) {
+    // Fallback: try native download attribute (may open on some browsers if cross-origin blocks)
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+
 // [PART 2] Local types (kept light so the viewer understands the props)
 type StillItem = { id: string; url: string };
 type MotionItem = { id: string; url: string };
@@ -53,6 +82,7 @@ export default function StudioRight(props: StudioRightProps) {
 
   // Center click = zoom toggle (cover <-> contain)
   const [containMode, setContainMode] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   // Reset zoom when switching media
   useEffect(() => {
@@ -111,9 +141,32 @@ export default function StudioRight(props: StudioRightProps) {
             <button type="button" className="studio-output-click" onClick={handleFrameClick} aria-label="Toggle zoom / Navigate">
               <div className={`studio-output-frame ${containMode ? "is-contain" : ""}`}>
                 {media?.type === "video" ? (
-                  <video className="studio-output-media" src={media.url} autoPlay loop muted controls />
+                  <video
+                    className="studio-output-media"
+                    src={media.url}
+                    autoPlay
+                    loop
+                    muted
+                    controls
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/uri-list", media.url);
+                      e.dataTransfer.setData("text/plain", media.url);
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                  />
                 ) : (
-                  <img className="studio-output-media" src={media?.url || ""} alt="" />
+                  <img
+                    className="studio-output-media"
+                    src={media?.url || ""}
+                    alt=""
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData("text/uri-list", media?.url || "");
+                      e.dataTransfer.setData("text/plain", media?.url || "");
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                  />
                 )}
               </div>
             </button>
@@ -148,6 +201,27 @@ export default function StudioRight(props: StudioRightProps) {
           />
 
           <div className="studio-feedback-actions">
+            <button
+              type="button"
+              className="studio-action-btn"
+              disabled={!media?.url || downloading}
+              onClick={async () => {
+                if (!media?.url) return;
+                setDownloading(true);
+                try {
+                  const filename =
+                    media.type === "video"
+                      ? `mina_motion_${currentMotion?.id || "export"}.mp4`
+                      : `mina_still_${currentStill?.id || "export"}.png`;
+                  await downloadToDisk(media.url, filename);
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+            >
+              {downloading ? "Downloading…" : "Download"}
+            </button>
+
             <button type="button" className="studio-action-btn" onClick={onSubmitFeedback} disabled={!canSend}>
               Send
             </button>

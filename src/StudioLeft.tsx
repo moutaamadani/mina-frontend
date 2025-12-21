@@ -120,6 +120,8 @@ type StudioLeftProps = {
   deleteCustomStyle: (key: string) => void;
   onOpenCustomStylePanel: () => void;
 
+  onImageUrlPasted?: (url: string) => void;
+
   minaVisionEnabled: boolean;
   onToggleVision: () => void;
 
@@ -422,6 +424,49 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
 
   const getFirstImageUrl = (items: UploadItem[]) => items[0]?.remoteUrl || items[0]?.url || "";
+
+  // Prefer permanent URLs. Hide blob: previews (user asked: no blobs in UI).
+  const getDisplayUrl = (it: UploadItem) => {
+    const u = it?.remoteUrl || it?.url || "";
+    if (!u) return "";
+    if (u.startsWith("blob:")) return ""; // hide blob previews
+    return u;
+  };
+
+  // Drag/drop support:
+  // - drop files => onFilesPicked(panel, files)
+  // - drop url => onImageUrlPasted(url) (and we open the panel for UX)
+  const extractDropUrl = (e: React.DragEvent) => {
+    const dt = e.dataTransfer;
+    const u =
+      dt.getData("text/uri-list") ||
+      dt.getData("text/plain") ||
+      "";
+    const url = (u || "").trim().split("\n")[0];
+    return /^https?:\/\//i.test(url) ? url : "";
+  };
+
+  const handleDropOnPanel = (panel: UploadPanelKey) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length) {
+      props.onFilesPicked(panel, files);
+      return;
+    }
+
+    const url = extractDropUrl(e);
+    if (url) {
+      openPanel(panel);
+      props.onImageUrlPasted?.(url);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
   const productThumb = getFirstImageUrl(uploads.product);
   const logoThumb = getFirstImageUrl(uploads.logo);
   const inspirationThumb = getFirstImageUrl(uploads.inspiration);
@@ -844,7 +889,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <div className="studio-panel-title">Add your product</div>
 
                     <div className="studio-panel-row">
-                      <div className="studio-thumbs studio-thumbs--inline">
+                      <div
+                        className="studio-thumbs studio-thumbs--inline"
+                        onDragOver={handleDragOver}
+                        onDrop={handleDropOnPanel("product")}
+                      >
                         {uploads.product.map((it) => (
                           <button
                             key={it.id}
@@ -853,7 +902,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             onClick={() => removeUploadItem("product", it.id)}
                             title="Click to delete"
                           >
-                            <img src={it.remoteUrl || it.url} alt="" />
+                            {getDisplayUrl(it) ? (
+                              <img src={getDisplayUrl(it)} alt="" />
+                            ) : (
+                              <span aria-hidden="true" style={{ fontSize: 11, opacity: 0.45 }}>
+                                Uploading…
+                              </span>
+                            )}
                           </button>
                         ))}
 
@@ -877,7 +932,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <div className="studio-panel-title">Add your logo</div>
 
                     <div className="studio-panel-row">
-                      <div className="studio-thumbs studio-thumbs--inline">
+                      <div
+                        className="studio-thumbs studio-thumbs--inline"
+                        onDragOver={handleDragOver}
+                        onDrop={handleDropOnPanel("logo")}
+                      >
                         {uploads.logo.map((it) => (
                           <button
                             key={it.id}
@@ -886,7 +945,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             onClick={() => removeUploadItem("logo", it.id)}
                             title="Click to delete"
                           >
-                            <img src={it.remoteUrl || it.url} alt="" />
+                            {getDisplayUrl(it) ? (
+                              <img src={getDisplayUrl(it)} alt="" />
+                            ) : (
+                              <span aria-hidden="true" style={{ fontSize: 11, opacity: 0.45 }}>
+                                Uploading…
+                              </span>
+                            )}
                           </button>
                         ))}
 
@@ -910,7 +975,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <div className="studio-panel-title">Add inspiration</div>
 
                     <div className="studio-panel-row">
-                      <div className="studio-thumbs studio-thumbs--inline">
+                      <div
+                        className="studio-thumbs studio-thumbs--inline"
+                        onDragOver={handleDragOver}
+                        onDrop={handleDropOnPanel("inspiration")}
+                      >
                         {uploads.inspiration.map((it, idx) => (
                           <button
                             key={it.id}
@@ -933,7 +1002,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             onClick={() => removeUploadItem("inspiration", it.id)}
                             title="Click to delete • Drag to reorder"
                           >
-                            <img src={it.remoteUrl || it.url} alt="" />
+                            {getDisplayUrl(it) ? (
+                              <img src={getDisplayUrl(it)} alt="" />
+                            ) : (
+                              <span aria-hidden="true" style={{ fontSize: 11, opacity: 0.45 }}>
+                                Uploading…
+                              </span>
+                            )}
                           </button>
                         ))}
 
@@ -1017,28 +1092,57 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <>
                 <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
-                    <div className="studio-panel-title">Add your image</div>
+                    <div className="studio-panel-title">Kling frames</div>
+
+                    <div style={{ fontSize: 11, opacity: 0.55, marginTop: -4, marginBottom: 10 }}>
+                      1st = start frame (required) • 2nd = end frame (optional, pro only)
+                    </div>
 
                     <div className="studio-panel-row">
-                      <div className="studio-thumbs studio-thumbs--inline">
-                        {uploads.product.map((it) => (
+                      <div
+                        className="studio-thumbs studio-thumbs--inline"
+                        onDragOver={handleDragOver}
+                        onDrop={handleDropOnPanel("product")}
+                      >
+                        {uploads.product.map((it, idx) => (
                           <button
                             key={it.id}
                             type="button"
                             className="studio-thumb"
+                            draggable
+                            onDragStart={() => {
+                              (window as any).__minaDragIndex = idx;
+                            }}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              const from = Number((window as any).__minaDragIndex);
+                              const to = idx;
+                              if (Number.isFinite(from) && from !== to) {
+                                moveUploadItem("product", from, to);
+                              }
+                              (window as any).__minaDragIndex = null;
+                            }}
                             onClick={() => removeUploadItem("product", it.id)}
-                            title="Click to delete"
+                            title={idx === 0 ? "Start frame (required) • Click to delete • Drag to reorder" : "End frame (optional) • Click to delete • Drag to reorder"}
                           >
-                            <img src={it.remoteUrl || it.url} alt="" />
+                            {getDisplayUrl(it) ? (
+                              <img src={getDisplayUrl(it)} alt="" />
+                            ) : (
+                              <span aria-hidden="true" style={{ fontSize: 11, opacity: 0.45 }}>
+                                Uploading…
+                              </span>
+                            )}
                           </button>
                         ))}
 
-                        {uploads.product.length === 0 && (
+                        {uploads.product.length < 2 && (
                           <button
                             type="button"
                             className="studio-plusbox studio-plusbox--inline"
                             onClick={() => triggerPick("product")}
-                            title="Add image"
+                            title={uploads.product.length === 0 ? "Add start frame" : "Add end frame (optional)"}
                           >
                             <span aria-hidden="true">+</span>
                           </button>
@@ -1114,6 +1218,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           ref={productInputRef}
           type="file"
           accept="image/*"
+          multiple={isMotion}
           style={{ display: "none" }}
           onChange={(e) => handleFileInput("product", e)}
         />
