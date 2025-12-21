@@ -143,15 +143,38 @@ function buildDownloadName(url: string) {
   return base.endsWith(ext) ? base : `${base}${ext}`;
 }
 
-function triggerDownload(url: string, id?: string | null) {
+async function triggerDownload(url: string, id?: string | null) {
   if (!url) return;
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = buildDownloadName(url);
-  if (id) a.setAttribute("data-id", id);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+
+  // Try fetch->blob so it saves directly (no navigation)
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`download_failed_${res.status}`);
+
+    const blob = await res.blob();
+    const objUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = buildDownloadName(url);
+    if (id) a.setAttribute("data-id", id);
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(objUrl);
+  } catch {
+    // Fallback: still try download attr (may open on some origins)
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = buildDownloadName(url);
+    if (id) a.setAttribute("data-id", id);
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
 }
 
 const normalizeBase = (raw?: string | null) => {
@@ -175,6 +198,139 @@ const resolveApiBase = (override?: string | null) => {
 
   return "https://mina-editorial-ai-api.onrender.com/api";
 };
+
+const PROFILE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes "fresh"
+const PROFILE_CACHE_KEY_PREFIX = "mina_profile_cache_v1:";
+const RECREATE_DRAFT_KEY = "mina_recreate_draft_v1";
+
+function cacheKey(apiBase: string, passId: string) {
+  const a = (apiBase || "").trim();
+  const p = (passId || "").trim();
+  if (!a || !p) return "";
+  return `${PROFILE_CACHE_KEY_PREFIX}${a}::${p}`;
+}
+
+function readCache(key: string) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.ts !== "number") return null;
+    return parsed as { ts: number; data: any };
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(key: string, data: any) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+  } catch {}
+}
+
+function getMmaVars(row: Row) {
+  const v = (row as any)?.mg_mma_vars ?? (row as any)?.mma_vars ?? null;
+  return v && typeof v === "object" ? v : null;
+}
+
+function pickAny(obj: any, keys: string[], fallback = ""): string {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
+  }
+  return fallback;
+}
+
+function summarizeInputs(row: Row, isMotion: boolean, aspectRatio: string) {
+  const vars = getMmaVars(row);
+  const inputs = vars?.inputs || {};
+  const assets = vars?.assets || {};
+  const settings = vars?.settings || {};
+
+  // user brief (what they typed in textarea)
+  const userBrief = (
+    pickAny(inputs, [
+      "userBrief",
+      "brief",
+      "motion_user_brief",
+      "motionUserBrief",
+      "motionDescription",
+      "motion_description",
+      "prompt",
+    ]) || ""
+  ).trim();
+
+  // style text (if you store it)
+  const style = pickAny(inputs, ["style"], "").trim();
+  const movementStyle = pickAny(inputs, ["movement_style", "movementStyle"], "").trim();
+
+  // refs
+  const productUrl = pickAny(assets, ["productImageUrl", "product_image_url"], "").trim();
+  const logoUrl = pickAny(assets, ["logoImageUrl", "logo_image_url"], "").trim();
+  const inspArr = (assets.styleImageUrls || assets.style_image_urls) as any;
+  const inspCount = Array.isArray(inspArr)
+    ? inspArr.filter((x) => typeof x === "string" && x.startsWith("http")).length
+    : 0;
+
+  // kling frames
+  const start = pickAny(assets, ["start_image_url", "startImageUrl"], "").trim();
+  const end = pickAny(assets, ["end_image_url", "endImageUrl"], "").trim();
+
+  const metaParts: string[] = [];
+
+  if (!isMotion) {
+    const refs: string[] = [];
+    if (productUrl) refs.push("product");
+    if (logoUrl) refs.push("logo");
+    if (inspCount) refs.push(`${inspCount} insp`);
+    if (refs.length) metaParts.push(`Refs: ${refs.join(" + ")}`);
+  } else {
+    const frames: string[] = [];
+    if (start) frames.push("start");
+    if (end) frames.push("end");
+    if (frames.length) metaParts.push(`Frames: ${frames.join(" + ")}`);
+  }
+
+  if (style) metaParts.push(`Style: ${style}`);
+  if (isMotion && movementStyle) metaParts.push(`Motion: ${movementStyle}`);
+
+  const ratio =
+    aspectRatio ||
+    pickAny(settings, ["aspect_ratio", "aspectRatio"], "").trim() ||
+    pickAny(inputs, ["aspect_ratio", "aspectRatio"], "").trim();
+
+  if (ratio) metaParts.push(`Ratio: ${ratio}`);
+
+  // Mina prompt (the model prompt you stored)
+  const minaPrompt =
+    pick(row, ["mg_prompt", "prompt"], "").trim() ||
+    pickAny(vars?.prompts || {}, [isMotion ? "motion_prompt" : "clean_prompt"], "").trim();
+
+  return {
+    userBrief,
+    metaLine: metaParts.join(" • "),
+    minaPrompt,
+    vars,
+  };
+}
+
+function buildRecreateDraft(row: Row, isMotion: boolean) {
+  const vars = getMmaVars(row);
+  const inputs = vars?.inputs || {};
+  const assets = vars?.assets || {};
+  const settings = vars?.settings || {};
+
+  // Keep it simple: brief + assets urls + basic settings
+  return {
+    v: 1,
+    ts: Date.now(),
+    mode: isMotion ? "motion" : "still",
+    brief: pickAny(inputs, ["userBrief", "brief", "motion_user_brief", "motionDescription", "prompt"], "").trim(),
+    assets,
+    settings,
+  };
+}
 
 type ProfileProps = {
   passId?: string | null;
@@ -305,6 +461,34 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
       const passId = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
 
+      // ---- FAST PATH: session cache (show instantly) ----
+      const ck = cacheKey(apiBase, passId);
+      const cached = ck ? readCache(ck) : null;
+
+      const applyJson = (j: any) => {
+        setGenerations(Array.isArray(j?.generations) ? j.generations : []);
+        setFeedbacks(Array.isArray(j?.feedbacks) ? j.feedbacks : []);
+
+        const creditsObj = j?.credits ?? null;
+        const bal = creditsObj?.balance;
+        setCredits(Number.isFinite(Number(bal)) ? Number(bal) : null);
+
+        const exp = creditsObj?.expiresAt ?? null;
+        setExpiresAt(exp ? String(exp) : null);
+      };
+
+      if (cached?.data) {
+        applyJson(cached.data);
+
+        const fresh = Date.now() - cached.ts < PROFILE_CACHE_TTL_MS;
+        if (fresh) {
+          // Skip refetch completely if fresh
+          setLoadingHistory(false);
+          return;
+        }
+        // If stale: keep showing cached while we revalidate below
+      }
+
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
       if (passId) headers["X-Mina-Pass-Id"] = passId;
@@ -365,6 +549,11 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
 
       setGenerations(Array.isArray(json.generations) ? json.generations : []);
       setFeedbacks(Array.isArray(json.feedbacks) ? json.feedbacks : []);
+      {
+        const passIdForCache = (propPassId || ctxPassId || localStorage.getItem("minaPassId") || "").trim();
+        const ck2 = cacheKey(apiBase, passIdForCache);
+        if (ck2) writeCache(ck2, json);
+      }
 
       const creditsObj = json?.credits ?? creditsFromAny;
       const bal = creditsObj?.balance;
@@ -423,12 +612,14 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const meta = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
         const gptMeta = (g as any)?.gpt ?? null;
 
-        const prompt =
+        const fallbackPrompt =
           pick(g, ["mg_user_prompt", "userPrompt", "promptUser", "prompt_raw", "promptOriginal"], "") ||
           pick(payload, ["userPrompt", "user_prompt", "userMessage", "prompt"], "") ||
           pick(gptMeta, ["userMessage", "input"], "") ||
           pick(g, ["mg_prompt", "prompt"], "") ||
           "";
+
+        // We'll compute isMotion first (URL-based), then pull MMA vars summary
 
         const likeUrl = source === "feedback" ? findLikeUrl(g) : "";
         const isLikeOnly = source === "feedback" && !!likeUrl;
@@ -455,6 +646,9 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
         const url = (videoUrl || imageUrl || out).trim();
         const isMotion = Boolean(videoUrl);
 
+        const summary = summarizeInputs(g, isMotion, "");
+        const prompt = summary.userBrief || fallbackPrompt;
+
         const aspectRatio =
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
@@ -471,6 +665,10 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
           id,
           createdAt,
           prompt,
+          userBrief: prompt,
+          metaLine: summary.metaLine,
+          minaPrompt: summary.minaPrompt,
+          rawRow: g,
           url,
           liked,
           isMotion,
@@ -736,7 +934,20 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                   >
                     Download
                   </button>
+
                   {it.liked ? <span className="profile-card-liked">Liked</span> : null}
+
+                  {/* Plain minus delete (top-right) */}
+                  <button
+                    className="profile-card-show"
+                    type="button"
+                    style={{ marginLeft: "auto", fontWeight: 800 }}
+                    onClick={() => deleteItem(it.id)}
+                    disabled={Boolean(deletingIds[it.id])}
+                    title="Delete"
+                  >
+                    −
+                  </button>
                 </div>
 
                 <div
@@ -767,12 +978,57 @@ export default function Profile({ passId: propPassId, apiBaseUrl, onBackToStudio
                 </div>
 
                 <div className="profile-card-promptline">
-                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>{it.prompt || ""}</div>
+                  {/* What the USER typed (preferred), not the Mina prompt */}
+                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
+                    {it.userBrief || it.prompt || ""}
+                  </div>
+
+                  {/* Small meta line: refs/styles/ratio */}
+                  {it.metaLine ? (
+                    <div style={{ marginTop: 6, fontSize: 11, opacity: 0.55 }}>
+                      {it.metaLine}
+                    </div>
+                  ) : null}
 
                   {showViewMore ? (
                     <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
                       {expanded ? "less" : "more"}
                     </button>
+                  ) : null}
+
+                  {/* Expanded: show Mina prompt + Re-create */}
+                  {expanded ? (
+                    <div style={{ marginTop: 8, fontSize: 11, opacity: 0.65, lineHeight: 1.3 }}>
+                      {it.minaPrompt ? (
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ fontWeight: 800 }}>Mina prompt:</span> {it.minaPrompt}
+                        </div>
+                      ) : null}
+
+                      <button
+                        className="profile-card-viewmore"
+                        type="button"
+                        onClick={() => {
+                          try {
+                            const draft = buildRecreateDraft((it as any).rawRow, it.isMotion);
+                            localStorage.setItem(RECREATE_DRAFT_KEY, JSON.stringify(draft));
+                          } catch {}
+
+                          // go back and let Studio read the draft
+                          if (onBackToStudio) onBackToStudio();
+                          else window.location.href = "/studio";
+                        }}
+                      >
+                        Re-create
+                      </button>
+                    </div>
+                  ) : null}
+
+                  {/* Delete error (if any) */}
+                  {deleteErr ? (
+                    <div style={{ marginTop: 6, fontSize: 11, opacity: 0.55 }}>
+                      {deleteErr}
+                    </div>
                   ) : null}
                 </div>
               </div>
