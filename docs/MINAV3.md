@@ -4,7 +4,672 @@
 **Storage + DB model:** MEGA-only (3 tables) + Cloudflare R2 public URLs
 **AI pipeline:** MMA (Mina Mind API) orchestrates scans → prompt-building → generation → post-scan → feedback loops
 
+# MINAV3.me — User Scenario with Routes + Parameters (MEGA-only + MMA)
+
+## Conventions (important)
+
+### Identity (Pass ID)
+
+Backend resolves the user identity in this priority:
+
+1. `body.customerId` (if present)
+2. `X-Mina-Pass-Id` header
+3. fallback `anonymous`
+
+✅ **Frontend should always send**:
+
+* `X-Mina-Pass-Id: <passId>` once known
+* plus `X-Session-Id: <sessionUuid>` if you use it in the client
+
+### Session UUID format
+
+Use `sess_<uuid>` (the backend normalizes this).
+
+### Matcha (credits)
+
+* UI uses **matcha** (not matchas).
+* If matcha is 0, buttons become **I need matcha** and redirect to Shopify.
+* Pack quantity counts:
+
+  * Example: `MINA-50 x 4` → **50 * 4 = 200 matcha**
+
+### Assets rule
+
+All stored media referenced in MEGA should end up as **permanent public URLs** (R2 public).
+Frontend can upload via signed URLs.
+
 ---
+
+## 0) Boot / Health
+
+### 0.1 Health check
+
+**GET** `/health`
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+---
+
+## 1) Login (Frontend auth) + “ensure user” in backend
+
+Login itself is handled by the frontend (Google OAuth or email OTP).
+After login success, the frontend should **bind** the user to backend identity.
+
+### 1.1 Ensure / load profile
+
+**GET** `/me`
+
+**Headers**
+
+* `X-Mina-Pass-Id: pass:user:<uuid>` OR `pass:shopify:<id>` OR `pass:anon:<uuid>`
+
+**Response (example)**
+
+```json
+{
+  "passId": "pass:user:7c0e...",
+  "email": "user@mail.com",
+  "credits": 12,
+  "expiresAt": "2026-01-21T10:00:00.000Z",
+  "lastActive": "2025-12-22T08:10:00.000Z"
+}
+```
+
+✅ Backend behavior:
+
+* Upserts `MEGA_CUSTOMERS` if missing
+* Updates `mg_last_active` (last seen)
+
+---
+
+## 2) Start a Studio session
+
+### 2.1 Start session
+
+**POST** `/sessions/start`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "platform": "web",
+  "clientVersion": "3.0.0",
+  "meta": { "timezone": "Asia/Dubai" }
+}
+```
+
+**Response**
+
+```json
+{
+  "sessionId": "sess_2f2d0b2c-0f9d-4e8c-9a1a-6b2e7d4bbd35"
+}
+```
+
+✅ Backend writes a `MEGA_GENERATIONS` record:
+
+* `mg_record_type="session"`
+* `mg_id="session:<sessionId>"`
+
+---
+
+## 3) Check matcha balance (gating Create/Animate)
+
+### 3.1 Read balance
+
+**GET** `/credits/balance`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Response**
+
+```json
+{
+  "credits": 0,
+  "expiresAt": "2026-01-21T10:00:00.000Z"
+}
+```
+
+### 3.2 UI logic
+
+* If `credits <= 0`:
+
+  * Still button: **I need matcha**
+  * Animate button: **I need matcha**
+  * Clicking redirects user to Shopify checkout page (frontend controlled)
+
+---
+
+## 4) Buying matcha (Shopify)
+
+Frontend sends user to Shopify checkout (not your API).
+When order completes, Shopify calls your webhook.
+
+### 4.1 Shopify webhook (credits increment + tag user)
+
+**POST** `/api/credits/shopify-order`
+
+> Uses `express.raw` + HMAC verify on backend
+
+**Body**
+
+* Shopify order payload (raw)
+
+✅ Backend behavior:
+
+* Compute credits from SKU * quantity
+  Example: `MINA-50 x 4` → `+200`
+* Write credit transaction row in `MEGA_GENERATIONS`
+* Update `MEGA_CUSTOMERS.mg_credits`
+* Set `mg_expires_at = now + 30 days` (rolling from last purchase)
+* Tag Shopify customer as `Mina-users`
+
+### 4.2 Frontend after checkout
+
+After returning from Shopify, frontend should poll:
+**GET** `/credits/balance`
+until credits reflect the purchase.
+
+---
+
+## 5) Upload assets (3 supported ways)
+
+You typically need permanent URLs for:
+
+* product image
+* logo
+* inspiration images (0–4)
+* (later) input still for animation
+
+### Option A — Signed upload to R2 (recommended)
+
+#### 5.A.1 Request signed upload URL
+
+**POST** `/api/r2/upload-signed`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "contentType": "image/png",
+  "fileName": "product.png",
+  "folder": "user_uploads"
+}
+```
+
+**Response**
+
+```json
+{
+  "uploadUrl": "https://s3-compatible-presigned-url...",
+  "publicUrl": "https://<your-r2-public-domain>/user_uploads/<key>.png",
+  "key": "user_uploads/<key>.png",
+  "expiresInSec": 600
+}
+```
+
+Then frontend uploads file bytes via:
+**PUT** `<uploadUrl>` with `Content-Type: image/png`
+
+✅ After upload completes, use `publicUrl` as the asset URL in generation requests.
+
+---
+
+### Option B — Store a remote image (server pulls → R2)
+
+#### 5.B.1 Store remote image via signed-store endpoint
+
+**POST** `/api/r2/store-remote-signed`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "sourceUrl": "https://example.com/image.jpg",
+  "folder": "user_uploads"
+}
+```
+
+**Response**
+
+```json
+{
+  "publicUrl": "https://<r2-public>/user_uploads/<key>.jpg",
+  "key": "user_uploads/<key>.jpg"
+}
+```
+
+---
+
+### Option C — Store remote generation (legacy helper)
+
+**POST** `/store-remote-generation`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "url": "https://example.com/image.jpg",
+  "type": "image"
+}
+```
+
+**Response**
+
+```json
+{ "publicUrl": "https://<r2-public>/...jpg" }
+```
+
+---
+
+## 6) Still Image: Create (MMA → Seedream)
+
+### 6.1 Create still generation
+
+**POST** `/editorial/generate`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body (example)**
+
+```json
+{
+  "sessionId": "sess_2f2d0b2c-0f9d-4e8c-9a1a-6b2e7d4bbd35",
+
+  "brief": "Luxury perfume bottle on marble, soft shadows, premium editorial look.",
+  "style": "minimal", 
+  "ratio": "1:1",
+
+  "assets": {
+    "productImageUrl": "https://<r2-public>/user_uploads/product.png",
+    "logoUrl": "https://<r2-public>/user_uploads/logo.png",
+    "inspirationUrls": [
+      "https://<r2-public>/user_uploads/insp1.jpg",
+      "https://<r2-public>/user_uploads/insp2.jpg"
+    ]
+  },
+
+  "settings": {
+    "seedream": {
+      "quality": "high",
+      "guidance": 7
+    }
+  },
+
+  "ui": {
+    "visionIntelligence": true,
+    "styleNoneAllowed": true
+  }
+}
+```
+
+**Response (example)**
+
+```json
+{
+  "generationId": "gen_still_001",
+  "status": "done",
+  "userMessage": "Got it — I built a clean prompt and generated your still.",
+  "outputUrl": "https://<r2-public>/generations/gen_still_001.png",
+  "creditsAfter": 11
+}
+```
+
+✅ Backend behavior:
+
+* Checks credits; if 0 returns an error the UI maps to “I need matcha”
+* MMA runs scan steps (caption product/logo/inspo), reads history/likes, builds prompt
+* Stores all steps + vars in MEGA tables
+* Stores final image on R2 public URL
+* Decrements **-1 matcha**
+
+---
+
+## 7) Still Image: Like / Download / Feedback / Tweak loop
+
+### 7.1 Like an image
+
+**POST** `/feedback/like`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "generationId": "gen_still_001",
+  "value": true,
+  "context": "studio_right_panel"
+}
+```
+
+**Response**
+
+```json
+{ "ok": true }
+```
+
+### 7.2 Download event (recommended to track)
+
+If you track downloads through the same route:
+**POST** `/feedback/like`
+
+**Body**
+
+```json
+{
+  "generationId": "gen_still_001",
+  "event": "download",
+  "context": "studio_right_panel"
+}
+```
+
+> If your backend currently only supports like/unlike here, keep download as a no-op or log it in `mg_meta` as an MMA event.
+
+---
+
+### 7.3 Tweak (still) — create a new still using feedback
+
+There isn’t a dedicated `/editorial/tweak` route in the list, so the tweak loop is implemented by calling **the same generation route** again with a feedback payload (backend interprets it as “tweak”).
+
+**POST** `/editorial/generate`
+
+**Body**
+
+```json
+{
+  "sessionId": "sess_...",
+  "parentGenerationId": "gen_still_001",
+
+  "brief": "Luxury perfume bottle on marble, soft shadows, premium editorial look.",
+  "style": "minimal",
+  "ratio": "1:1",
+
+  "assets": {
+    "productImageUrl": "https://<r2-public>/user_uploads/product.png",
+    "logoUrl": "https://<r2-public>/user_uploads/logo.png"
+  },
+
+  "feedback": {
+    "text": "I hate the light you added. Make lighting softer and more natural.",
+    "mode": "still"
+  }
+}
+```
+
+**Response**
+
+```json
+{
+  "generationId": "gen_still_002",
+  "status": "done",
+  "outputUrl": "https://<r2-public>/generations/gen_still_002.png",
+  "creditsAfter": 10
+}
+```
+
+✅ Backend behavior:
+
+* Uses previous prompt + output + feedback to generate a new prompt
+* Regenerates with same settings
+* Charges **-1 matcha**
+* Stores immutable new generation row + mma_step rows + mma_event (feedback)
+
+---
+
+## 8) Animation Studio: “Type for me” + Animate (MMA → Kling)
+
+### 8.1 If user clicks Animate with no image
+
+Frontend rule:
+
+* If no `inputStillUrl`, disable Type-for-me
+* Animate button state: **I need an image**
+
+### 8.2 Optional: Type for me suggestion (motion prompt helper)
+
+**POST** `/motion/suggest`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "inputStillUrl": "https://<r2-public>/generations/gen_still_002.png",
+  "movementStyle": "cinematic_smooth",
+  "userMotionBrief": "Slow push-in and subtle parallax.",
+  "maxPromptComplexity": "simple_english"
+}
+```
+
+**Response**
+
+```json
+{
+  "motionPrompt": "Slow cinematic camera push-in. Gentle parallax. Keep lighting stable and natural."
+}
+```
+
+---
+
+### 8.3 Generate the video
+
+**POST** `/motion/generate`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Body**
+
+```json
+{
+  "sessionId": "sess_...",
+  "inputStillUrl": "https://<r2-public>/generations/gen_still_002.png",
+
+  "movementStyle": "cinematic_smooth",
+  "motionPrompt": "Slow cinematic camera push-in. Gentle parallax. Keep lighting stable and natural.",
+
+  "ratio": "1:1",
+  "settings": {
+    "kling": {
+      "durationSec": 5,
+      "fps": 24
+    }
+  }
+}
+```
+
+**Response**
+
+```json
+{
+  "generationId": "gen_video_001",
+  "status": "done",
+  "outputUrl": "https://<r2-public>/generations/gen_video_001.mp4",
+  "creditsAfter": 9
+}
+```
+
+✅ Backend behavior:
+
+* Runs scan on the input still if needed
+* Builds Kling-ready prompt (or uses Type-for-me output)
+* Stores steps + vars in MEGA
+* Stores final MP4 to R2 public URL
+* Decrements matcha by the configured motion cost (commonly -1 or runtime-configured)
+
+---
+
+## 9) Video feedback (current UX rule: “Send” only)
+
+You said: *“we are not tweaking videos”*.
+
+So in UI:
+
+* Instead of “Tweak”, show **Send** feedback only (no regen)
+
+Use:
+**POST** `/feedback/like`
+
+**Body**
+
+```json
+{
+  "generationId": "gen_video_001",
+  "event": "feedback",
+  "text": "Nice motion but too fast. Next time more subtle.",
+  "context": "animation_right_panel"
+}
+```
+
+(Backend stores this as an MMA event; no new generation.)
+
+---
+
+## 10) History / Archive / Profile screens
+
+### 10.1 Load my generations (current user)
+
+**GET** `/history`
+
+**Headers**
+
+* `X-Mina-Pass-Id: <passId>`
+
+**Response**
+
+```json
+{
+  "items": [
+    {
+      "generationId": "gen_still_002",
+      "type": "image",
+      "outputUrl": "https://...",
+      "createdAt": "2025-12-22T08:20:00.000Z"
+    },
+    {
+      "generationId": "gen_video_001",
+      "type": "motion",
+      "outputUrl": "https://...",
+      "createdAt": "2025-12-22T08:30:00.000Z"
+    }
+  ],
+  "nextCursor": "..."
+}
+```
+
+### 10.2 Load history for a specific Pass ID (admin / debugging)
+
+**GET** `/history/pass/:passId`
+
+---
+
+## 11) Admin routes (observability)
+
+(Requires admin auth)
+
+* **GET** `/admin/summary`
+* **GET** `/admin/customers`
+* **GET** `/admin/mega/parity`
+* **POST** `/admin/credits/adjust`
+* **GET/POST** `/admin/config/runtime`
+* **POST** `/admin/config/runtime/unset`
+* **POST** `/admin/config/runtime/reload`
+
+Admin can inspect:
+
+* all generations
+* mma_step trace per generation
+* mma_event stream (likes/download/feedback)
+* credit transactions and reconciliation
+
+---
+
+# Full Scenario (one linear story)
+
+1. **GET** `/health`
+2. User signs in (Google/OTP on frontend)
+3. **GET** `/me` (with `X-Mina-Pass-Id`) → ensure customer + last seen
+4. **POST** `/sessions/start` → `sess_...`
+5. **GET** `/credits/balance`
+
+   * if 0 → UI shows **I need matcha** → user goes Shopify
+6. Shopify webhook **POST** `/api/credits/shopify-order` adds matcha (`MINA-50 x 4` → +200)
+7. Frontend polls **GET** `/credits/balance` until updated
+8. Upload product/logo/inspo via:
+
+   * **POST** `/api/r2/upload-signed` then PUT to R2 (repeat per asset), OR
+   * **POST** `/api/r2/store-remote-signed` if pasted URL
+9. **POST** `/editorial/generate` → still output, -1 matcha
+10. **POST** `/feedback/like` (like) and/or (download event)
+11. **POST** `/editorial/generate` again with `parentGenerationId` + `feedback.text` → tweak still, -1 matcha
+12. **POST** `/motion/suggest` (Type for me) → simple motion prompt
+13. **POST** `/motion/generate` → video output, -matcha (configured)
+14. (No video tweak) → **POST** `/feedback/like` with `event="feedback"` as send-only
+15. **GET** `/history` → archive and recreate actions
+
+---
+
+## Minimal “request shapes” frontend should standardize
+
+### Headers
+
+* `X-Mina-Pass-Id: <passId>`
+* (optional) `X-Session-Id: sess_<uuid>`
+
+### Still create
+
+* `brief`, `style`, `ratio`
+* `assets.productImageUrl?`, `assets.logoUrl?`, `assets.inspirationUrls?[]`
+* `settings.seedream?`
+* `sessionId`
+
+### Still tweak
+
+* Same as still create plus:
+* `parentGenerationId`
+* `feedback.text`, `feedback.mode="still"`
+
+### Motion
+
+* `inputStillUrl` (required)
+* `movementStyle`, `motionPrompt`
+* `settings.kling?`, `ratio`, `sessionId`
+
+---
+
+If you want, I can also generate a **Postman collection JSON** for these routes (ready to import), using your headers and example payloads.
+
 
 ## 1) What MINAV3.me is
 
