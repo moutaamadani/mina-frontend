@@ -123,6 +123,24 @@ type AuthCallbackParams = {
   hasCallbackParams: boolean;
 };
 
+// Supabase / OAuth / magic links can include these in query or hash.
+// We clear them from the URL to prevent sticky loops and to avoid leaving tokens
+// in the address bar.
+const CALLBACK_KEYS = [
+  "code",
+  "error",
+  "error_code",
+  "error_description",
+  // Supabase / magic link / provider tokens
+  "access_token",
+  "refresh_token",
+  "token_type",
+  "expires_in",
+  "type",
+  "provider_token",
+  "provider_refresh_token",
+] as const;
+
 /**
  * Supabase may append params in query OR hash. Your example had both.
  * We support:
@@ -153,7 +171,7 @@ function readAuthCallbackParams(): AuthCallbackParams {
     const errorCode = get("error_code");
     const errorDescription = get("error_description");
 
-    const hasCallbackParams = !!(code || error || errorCode || errorDescription);
+    const hasCallbackParams = CALLBACK_KEYS.some((k) => q.has(k) || (h?.has(k) ?? false));
 
     return { code, error, errorCode, errorDescription, hasCallbackParams };
   } catch {
@@ -168,7 +186,7 @@ function clearAuthCallbackParamsFromUrl() {
     const url = new URL(window.location.href);
 
     // Remove from query
-    const keys = ["code", "error", "error_code", "error_description"];
+    const keys = [...CALLBACK_KEYS];
     keys.forEach((k) => url.searchParams.delete(k));
 
     // Remove from hash only if it looks like params (not "#/route")
@@ -324,7 +342,8 @@ function getInboxHref(email: string | null): string {
   if (domain === "gmail.com") return "https://mail.google.com/mail/u/0/#inbox";
   if (["outlook.com", "hotmail.com", "live.com"].includes(domain)) return "https://outlook.live.com/mail/0/";
   if (domain === "yahoo.com") return "https://mail.yahoo.com/d/folders/1";
-  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com")) return "https://www.icloud.com/mail";
+  if (domain === "icloud.com" || domain.endsWith(".me.com") || domain.endsWith(".mac.com"))
+    return "https://www.icloud.com/mail";
 
   return `mailto:${email}`;
 }
@@ -576,6 +595,7 @@ export function AuthGate({ children }: AuthGateProps) {
     if (!trimmed) return;
 
     setError(null);
+    setAuthCallbackError(null);
     setLoading(true);
 
     const pid = (passId ?? readStoredPassId() ?? generateLocalPassId()).trim();
@@ -606,6 +626,7 @@ export function AuthGate({ children }: AuthGateProps) {
     if (googleOpening || loading || initializing || handlingAuthCallback) return;
 
     setError(null);
+    setAuthCallbackError(null);
     setGoogleOpening(true);
 
     try {
@@ -756,6 +777,7 @@ export function AuthGate({ children }: AuthGateProps) {
                           onClick={() => {
                             setEmailMode(true);
                             setError(null);
+                            setAuthCallbackError(null);
                           }}
                           disabled={loading || googleOpening}
                         >
@@ -797,7 +819,9 @@ export function AuthGate({ children }: AuthGateProps) {
                   </div>
                 </div>
 
-                {error && <div className="mina-auth-error">{error}</div>}
+                {(authCallbackError || error) && (
+                  <div className="mina-auth-error">{authCallbackError || error}</div>
+                )}
               </>
             ) : (
               <>
@@ -821,7 +845,9 @@ export function AuthGate({ children }: AuthGateProps) {
                   </div>
                 </div>
 
-                {error && <div className="mina-auth-error">{error}</div>}
+                {(authCallbackError || error) && (
+                  <div className="mina-auth-error">{authCallbackError || error}</div>
+                )}
               </>
             )}
           </div>
