@@ -3374,12 +3374,15 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
 
             <input
               ref={customStyleInputRef}
+              id="mina_custom_style_upload"
+              name="mina_custom_style_upload"
               type="file"
               accept="image/*"
               multiple
               style={{ display: "none" }}
               onChange={handleCustomStyleInputChange}
             />
+
           </div>
 
           {customStyleImages.length > 0 && (
