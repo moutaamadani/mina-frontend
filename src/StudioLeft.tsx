@@ -980,6 +980,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <textarea
                 ref={briefInputRef}
                 className="studio-brief-input"
+                maxLength={1000}
                 placeholder={
                   isMotion
                     ? "Describe the motion you want (loop, camera, drips, melt, etc.)"
