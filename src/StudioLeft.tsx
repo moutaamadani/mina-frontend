@@ -752,12 +752,7 @@ const motionStyleLabel =
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
-                    <span
-                      className={classNames(
-                        "studio-pill-inner",
-                        activePanel === "style" && "is-selected"
-                      )}
-                    >
+                    
                       {renderPillIcon(styleThumb, "+", true)}
                       <span className="studio-pill-main">{styleLabel}</span>
                     </span>
