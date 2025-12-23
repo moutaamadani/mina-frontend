@@ -153,10 +153,7 @@
   border-color: rgba(8, 10, 0, 0.18);
 }
 
-.studio-pill:active {
-  transform: scale(0.985);
-  opacity: 0.85;
-}
+
 
 .studio-pill-inner {
   display: inline-flex;
