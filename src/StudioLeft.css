@@ -165,9 +165,6 @@ transition:
   transition: transform 140ms ease;
 }
 
-.studio-pill-inner.is-selected {
-  transform: scale(0.9);
-}
 
 .studio-pill-icon {
   min-width: 24px;
