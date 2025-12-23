@@ -1092,11 +1092,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <>
                 <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
-                    <div className="studio-panel-title">Kling frames</div>
-
-                    <div style={{ fontSize: 11, opacity: 0.55, marginTop: -4, marginBottom: 10 }}>
-                      1st = start frame (required) • 2nd = end frame (optional, pro only)
-                    </div>
+                    <div className="studio-panel-title">Add one or two frames</div>
 
                     <div className="studio-panel-row">
                       <div
