@@ -39,8 +39,8 @@ const API_BASE_URL = (() => {
   return "https://mina-editorial-ai-api.onrender.com";
 })();
 
-const MMA_ENABLED =
-  String(import.meta.env.VITE_MMA_ENABLED || "").toLowerCase() === "1";
+// MMA-only build (legacy endpoints removed from backend)
+const MMA_ENABLED = true;
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
 const RECREATE_DRAFT_KEY = "mina_recreate_draft_v1";
@@ -2064,19 +2064,49 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
   // ========================================================================
   // [PART 9 START] Stills (editorial)
   // ========================================================================
-  // Part 9 handles the editorial still-image flow: building prompts, kicking
-  // off generation, and managing the gallery/history tiles for still outputs.
+
   const handleGenerateStill = async () => {
     const trimmed = stillBrief.trim();
-    if (trimmed.length < 40) return;
+    if (trimmed.length < 10) return;
 
-    if (MMA_ENABLED) {
+    if (!API_BASE_URL) {
+      setStillError("Missing API base URL.");
+      return;
+    }
+    if (!currentPassId) {
+      setStillError("Missing Pass ID.");
+      return;
+    }
+    if (!MMA_ENABLED) {
+      setStillError("MMA is required (legacy routes removed).");
+      return;
+    }
+
+    setStillGenerating(true);
+    setStillError(null);
+
+    try {
+      const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
+
+      const productItem0 = uploads.product[0];
+      const logoItem0 = uploads.logo[0];
+
+      const productUrl = (productItem0?.remoteUrl || productItem0?.url || "").trim();
+      const logoUrl = (logoItem0?.remoteUrl || logoItem0?.url || "").trim();
+
+      const inspirationUrls = (uploads.inspiration || [])
+        .map((u) => (u.remoteUrl || u.url || "").trim())
+        .filter((u) => isHttpUrl(u))
+        .slice(0, 4);
+
+      const sid = await ensureSession();
+
       const mmaBody = {
         passId: currentPassId,
         assets: {
-          productImageUrl: payload.productImageUrl || "",
-          logoImageUrl: payload.logoImageUrl || "",
-          styleImageUrls: payload.styleImageUrls || [],
+          productImageUrl: isHttpUrl(productUrl) ? productUrl : "",
+          logoImageUrl: isHttpUrl(logoUrl) ? logoUrl : "",
+          styleImageUrls: inspirationUrls,
         },
         inputs: {
           brief: trimmed,
@@ -2085,6 +2115,10 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
           aspect_ratio: safeAspectRatio,
           stylePresetKeys: stylePresetKeysForApi,
           minaVisionEnabled,
+        },
+        history: {
+          sessionId: sid || null,
+          sessionTitle: sessionTitle || null,
         },
         settings: {},
         feedback: {},
@@ -2096,138 +2130,23 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
         mmaBody,
         ({ status, scanLines }) => {
           const last = scanLines.slice(-1)[0] || "";
-          const overlay = `${status.toUpperCase()}\n${last}`.trim();
+          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
           if (overlay) setMinaOverrideText(overlay);
         }
       );
 
       const result = await mmaFetchResult(generationId);
+
       const rawUrl =
         result?.outputs?.seedream_image_url ||
         result?.outputs?.image_url ||
         result?.imageUrl ||
         result?.outputUrl ||
         "";
-      const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
-      if (!url) throw new Error("MMA returned no image URL.");
 
-      historyDirtyRef.current = true;
-      creditsDirtyRef.current = true;
-
-      const item: StillItem = {
-        id: generationId,
-        url,
-        createdAt: new Date().toISOString(),
-        prompt: result?.prompt || trimmed,
-        aspectRatio: currentAspect.ratio,
-      };
-
-      setStillItems((prev) => {
-        const next = [item, ...prev];
-        setStillIndex(0);
-        return next;
-      });
-
-      setActiveMediaKind("still");
-      setLastStillPrompt(item.prompt);
-      return; // ✅ stop here (skip old /editorial/generate)
-    }
-
-    const res = await apiFetch("/editorial/generate", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-
-    if (!API_BASE_URL) {
-      setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
-      setStillGenerating(false);
-      return;
-    }
-
-    if (!currentPassId) {
-      setStillError("Missing Pass ID for MEGA session.");
-      setStillGenerating(false);
-      return;
-    }
-
-    try {
-      const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
-
-      const productItem = uploads.product[0];
-      const productUrl = productItem?.remoteUrl || productItem?.url;
-      const logoItem = uploads.logo[0];
-      const logoUrl = logoItem?.remoteUrl || logoItem?.url;
-
-      const inspirationUrls = uploads.inspiration
-        .map((u) => u.remoteUrl || u.url)
-        .filter((u) => isHttpUrl(u))
-        .slice(0, 4);
-
-      // MMA create body (relies on X-Mina-Pass-Id header set by apiFetch)
-      const mmaBody = {
-        inputs: {
-          brief: trimmed,
-          tone,
-          platform: currentAspect.platformKey,
-        },
-        assets: {
-          product_image_url: productUrl && isHttpUrl(productUrl) ? productUrl : "",
-          logo_image_url: logoUrl && isHttpUrl(logoUrl) ? logoUrl : "",
-          inspiration_image_urls: inspirationUrls,
-        },
-        settings: {
-          aspect_ratio: safeAspectRatio,
-          minaVisionEnabled,
-          stylePresetKey: primaryStyleKeyForApi,
-          stylePresetKeys: stylePresetKeysForApi,
-        },
-        history: {
-          sessionId: sessionId || null,
-          sessionTitle: sessionTitle || null,
-        },
-      };
-
-      const res = await apiFetch("/mma/still/create", {
-        method: "POST",
-        body: JSON.stringify(mmaBody),
-      });
-
-      const createJson = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse>;
-      if (!res.ok || !createJson?.generation_id) {
-        const msg = (createJson as any)?.message || `Error ${res.status}: MMA still/create failed.`;
-        throw new Error(msg);
-      }
-
-      const generationId = String(createJson.generation_id);
-      const sseUrl = String(createJson.sse_url || `/mma/stream/${generationId}`);
-
-      // Stream progress + poll final
-      const final = await waitForMmaDone(
-        generationId,
-        sseUrl,
-        9 * 60 * 1000,
-        (st, scan) => {
-          setMinaOverrideText(buildMmaOverlay(st, scan));
-        }
-      );
-
-      if (final.status === "error") {
-        const msg = final?.error?.message || final?.error?.code || "MMA generation failed.";
-        throw new Error(String(msg));
-      }
-
-      const rawUrl =
-        final.outputs?.seedream_image_url ||
-        final.outputs?.image_url ||
-        (final as any)?.imageUrl ||
-        (final as any)?.outputUrl ||
-        "";
       if (!rawUrl) throw new Error("MMA returned no image URL.");
 
-      const url = await ensureAssetsUrl(rawUrl, "generations");
-
-      const promptText = (final.prompt || trimmed).trim();
-      setMinaOverrideText(buildMmaOverlay("done", [], `Prompt:\n${promptText.slice(0, 380)}${promptText.length > 380 ? "…" : ""}`));
+      const finalUrl = await ensureAssetsUrl(String(rawUrl), "generations");
 
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
@@ -2235,9 +2154,9 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 
       const item: StillItem = {
         id: generationId,
-        url,
+        url: finalUrl,
         createdAt: new Date().toISOString(),
-        prompt: promptText,
+        prompt: String(result?.prompt || trimmed),
         aspectRatio: currentAspect.ratio,
       };
 
@@ -2305,6 +2224,11 @@ const handleSuggestMotion = async () => {
   if (!API_BASE_URL || !motionReferenceImageUrl || motionSuggestLoading || motionSuggestTyping) return;
   if (!currentPassId) return;
 
+  if (!MMA_ENABLED) {
+    setMotionSuggestError("MMA is required (legacy routes removed).");
+    return;
+  }
+
   setAnimateMode(true);
 
   try {
@@ -2313,52 +2237,29 @@ const handleSuggestMotion = async () => {
 
     const movementStyle = (motionStyleKeys?.[0] || "cinematic_smooth") as any;
 
-    const tryPaths = MMA_ENABLED
-      ? ["/mma/motion/suggest", "/motion/suggest"] // try MMA first; fallback keeps button working
-      : ["/motion/suggest"];
+    const res = await apiFetch("/mma/motion/suggest", {
+      method: "POST",
+      body: JSON.stringify({
+        passId: currentPassId,
+        inputStillUrl: motionReferenceImageUrl,
+        movementStyle,
+        userMotionBrief: motionDescription || "",
+        maxPromptComplexity: "simple_english",
+        platform: animateAspectOption.platformKey,
+        tone,
+        aspect_ratio: animateAspectOption.ratio,
+        stylePresetKeys: stylePresetKeysForApi,
+        minaVisionEnabled,
+      }),
+    });
 
-    let res: Response | null = null;
-    let lastErr: any = null;
-
-    for (const p of tryPaths) {
-      try {
-        res = await apiFetch(p, {
-          method: "POST",
-          body: JSON.stringify({
-            // backend spec keys
-            inputStillUrl: motionReferenceImageUrl,
-            movementStyle,
-            userMotionBrief: motionDescription || "",
-            maxPromptComplexity: "simple_english",
-
-            // keep your existing keys too (harmless)
-            referenceImageUrl: motionReferenceImageUrl,
-            tone,
-            platform: animateAspectOption.platformKey,
-            minaVisionEnabled,
-            stylePresetKeys: stylePresetKeysForApi,
-            aspectRatio: animateAspectOption.ratio,
-          }),
-        });
-        if (res.ok) break;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-
-    if (!res || !res.ok) {
-      const errJson = res ? await res.json().catch(() => null) : null;
-      throw new Error(errJson?.message || lastErr?.message || "Failed to suggest motion.");
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => null);
+      throw new Error(errJson?.message || `MMA suggest failed (${res.status})`);
     }
 
     const data = (await res.json().catch(() => ({}))) as any;
-
-    // accept both response shapes
-    const suggestion =
-      data.motionPrompt ||
-      data.suggestion ||
-      data.prompt ||
-      "";
+    const suggestion = data.motionPrompt || data.suggestion || data.prompt || "";
 
     if (suggestion) await applyMotionSuggestionText(String(suggestion));
   } catch (err: any) {
@@ -2372,14 +2273,28 @@ const handleSuggestMotion = async () => {
   const handleGenerateMotion = async () => {
     if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
-  try {
-    if (MMA_ENABLED) {
-      // Kling images: start + optional end (2nd upload)
-      const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
-      const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
+    if (!currentPassId) {
+      setMotionError("Missing Pass ID.");
+      return;
+    }
+
+    if (!MMA_ENABLED) {
+      setMotionError("MMA is required (legacy routes removed).");
+      return;
+    }
+
+    setMotionGenerating(true);
+    setMotionError(null);
+
+    try {
+      // Kling frames: start + optional end (2nd product upload)
+      const frame0 = (uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "").trim();
+      const frame1 = (uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "").trim();
 
       const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
       const endFrame = isHttpUrl(frame1) ? frame1 : "";
+
+      const sid = await ensureSession();
 
       const mmaBody = {
         passId: currentPassId,
@@ -2395,6 +2310,10 @@ const handleSuggestMotion = async () => {
           stylePresetKeys: stylePresetKeysForApi,
           minaVisionEnabled,
         },
+        history: {
+          sessionId: sid || null,
+          sessionTitle: sessionTitle || null,
+        },
         settings: {},
         feedback: {},
         prompts: {},
@@ -2405,29 +2324,33 @@ const handleSuggestMotion = async () => {
         mmaBody,
         ({ status, scanLines }) => {
           const last = scanLines.slice(-1)[0] || "";
-          const overlay = `${status.toUpperCase()}\n${last}`.trim();
+          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
           if (overlay) setMinaOverrideText(overlay);
         }
       );
 
       const result = await mmaFetchResult(generationId);
+
       const rawUrl =
         result?.outputs?.kling_video_url ||
         result?.outputs?.video_url ||
         result?.videoUrl ||
         result?.outputUrl ||
         "";
-      const url = rawUrl ? await ensureAssetsUrl(rawUrl, "motions") : "";
-      if (!url) throw new Error("MMA returned no video URL.");
+
+      if (!rawUrl) throw new Error("MMA returned no video URL.");
+
+      const finalUrl = await ensureAssetsUrl(String(rawUrl), "motions");
 
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
+      void fetchCredits();
 
       const item: MotionItem = {
         id: generationId,
-        url,
+        url: finalUrl,
         createdAt: new Date().toISOString(),
-        prompt: result?.prompt || motionTextTrimmed,
+        prompt: String(result?.prompt || motionTextTrimmed),
       };
 
       setMotionItems((prev) => {
@@ -2437,120 +2360,13 @@ const handleSuggestMotion = async () => {
       });
 
       setActiveMediaKind("motion");
-      return; // ✅ stop here (skip old /motion/generate)
-    }
-
-    const res = await apiFetch("/motion/generate", {
-      method: "POST",
-      body: JSON.stringify({
-        passId: currentPassId,
-        sessionId: sid,
-        lastImageUrl: motionReferenceImageUrl,
-        motionDescription: motionTextTrimmed,
-        tone,
-        platform: animateAspectOption.platformKey,
-        minaVisionEnabled,
-        stylePresetKey: primaryStyleKeyForApi,
-        stylePresetKeys: stylePresetKeysForApi,
-        motionStyles: motionStyleKeys,
-        aspectRatio: animateAspectOption.ratio,
-      }),
-    });
-
-    if (!currentPassId) {
-      setMotionError("Missing Pass ID for MEGA session.");
-      setMotionGenerating(false);
-      return;
-    }
-
-    const mmaBody = {
-      inputs: {
-        motion_description: motionTextTrimmed,
-        tone,
-        platform: animateAspectOption.platformKey,
-      },
-      assets: {
-        // init image for video
-        image_url: motionReferenceImageUrl,
-      },
-      settings: {
-        aspect_ratio: animateAspectOption.ratio,
-        minaVisionEnabled,
-        stylePresetKey: primaryStyleKeyForApi,
-        stylePresetKeys: stylePresetKeysForApi,
-        motionStyles: motionStyleKeys,
-      },
-      history: {
-        sessionId: sessionId || null,
-        sessionTitle: sessionTitle || null,
-      },
-    };
-
-    const mmaRes = await apiFetch("/mma/video/animate", {
-      method: "POST",
-      body: JSON.stringify(mmaBody),
-    });
-
-    const createJson = (await mmaRes.json().catch(() => ({}))) as Partial<MmaCreateResponse>;
-    if (!mmaRes.ok || !createJson?.generation_id) {
-      const msg = (createJson as any)?.message || `Error ${mmaRes.status}: MMA video/animate failed.`;
-      throw new Error(msg);
-    }
-
-    const generationId = String(createJson.generation_id);
-    const sseUrl = String(createJson.sse_url || `/mma/stream/${generationId}`);
-
-    const final = await waitForMmaDone(
-      generationId,
-      sseUrl,
-      40 * 60 * 1000,
-      (st, scan) => {
-        setMinaOverrideText(buildMmaOverlay(st, scan));
-      }
-    );
-
-    if (final.status === "error") {
-      const msg = final?.error?.message || final?.error?.code || "MMA motion failed.";
-      throw new Error(String(msg));
-    }
-
-    const rawUrl =
-      final.outputs?.kling_video_url ||
-      final.outputs?.video_url ||
-      (final as any)?.videoUrl ||
-      (final as any)?.outputUrl ||
-      "";
-    if (!rawUrl) throw new Error("MMA returned no video URL.");
-
-    const url = await ensureAssetsUrl(rawUrl, "motions");
-
-    const promptText = (final.prompt || motionTextTrimmed).trim();
-    setMinaOverrideText(buildMmaOverlay("done", [], `Prompt:\n${promptText.slice(0, 380)}${promptText.length > 380 ? "…" : ""}`));
-
-    historyDirtyRef.current = true;
-    creditsDirtyRef.current = true;
-    void fetchCredits();
-
-    const item: MotionItem = {
-      id: generationId,
-      url,
-      createdAt: new Date().toISOString(),
-      prompt: promptText,
-    };
-
-    setMotionItems((prev) => {
-      const next = [item, ...prev];
-      setMotionIndex(0);
-      return next;
-    });
-
-      setActiveMediaKind("motion");
     } catch (err: any) {
       setMotionError(err?.message || "Unexpected error generating motion.");
     } finally {
       setMotionGenerating(false);
     }
   };
+
 
 // ========================================================================
 // [PART 10 END]
@@ -2561,13 +2377,6 @@ const handleSuggestMotion = async () => {
   // ========================================================================
   // Part 11 groups user feedback utilities: sending comments, toggling likes,
   // and building download links for generated assets.
-const getCurrentMediaKey = () => {
-  const mediaType = currentMotion ? "motion" : currentStill ? "still" : null;
-  if (!mediaType) return null;
-
-  const rawKey = currentMotion?.id || currentStill?.id || currentMotion?.url || currentStill?.url;
-  return rawKey ? `${mediaType}:${rawKey}` : null;
-};
 
 const guessDownloadExt = (url: string, fallbackExt: string) => {
   const lower = url.toLowerCase();
