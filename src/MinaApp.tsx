@@ -366,13 +366,13 @@ const STYLE_PRESETS = [
   },
   {
     key: "gradient",
-    label: "Gradient",
+    label: "Luxury",
     thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-thumb.png",
     hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-hero.png",
   },
   {
     key: "back-light",
-    label: "Back light",
+    label: "Minimal",
     thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
     hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
   },
