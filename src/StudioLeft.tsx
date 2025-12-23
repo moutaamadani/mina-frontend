@@ -534,6 +534,87 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     return u;
   };
 
+  // Inline pointer-based reorder helpers
+  const DRAG_THRESHOLD_PX = 6;
+
+  type ReorderState = {
+    panel: UploadPanelKey;
+    index: number;
+    startX: number;
+    startY: number;
+    pointerId: number;
+    active: boolean;
+  };
+
+  const reorderRef = useRef<ReorderState | null>(null);
+  const suppressClickRef = useRef(false);
+
+  const onThumbPointerDown = (panel: UploadPanelKey, index: number) =>
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      reorderRef.current = {
+        panel,
+        index,
+        startX: e.clientX,
+        startY: e.clientY,
+        pointerId: e.pointerId,
+        active: false,
+      };
+      suppressClickRef.current = false;
+    };
+
+  const onThumbPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const st = reorderRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - st.startX;
+    const dy = e.clientY - st.startY;
+    const dist = Math.hypot(dx, dy);
+
+    if (!st.active) {
+      if (dist < DRAG_THRESHOLD_PX) return;
+      st.active = true;
+      suppressClickRef.current = true; // prevent delete click after drag
+    }
+
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const btn = el?.closest("button.studio-thumb") as HTMLButtonElement | null;
+
+    const panel = btn?.dataset?.panel as UploadPanelKey | undefined;
+    const toRaw = btn?.dataset?.index;
+
+    if (!btn || !panel || panel !== st.panel) return;
+
+    const to = toRaw ? Number(toRaw) : NaN;
+    if (!Number.isFinite(to)) return;
+
+    if (to !== st.index) {
+      moveUploadItem(st.panel, st.index, to);
+      st.index = to;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onThumbPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const st = reorderRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+
+    reorderRef.current = null;
+    setTimeout(() => {
+      suppressClickRef.current = false;
+    }, 0);
+  };
+
+  const handleThumbClick = (panel: UploadPanelKey, id: string) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+
+    removeUploadItem(panel, id);
+  };
+
   // Drag/drop support:
   // - drop files => onFilesPicked(panel, files)
   // - drop url => onImageUrlPasted(url) (and we open the panel for UX)
@@ -1022,16 +1103,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         onDragOver={handleDragOver}
                         onDrop={handleDropOnPanel("product")}
                       >
-                        {uploads.product.map((it) => (
+                        {uploads.product.map((it, idx) => (
                           <button
                             key={it.id}
                             type="button"
                             className="studio-thumb"
-                            onClick={() => removeUploadItem("product", it.id)}
-                            title="Click to delete"
+                            data-panel="product"
+                            data-index={idx}
+                            style={{ touchAction: "none" }}
+                            onPointerDown={onThumbPointerDown("product", idx)}
+                            onPointerMove={onThumbPointerMove}
+                            onPointerUp={onThumbPointerUp}
+                            onPointerCancel={onThumbPointerUp}
+                            onClick={() => handleThumbClick("product", it.id)}
+                            title="Drag to reorder • Click to delete"
                           >
                             {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" />
+                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
                             ) : it.uploading ? (
                               <span className="studio-thumb-spinner" aria-hidden="true" />
                             ) : null}
@@ -1109,25 +1197,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             key={it.id}
                             type="button"
                             className="studio-thumb"
-                            draggable
-                            onDragStart={() => {
-                              (window as any).__minaDragIndex = idx;
-                            }}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const from = Number((window as any).__minaDragIndex);
-                              const to = idx;
-                              if (Number.isFinite(from) && from !== to) {
-                                moveUploadItem("inspiration", from, to);
-                              }
-                              (window as any).__minaDragIndex = null;
-                            }}
-                            onClick={() => removeUploadItem("inspiration", it.id)}
-                            title="Click to delete • Drag to reorder"
+                            data-panel="inspiration"
+                            data-index={idx}
+                            style={{ touchAction: "none" }}
+                            onPointerDown={onThumbPointerDown("inspiration", idx)}
+                            onPointerMove={onThumbPointerMove}
+                            onPointerUp={onThumbPointerUp}
+                            onPointerCancel={onThumbPointerUp}
+                            onClick={() => handleThumbClick("inspiration", it.id)}
+                            title="Drag to reorder • Click to delete"
                           >
                             {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" />
+                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
                             ) : it.uploading ? (
                               <span className="studio-thumb-spinner" aria-hidden="true" />
                             ) : null}
@@ -1238,14 +1319,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             key={it.id}
                             type="button"
                             className="studio-thumb"
+                            data-panel="product"
                             data-index={idx}
-                            style={{ touchAction: "none" }} // ✅ smooth drag on mobile too
+                            style={{ touchAction: "none" }}
                             onPointerDown={onThumbPointerDown("product", idx)}
                             onPointerMove={onThumbPointerMove}
                             onPointerUp={onThumbPointerUp}
                             onPointerCancel={onThumbPointerUp}
                             onClick={() => handleThumbClick("product", it.id)}
-                            title={idx === 0 ? "Start frame • Drag to reorder • Click to delete" : "End frame • Drag to reorder • Click to delete"}
+                            title="Drag to reorder • Click to delete"
                           >
                             {getDisplayUrl(it) ? (
                               <img src={getDisplayUrl(it)} alt="" draggable={false} />
