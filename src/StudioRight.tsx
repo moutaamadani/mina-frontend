@@ -135,7 +135,7 @@ export default function StudioRight(props: StudioRightProps) {
     <div className="studio-right">
       <div className="studio-right-surface">
         {isEmpty ? (
-          <div className="studio-empty-text">New ideas don’t actually exist, just recycle.</div>
+          <div className="studio-empty-text">New ideas don’t exist, just recycle.</div>
         ) : (
           <>
             <button type="button" className="studio-output-click" onClick={handleFrameClick} aria-label="Toggle zoom / Navigate">
