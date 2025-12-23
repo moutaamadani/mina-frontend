@@ -2759,62 +2759,82 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const pickTargetPanel = (): UploadPanelKey =>
     activePanel === "logo" ? "logo" : activePanel === "inspiration" ? "inspiration" : "product";
 
-  const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
-    const max = capForPanel(panel);
-    const incoming = Array.from(files).filter((f) => f.type.startsWith("image/"));
-    if (!incoming.length) return;
+  // ✅ REPLACE the whole addFilesToPanel() function with this version
+const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
+  const max = capForPanel(panel);
 
-    // For product/logo, we replace the current item (only 1)
-    const replace = panel !== "inspiration";
+  const incoming = Array.from(files || []).filter(
+    (f) => f && typeof f.type === "string" && f.type.startsWith("image/")
+  );
+  if (!incoming.length) return;
 
-    // Compute how many we can accept right now
-    const existingCount = uploads[panel].length;
-    const remaining = replace ? max : Math.max(0, max - existingCount);
-    const slice = incoming.slice(0, remaining);
-    if (!slice.length) return;
+  const replace = panel !== "inspiration";
 
-    const created: Array<{ id: string; file: File }> = [];
+  // IMPORTANT: use uploadsRef so drag/drop handlers never use stale `uploads`
+  const current = uploadsRef.current?.[panel] || [];
+  const existingCount = current.length;
 
-    setUploads((prev) => {
-      // Revoke old blobs if replacing product/logo
-      if (replace) {
-        prev[panel].forEach((it) => {
-          if (it.kind === "file" && it.url.startsWith("blob:")) {
-            try {
-              URL.revokeObjectURL(it.url);
-            } catch {}
+  const remaining = replace ? max : Math.max(0, max - existingCount);
+  const slice = incoming.slice(0, remaining);
+  if (!slice.length) return;
+
+  // Build new items FIRST (so we can start uploads immediately)
+  const now = Date.now();
+  const created = slice.map((file, i) => {
+    const id = `${panel}_${now}_${i}_${Math.random().toString(16).slice(2)}`;
+    const previewUrl = URL.createObjectURL(file);
+
+    const item: UploadItem = {
+      id,
+      kind: "file",
+      url: previewUrl, // blob preview
+      remoteUrl: undefined, // will become https after upload
+      file,
+      uploading: true,
+      error: undefined,
+    };
+
+    return { id, file, previewUrl, item };
+  });
+
+  // Update state (and revoke old previews if replacing)
+  setUploads((prev) => {
+    if (replace) {
+      prev[panel].forEach((it) => {
+        if (it.kind === "file" && it.url && it.url.startsWith("blob:")) {
+          try {
+            URL.revokeObjectURL(it.url);
+          } catch {
+            // ignore
           }
-        });
-      }
-
-      const base = replace ? [] : prev[panel];
-
-      const nextItems: UploadItem[] = slice.map((file) => {
-        const id = `${panel}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-        const previewUrl = URL.createObjectURL(file);
-        created.push({ id, file });
-
-        return {
-          id,
-          kind: "file",
-          url: previewUrl, // blob preview
-          remoteUrl: undefined, // will become https after upload
-          file,
-          uploading: true,
-        };
+        }
       });
+    }
 
-      return {
-        ...prev,
-        [panel]: [...base, ...nextItems].slice(0, max),
-      };
+    const base = replace ? [] : prev[panel];
+    const next = [...base, ...created.map((c) => c.item)].slice(0, max);
+
+    // Safety: if anything got trimmed, revoke unused blobs
+    const accepted = new Set(next.map((x) => x.id));
+    created.forEach((c) => {
+      if (!accepted.has(c.id)) {
+        try {
+          URL.revokeObjectURL(c.previewUrl);
+        } catch {
+          // ignore
+        }
+      }
     });
 
-    // Kick off uploads AFTER state update
-    created.forEach(({ id, file }) => {
-      void startUploadForFileItem(panel, id, file);
-    });
-  };
+    return { ...prev, [panel]: next };
+  });
+
+  // ✅ START uploads immediately (this is what was missing before)
+  created.forEach(({ id, file }) => {
+    void startUploadForFileItem(panel, id, file);
+  });
+};
+
 
   const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
     const max = capForPanel(panel);
