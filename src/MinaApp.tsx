@@ -393,7 +393,7 @@ const PILL_SLIDE_DURATION_MS = 320; // slide + fade duration (must exceed stagge
 const PANEL_REVEAL_DELAY_MS = PILL_INITIAL_DELAY_MS; // panel shows with first pill
 const CONTROLS_REVEAL_DELAY_MS = 0; // vision + create show later
 const GROUP_FADE_DURATION_MS = 420; // shared fade timing for pills/panels/controls/textarea
-const TYPING_HIDE_DELAY_MS = 3000; // wait before hiding UI when typing starts
+const TYPING_HIDE_DELAY_MS = 4000; // wait before hiding UI when typing starts
 const TYPING_REVEAL_DELAY_MS = 320; // wait before showing UI after typing stops
 const TEXTAREA_FLOAT_DISTANCE_PX = 12; // tiny translate to avoid layout jump
 
