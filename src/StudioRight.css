@@ -26,7 +26,7 @@
   border-radius: 0;
 
   /* ✅ same “black opacity system” */
-  background: #EEEEE2;
+  background: #F2F2E9;
 }
 
 /* Stage 0 center text */
@@ -121,7 +121,7 @@
   width: 100%;
   padding: 18px 18px;
 
-  background: #EEEEE2;
+  background: #F2F2E9;
   border-radius: 0;
 
   display: flex;
