@@ -132,9 +132,11 @@
   border: none;
   outline: none;
 
-  transition: background 0ms cubic-bezier(0.16, 1, 0.3, 1),
-    opacity var(--pill-slide-duration, 320ms) cubic-bezier(0.16, 1, 0.3, 1),
-    transform var(--pill-slide-duration, 320ms) cubic-bezier(0.16, 1, 0.3, 1);
+  /* REPLACE the transition inside .studio-pill */
+transition:
+  opacity var(--pill-slide-duration, 320ms) cubic-bezier(0.16, 1, 0.3, 1),
+  transform var(--pill-slide-duration, 320ms) cubic-bezier(0.16, 1, 0.3, 1);
+
 }
 
 .studio-pill.active,
