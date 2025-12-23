@@ -130,10 +130,19 @@ function normalizeAspectRatio(raw: string | null | undefined) {
   return "";
 }
 
-// Likes are feedback rows where comment is empty.
+// Likes can be legacy feedback rows (comment empty) OR MMA event rows (event_type === "like")
 function findLikeUrl(row: Row) {
   const payload = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
 
+  const eventType = String(
+    pick(row, ["mg_event_type", "event_type", "type"], "") || pick(payload, ["event_type", "type"], "")
+  )
+    .trim()
+    .toLowerCase();
+
+  const isLikeEvent = eventType === "like";
+
+  // Legacy: "Likes are feedback rows where comment is empty."
   const payloadComment = typeof payload?.comment === "string" ? payload.comment.trim() : null;
 
   const commentFieldPresent =
@@ -143,14 +152,35 @@ function findLikeUrl(row: Row) {
   const commentValue = commentFieldPresent ? pick(row, ["mg_comment", "comment"], "") : null;
   const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
 
-  const isLike = (payloadComment !== null && payloadComment === "") || (commentTrim !== null && commentTrim === "");
-  if (!isLike) return "";
+  const isLegacyLike = (payloadComment !== null && payloadComment === "") || (commentTrim !== null && commentTrim === "");
+
+  if (!isLikeEvent && !isLegacyLike) return "";
+
+  // MMA events: you post { payload: { url, result_type } }
+  const mmaEventUrl =
+    pick(payload, ["url", "outputUrl", "output_url", "videoUrl", "video_url", "imageUrl", "image_url"], "").trim() ||
+    pick(payload?.payload, ["url", "outputUrl", "output_url", "videoUrl", "video_url", "imageUrl", "image_url"], "").trim();
+
+  // Generations/legacy feedback rows
+  const outputs = (row as any)?.mg_outputs ?? (row as any)?.outputs ?? payload?.outputs ?? null;
 
   const out = pick(row, ["mg_output_url", "outputUrl", "output_url"], "").trim();
   const img = pick(row, ["mg_image_url", "imageUrl", "image_url"], "").trim();
   const vid = pick(row, ["mg_video_url", "videoUrl", "video_url"], "").trim();
 
-  return vid || (isVideoUrl(out) ? out : "") || img || out;
+  const outVideo = pick(outputs, ["kling_video_url", "video_url"], "").trim();
+  const outImage = pick(outputs, ["seedream_image_url", "image_url"], "").trim();
+
+  const chosen =
+    mmaEventUrl ||
+    vid ||
+    outVideo ||
+    (isVideoUrl(out) ? out : "") ||
+    img ||
+    outImage ||
+    out;
+
+  return chosen;
 }
 
 type RecreateDraft = {
@@ -162,11 +192,20 @@ type RecreateDraft = {
     stylePresetKeys?: string[];
   };
   assets: {
+    // legacy / Studio-friendly (camelCase)
     productImageUrl?: string;
     logoImageUrl?: string;
     styleImageUrls?: string[];
     kling_start_image_url?: string;
     kling_end_image_url?: string;
+
+    // MMA pipeline-friendly (snake_case)
+    product_image_url?: string;
+    logo_image_url?: string;
+    inspiration_image_urls?: string[];
+    start_image_url?: string;
+    end_image_url?: string;
+    kling_image_urls?: string[];
   };
 };
 
@@ -176,6 +215,7 @@ function extractInputsForDisplay(row: Row) {
 
   const brief =
     pick(row, ["mg_user_prompt", "userPrompt", "promptUser", "prompt_raw", "promptOriginal"], "") ||
+    pick(payload?.inputs, ["brief", "userPrompt", "user_prompt", "prompt"], "") ||
     pick(payload, ["userPrompt", "user_prompt", "userMessage", "brief", "prompt"], "") ||
     pick(row, ["mg_prompt", "prompt"], "");
 
@@ -183,6 +223,7 @@ function extractInputsForDisplay(row: Row) {
     normalizeAspectRatio(
       pick(row, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
         pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
+        pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "") ||
         pick(payload, ["aspect_ratio", "aspectRatio"], "")
     ) || "";
 
@@ -192,6 +233,7 @@ function extractInputsForDisplay(row: Row) {
     payload?.settings?.stylePresetKeys ??
     payload?.settings?.style_preset_keys ??
     payload?.inputs?.stylePresetKeys ??
+    payload?.inputs?.style_preset_keys ??
     null;
 
   const stylePresetKeyRaw =
@@ -199,6 +241,8 @@ function extractInputsForDisplay(row: Row) {
     meta?.style_preset_key ??
     payload?.settings?.stylePresetKey ??
     payload?.settings?.style_preset_key ??
+    payload?.inputs?.stylePresetKey ??
+    payload?.inputs?.style_preset_key ??
     null;
 
   const stylePresetKeys: string[] = Array.isArray(stylePresetKeysRaw)
@@ -216,6 +260,7 @@ function extractInputsForDisplay(row: Row) {
           ? payload.inputs.minaVisionEnabled
           : undefined;
 
+  // STILL assets (support both MMA snake_case and legacy camelCase)
   const productImageUrl =
     meta?.productImageUrl ||
     payload?.assets?.productImageUrl ||
@@ -235,11 +280,27 @@ function extractInputsForDisplay(row: Row) {
     payload?.assets?.styleImageUrls ||
     payload?.assets?.style_image_urls ||
     payload?.assets?.inspiration_image_urls ||
+    payload?.assets?.inspirationImageUrls ||
     [];
 
   const styleImages: string[] = Array.isArray(styleImageUrls)
     ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
     : [];
+
+  // MOTION frames (MMA)
+  const startImageUrl =
+    payload?.assets?.start_image_url ||
+    payload?.assets?.startImageUrl ||
+    payload?.assets?.kling_start_image_url ||
+    payload?.assets?.klingStartImageUrl ||
+    "";
+
+  const endImageUrl =
+    payload?.assets?.end_image_url ||
+    payload?.assets?.endImageUrl ||
+    payload?.assets?.kling_end_image_url ||
+    payload?.assets?.klingEndImageUrl ||
+    "";
 
   const tone = String(meta?.tone || payload?.inputs?.tone || payload?.tone || "").trim();
   const platform = String(meta?.platform || payload?.inputs?.platform || payload?.platform || "").trim();
@@ -254,6 +315,8 @@ function extractInputsForDisplay(row: Row) {
     styleImageUrls: styleImages,
     tone,
     platform,
+    motionStartImageUrl: String(startImageUrl || "").trim(),
+    motionEndImageUrl: String(endImageUrl || "").trim(),
   };
 }
 
@@ -369,56 +432,78 @@ export default function Profile({
 
     let base = baseRows
       .map(({ row: g, source }, idx) => {
-        const id = pick(g, ["mg_id", "id"], `row_${idx}`);
+        // ✅ MMA uses generation_id (and sometimes mg_generation_id)
+        const id = pick(g, ["mg_id", "mg_generation_id", "generation_id", "id"], `row_${idx}`);
+
         const createdAt =
-          pick(g, ["mg_event_at", "mg_created_at", "createdAt", "created_at"], "") || "";
+          pick(g, ["mg_event_at", "mg_created_at", "created_at", "createdAt"], "") || "";
 
         const payload = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
         const meta = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
+        const outputs = (g as any)?.mg_outputs ?? (g as any)?.outputs ?? payload?.outputs ?? null;
 
         const prompt =
           pick(g, ["mg_user_prompt", "userPrompt", "promptUser", "prompt_raw", "promptOriginal"], "") ||
+          pick(payload?.inputs, ["brief", "userPrompt", "user_prompt", "prompt"], "") ||
           pick(payload, ["userPrompt", "user_prompt", "userMessage", "brief", "prompt"], "") ||
           pick(g, ["mg_prompt", "prompt"], "") ||
           "";
 
+        // ✅ If this is a like-event feedback row, skip it (we use it only to mark liked)
         const likeUrl = source === "feedback" ? findLikeUrl(g) : "";
         const isLikeOnly = source === "feedback" && !!likeUrl;
         if (isLikeOnly) return null;
 
+        // ✅ Media URL extraction supports nested MMA outputs + legacy columns
         const out = pick(g, ["mg_output_url", "outputUrl", "output_url"], "").trim();
         const img = pick(g, ["mg_image_url", "imageUrl", "image_url"], "").trim();
         const vid = pick(g, ["mg_video_url", "videoUrl", "video_url"], "").trim();
 
+        const outVideo = pick(outputs, ["kling_video_url", "video_url"], "").trim();
+        const outImage = pick(outputs, ["seedream_image_url", "image_url"], "").trim();
+        const outGeneric = pick(outputs, ["output_url", "outputUrl", "url"], "").trim();
+
         const aspectRaw =
           pick(g, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
           pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
+          pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "") ||
           pick(payload, ["aspect_ratio", "aspectRatio"], "");
 
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
 
         const looksVideoMeta =
-          contentType.includes("video") || kindHint.includes("motion") || kindHint.includes("video");
+          contentType.includes("video") || kindHint.includes("motion") || kindHint.includes("video") || !!outVideo;
 
-        const looksImage = isImageUrl(out) || isImageUrl(img);
+        const looksImage = isImageUrl(out) || isImageUrl(img) || !!outImage;
 
-        const videoUrl = vid || (isVideoUrl(out) ? out : looksVideoMeta && !looksImage ? out : "");
-        const imageUrl = img || (!videoUrl ? out : "");
-        const url = (videoUrl || imageUrl || out).trim();
+        const videoUrl =
+          vid ||
+          outVideo ||
+          (isVideoUrl(out) ? out : "") ||
+          (!looksImage && looksVideoMeta && out ? out : "") ||
+          (isVideoUrl(outGeneric) ? outGeneric : "");
+
+        const imageUrl = img || outImage || (!videoUrl ? out || outGeneric : "") || "";
+        const url = (videoUrl || imageUrl || out || outGeneric).trim();
+
         const isMotion = Boolean(videoUrl);
 
         const aspectRatio =
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
-            typeof payload?.aspect_ratio === "string"
-              ? payload.aspect_ratio
-              : typeof payload?.aspectRatio === "string"
-                ? payload.aspectRatio
-                : ""
+            typeof payload?.inputs?.aspect_ratio === "string"
+              ? payload.inputs.aspect_ratio
+              : typeof payload?.inputs?.aspectRatio === "string"
+                ? payload.inputs.aspectRatio
+                : typeof payload?.aspect_ratio === "string"
+                  ? payload.aspect_ratio
+                  : typeof payload?.aspectRatio === "string"
+                    ? payload.aspectRatio
+                    : ""
           );
 
-        const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) || !!likeUrl : false;
+        const liked = url ? likedUrlSet.has(normalizeMediaUrl(url)) : false;
 
         const inputs = extractInputsForDisplay(g);
 
@@ -433,11 +518,31 @@ export default function Profile({
                 minaVisionEnabled: inputs.minaVisionEnabled,
                 stylePresetKeys: inputs.stylePresetKeys.length ? inputs.stylePresetKeys : undefined,
               },
-              assets: {
-                productImageUrl: inputs.productImageUrl || undefined,
-                logoImageUrl: inputs.logoImageUrl || undefined,
-                styleImageUrls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
-              },
+              assets: isMotion
+                ? {
+                    // motion frames (both styles)
+                    kling_start_image_url: inputs.motionStartImageUrl || inputs.productImageUrl || undefined,
+                    kling_end_image_url: inputs.motionEndImageUrl || undefined,
+
+                    start_image_url: inputs.motionStartImageUrl || inputs.productImageUrl || undefined,
+                    end_image_url: inputs.motionEndImageUrl || undefined,
+                    kling_image_urls:
+                      inputs.motionEndImageUrl && (inputs.motionStartImageUrl || inputs.productImageUrl)
+                        ? [inputs.motionStartImageUrl || inputs.productImageUrl, inputs.motionEndImageUrl]
+                        : (inputs.motionStartImageUrl || inputs.productImageUrl)
+                          ? [inputs.motionStartImageUrl || inputs.productImageUrl]
+                          : undefined,
+                  }
+                : {
+                    // still assets (both styles)
+                    productImageUrl: inputs.productImageUrl || undefined,
+                    logoImageUrl: inputs.logoImageUrl || undefined,
+                    styleImageUrls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
+
+                    product_image_url: inputs.productImageUrl || undefined,
+                    logo_image_url: inputs.logoImageUrl || undefined,
+                    inspiration_image_urls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
+                  },
             }
           : null;
 
