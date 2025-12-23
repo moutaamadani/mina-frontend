@@ -381,7 +381,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const animateMode = props.animateMode ?? localAnimate;
   const prevAnimateModeRef = useRef(animateMode);
 
-  const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey[]>(["fix_camera"]);
+  const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey[]>([]);
   const motionStyleKeys = props.motionStyleKeys ?? localMotionStyle;
   const setMotionStyleKeys = props.setMotionStyleKeys ?? setLocalMotionStyle;
 
@@ -503,16 +503,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         : `${selectedStyleCards.length} styles`;
 
   const motionStyleCards = MOTION_STYLES;
-  const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
-  const primaryMotionCard =
-    selectedMotionCards[0] || motionStyleCards.find((c) => c.key === "fix_camera") || motionStyleCards[0];
-  const motionStyleThumb = primaryMotionCard?.thumb || "";
-  const motionStyleLabel =
-    selectedMotionCards.length === 0
-      ? primaryMotionCard?.label || "Mouvement style"
-      : selectedMotionCards.length === 1
-        ? selectedMotionCards[0].label
-        : `${selectedMotionCards.length} styles`;
+const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
+
+// ✅ like still-style: none selected => no thumb => pill shows "+"
+const motionStyleThumb = selectedMotionCards[0]?.thumb || "";
+const motionStyleLabel =
+  selectedMotionCards.length === 0
+    ? "Movement styles"
+    : selectedMotionCards.length === 1
+      ? selectedMotionCards[0].label
+      : `${selectedMotionCards.length} styles`;
 
   const renderPillIcon = (
     src: string,
