@@ -533,76 +533,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     return u;
   };
 
-  // Inline pointer-based reorder helpers
-  const DRAG_THRESHOLD_PX = 6;
 
-  const suppressClickRef = useRef(false);
-
-  const onThumbPointerDown = (panel: UploadPanelKey, index: number) =>
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      reorderRef.current = {
-        panel,
-        index,
-        startX: e.clientX,
-        startY: e.clientY,
-        pointerId: e.pointerId,
-        active: false,
-      };
-      suppressClickRef.current = false;
-    };
-
-  const onThumbPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const st = reorderRef.current;
-    if (!st || st.pointerId !== e.pointerId) return;
-
-    const dx = e.clientX - st.startX;
-    const dy = e.clientY - st.startY;
-    const dist = Math.hypot(dx, dy);
-
-    if (!st.active) {
-      if (dist < DRAG_THRESHOLD_PX) return;
-      st.active = true;
-      suppressClickRef.current = true; // prevent delete click after drag
-    }
-
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    const btn = el?.closest("button.studio-thumb") as HTMLButtonElement | null;
-
-    const panel = btn?.dataset?.panel as UploadPanelKey | undefined;
-    const toRaw = btn?.dataset?.index;
-
-    if (!btn || !panel || panel !== st.panel) return;
-
-    const to = toRaw ? Number(toRaw) : NaN;
-    if (!Number.isFinite(to)) return;
-
-    if (to !== st.index) {
-      moveUploadItem(st.panel, st.index, to);
-      st.index = to;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const onThumbPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const st = reorderRef.current;
-    if (!st || st.pointerId !== e.pointerId) return;
-
-    reorderRef.current = null;
-    setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
-  };
-
-  const handleThumbClick = (panel: UploadPanelKey, id: string) => {
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-
-    removeUploadItem(panel, id);
-  };
 
   // Drag/drop support:
   // - drop files => onFilesPicked(panel, files)
