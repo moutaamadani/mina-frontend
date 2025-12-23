@@ -40,7 +40,8 @@ const API_BASE_URL = (() => {
 })();
 
 // MMA-only build (legacy endpoints removed from backend)
-const MMA_ENABLED = true;
+const MMA_ENABLED =
+  ["1", "true", "yes", "on"].includes(String(import.meta.env.VITE_MMA_ENABLED || "").toLowerCase());
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
 const RECREATE_DRAFT_KEY = "mina_recreate_draft_v1";
@@ -1449,7 +1450,6 @@ const apiFetch = async (path: string, init: RequestInit = {}) => {
   }
 };
 
-type MmaCreateResponse = { generation_id: string; status: string; sse_url: string };
 type MmaStreamState = { status: string; scanLines: string[] };
 
 const mmaStreamRef = useRef<EventSource | null>(null);
@@ -2067,18 +2067,14 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 
   const handleGenerateStill = async () => {
     const trimmed = stillBrief.trim();
-    if (trimmed.length < 10) return;
+    if (trimmed.length < 40) return;
 
     if (!API_BASE_URL) {
-      setStillError("Missing API base URL.");
+      setStillError("Missing API base URL (VITE_MINA_API_BASE_URL).");
       return;
     }
     if (!currentPassId) {
-      setStillError("Missing Pass ID.");
-      return;
-    }
-    if (!MMA_ENABLED) {
-      setStillError("MMA is required (legacy routes removed).");
+      setStillError("Missing Pass ID for MEGA session.");
       return;
     }
 
@@ -2086,77 +2082,138 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
     setStillError(null);
 
     try {
-      const safeAspectRatio = REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || "2:3";
+      const safeAspectRatio =
+        REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3";
 
-      const productItem0 = uploads.product[0];
-      const logoItem0 = uploads.logo[0];
+      // ✅ Build URLs from uploads (NO payload var)
+      const productItem = uploads.product[0];
+      const productUrl = productItem?.remoteUrl || productItem?.url || "";
 
-      const productUrl = (productItem0?.remoteUrl || productItem0?.url || "").trim();
-      const logoUrl = (logoItem0?.remoteUrl || logoItem0?.url || "").trim();
+      const logoItem = uploads.logo[0];
+      const logoUrl = logoItem?.remoteUrl || logoItem?.url || "";
 
       const inspirationUrls = (uploads.inspiration || [])
-        .map((u) => (u.remoteUrl || u.url || "").trim())
+        .map((u) => u.remoteUrl || u.url)
         .filter((u) => isHttpUrl(u))
         .slice(0, 4);
 
-      const sid = await ensureSession();
+      if (MMA_ENABLED) {
+        // ✅ Keys that your mma-controller reads:
+        // buildSeedreamImageInputs() accepts:
+        // - assets.product_image_url OR assets.productImageUrl
+        // - assets.logo_image_url OR assets.logoImageUrl
+        // - assets.inspiration_image_urls OR assets.inspirationImageUrls (etc)
+        //
+        // runProductionPipeline() uses working.inputs.aspect_ratio for seedream
+        const mmaBody = {
+          passId: currentPassId,
+          assets: {
+            product_image_url: isHttpUrl(productUrl) ? productUrl : "",
+            logo_image_url: isHttpUrl(logoUrl) ? logoUrl : "",
+            inspiration_image_urls: inspirationUrls,
+          },
+          inputs: {
+            brief: trimmed,
+            platform: currentAspect.platformKey,
+            aspect_ratio: safeAspectRatio,
+            stylePresetKeys: stylePresetKeysForApi,
+            minaVisionEnabled,
+          },
+          settings: {},
+          history: {
+            sessionId: sessionId || null,
+            sessionTitle: sessionTitle || null,
+          },
+          feedback: {},
+          prompts: {},
+        };
 
-      const mmaBody = {
-        passId: currentPassId,
-        assets: {
+        const { generationId } = await mmaCreateAndWait(
+          "/mma/still/create",
+          mmaBody,
+          ({ status, scanLines }) => {
+            const last = scanLines.slice(-1)[0] || "";
+            const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
+            if (overlay) setMinaOverrideText(overlay);
+          }
+        );
+
+        const result = await mmaFetchResult(generationId);
+
+        if (result?.status === "error") {
+          const msg = result?.error?.message || result?.error?.code || "MMA pipeline failed.";
+          throw new Error(String(msg));
+        }
+
+        const rawUrl =
+          result?.outputs?.seedream_image_url ||
+          result?.outputs?.image_url ||
+          result?.imageUrl ||
+          result?.outputUrl ||
+          "";
+
+        const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
+        if (!url) throw new Error("MMA returned no image URL.");
+
+        historyDirtyRef.current = true;
+        creditsDirtyRef.current = true;
+        void fetchCredits();
+
+        const item: StillItem = {
+          id: generationId,
+          url,
+          createdAt: new Date().toISOString(),
+          prompt: String(result?.prompt || trimmed),
+          aspectRatio: currentAspect.ratio,
+        };
+
+        setStillItems((prev) => {
+          const next = [item, ...prev];
+          setStillIndex(0);
+          return next;
+        });
+
+        setActiveMediaKind("still");
+        setLastStillPrompt(item.prompt);
+        return; // ✅ DO NOT fall through to legacy routes
+      }
+
+      // ---------- legacy (your existing /editorial/generate) ----------
+      // Keep your existing legacy payload build here (unchanged)
+      // (I’m not touching it since you asked “exactly my backend now” for MMA.)
+      const res = await apiFetch("/editorial/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          passId: currentPassId,
+          sessionId: await ensureSession(),
+          tone,
+          platform: currentAspect.platformKey,
+          minaVisionEnabled,
+          stylePresetKey: primaryStyleKeyForApi,
+          stylePresetKeys: stylePresetKeysForApi,
+          aspectRatio: currentAspect.ratio,
           productImageUrl: isHttpUrl(productUrl) ? productUrl : "",
           logoImageUrl: isHttpUrl(logoUrl) ? logoUrl : "",
           styleImageUrls: inspirationUrls,
-        },
-        inputs: {
           brief: trimmed,
-          tone,
-          platform: currentAspect.platformKey,
-          aspect_ratio: safeAspectRatio,
-          stylePresetKeys: stylePresetKeysForApi,
-          minaVisionEnabled,
-        },
-        history: {
-          sessionId: sid || null,
-          sessionTitle: sessionTitle || null,
-        },
-        settings: {},
-        feedback: {},
-        prompts: {},
-      };
+        }),
+      });
 
-      const { generationId } = await mmaCreateAndWait(
-        "/mma/still/create",
-        mmaBody,
-        ({ status, scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
-          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
-          if (overlay) setMinaOverrideText(overlay);
-        }
-      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `Editorial generate failed (${res.status})`);
+      }
 
-      const result = await mmaFetchResult(generationId);
-
-      const rawUrl =
-        result?.outputs?.seedream_image_url ||
-        result?.outputs?.image_url ||
-        result?.imageUrl ||
-        result?.outputUrl ||
-        "";
-
-      if (!rawUrl) throw new Error("MMA returned no image URL.");
-
-      const finalUrl = await ensureAssetsUrl(String(rawUrl), "generations");
-
-      historyDirtyRef.current = true;
-      creditsDirtyRef.current = true;
-      void fetchCredits();
+      const json = (await res.json().catch(() => ({}))) as any;
+      const raw = json?.imageUrl || json?.imageUrls?.[0] || "";
+      const url = raw ? await ensureAssetsUrl(raw, "generations") : "";
+      if (!url) throw new Error("No imageUrl returned.");
 
       const item: StillItem = {
-        id: generationId,
-        url: finalUrl,
+        id: json?.generationId || `still_${Date.now()}`,
+        url,
         createdAt: new Date().toISOString(),
-        prompt: String(result?.prompt || trimmed),
+        prompt: String(json?.prompt || trimmed),
         aspectRatio: currentAspect.ratio,
       };
 
@@ -2168,6 +2225,7 @@ async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: stri
 
       setActiveMediaKind("still");
       setLastStillPrompt(item.prompt);
+      applyCreditsFromResponse(json?.credits);
     } catch (err: any) {
       setStillError(err?.message || "Unexpected error generating still.");
     } finally {
@@ -2224,11 +2282,6 @@ const handleSuggestMotion = async () => {
   if (!API_BASE_URL || !motionReferenceImageUrl || motionSuggestLoading || motionSuggestTyping) return;
   if (!currentPassId) return;
 
-  if (!MMA_ENABLED) {
-    setMotionSuggestError("MMA is required (legacy routes removed).");
-    return;
-  }
-
   setAnimateMode(true);
 
   try {
@@ -2237,30 +2290,32 @@ const handleSuggestMotion = async () => {
 
     const movementStyle = (motionStyleKeys?.[0] || "cinematic_smooth") as any;
 
-    const res = await apiFetch("/mma/motion/suggest", {
+    // ✅ Your backend MMA controller does NOT expose /mma/motion/suggest
+    const res = await apiFetch("/motion/suggest", {
       method: "POST",
       body: JSON.stringify({
-        passId: currentPassId,
+        // Keep the exact keys your existing /motion/suggest expects
         inputStillUrl: motionReferenceImageUrl,
         movementStyle,
         userMotionBrief: motionDescription || "",
         maxPromptComplexity: "simple_english",
+
+        // helpful extra context (harmless if ignored)
+        passId: currentPassId,
         platform: animateAspectOption.platformKey,
-        tone,
-        aspect_ratio: animateAspectOption.ratio,
-        stylePresetKeys: stylePresetKeysForApi,
+        aspectRatio: animateAspectOption.ratio,
         minaVisionEnabled,
+        stylePresetKeys: stylePresetKeysForApi,
       }),
     });
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
-      throw new Error(errJson?.message || `MMA suggest failed (${res.status})`);
+      throw new Error(errJson?.message || "Failed to suggest motion.");
     }
 
     const data = (await res.json().catch(() => ({}))) as any;
     const suggestion = data.motionPrompt || data.suggestion || data.prompt || "";
-
     if (suggestion) await applyMotionSuggestionText(String(suggestion));
   } catch (err: any) {
     setMotionSuggestError(err?.message || "Unexpected error suggesting motion.");
@@ -2274,12 +2329,7 @@ const handleSuggestMotion = async () => {
     if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
     if (!currentPassId) {
-      setMotionError("Missing Pass ID.");
-      return;
-    }
-
-    if (!MMA_ENABLED) {
-      setMotionError("MMA is required (legacy routes removed).");
+      setMotionError("Missing Pass ID for MEGA session.");
       return;
     }
 
@@ -2287,70 +2337,124 @@ const handleSuggestMotion = async () => {
     setMotionError(null);
 
     try {
-      // Kling frames: start + optional end (2nd product upload)
-      const frame0 = (uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "").trim();
-      const frame1 = (uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "").trim();
+      if (MMA_ENABLED) {
+        // Kling start/end frames:
+        // ✅ Your backend's pickKlingImages() looks for:
+        // - assets.start_image_url (or startImageUrl)
+        // - assets.end_image_url (or endImageUrl)
+        // - OR assets.kling_image_urls array
+        const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+        const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
 
-      const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
-      const endFrame = isHttpUrl(frame1) ? frame1 : "";
+        const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
+        const endFrame = isHttpUrl(frame1) ? frame1 : "";
 
+        const mmaBody = {
+          passId: currentPassId,
+          assets: {
+            start_image_url: startFrame,
+            end_image_url: endFrame || "",
+            kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+          },
+          inputs: {
+            motionDescription: motionTextTrimmed,
+            platform: animateAspectOption.platformKey,
+            aspect_ratio: animateAspectOption.ratio,
+            stylePresetKeys: stylePresetKeysForApi,
+            minaVisionEnabled,
+          },
+          settings: {},
+          history: {
+            sessionId: sessionId || null,
+            sessionTitle: sessionTitle || null,
+          },
+          feedback: {},
+          prompts: {},
+        };
+
+        const { generationId } = await mmaCreateAndWait(
+          "/mma/video/animate",
+          mmaBody,
+          ({ status, scanLines }) => {
+            const last = scanLines.slice(-1)[0] || "";
+            const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
+            if (overlay) setMinaOverrideText(overlay);
+          }
+        );
+
+        const result = await mmaFetchResult(generationId);
+
+        if (result?.status === "error") {
+          const msg = result?.error?.message || result?.error?.code || "MMA pipeline failed.";
+          throw new Error(String(msg));
+        }
+
+        const rawUrl =
+          result?.outputs?.kling_video_url ||
+          result?.outputs?.video_url ||
+          result?.videoUrl ||
+          result?.outputUrl ||
+          "";
+
+        const url = rawUrl ? await ensureAssetsUrl(rawUrl, "motions") : "";
+        if (!url) throw new Error("MMA returned no video URL.");
+
+        historyDirtyRef.current = true;
+        creditsDirtyRef.current = true;
+        void fetchCredits();
+
+        const item: MotionItem = {
+          id: generationId,
+          url,
+          createdAt: new Date().toISOString(),
+          prompt: String(result?.prompt || motionTextTrimmed),
+        };
+
+        setMotionItems((prev) => {
+          const next = [item, ...prev];
+          setMotionIndex(0);
+          return next;
+        });
+
+        setActiveMediaKind("motion");
+        return; // ✅ do not fall through
+      }
+
+      // ---------- legacy /motion/generate ----------
       const sid = await ensureSession();
 
-      const mmaBody = {
-        passId: currentPassId,
-        assets: {
-          kling_start_image_url: startFrame,
-          kling_end_image_url: endFrame || null,
-        },
-        inputs: {
+      const res = await apiFetch("/motion/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          passId: currentPassId,
+          sessionId: sid,
+          lastImageUrl: motionReferenceImageUrl,
           motionDescription: motionTextTrimmed,
           tone,
           platform: animateAspectOption.platformKey,
-          aspect_ratio: animateAspectOption.ratio,
-          stylePresetKeys: stylePresetKeysForApi,
           minaVisionEnabled,
-        },
-        history: {
-          sessionId: sid || null,
-          sessionTitle: sessionTitle || null,
-        },
-        settings: {},
-        feedback: {},
-        prompts: {},
-      };
+          stylePresetKey: primaryStyleKeyForApi,
+          stylePresetKeys: stylePresetKeysForApi,
+          motionStyles: motionStyleKeys,
+          aspectRatio: animateAspectOption.ratio,
+        }),
+      });
 
-      const { generationId } = await mmaCreateAndWait(
-        "/mma/video/animate",
-        mmaBody,
-        ({ status, scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
-          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
-          if (overlay) setMinaOverrideText(overlay);
-        }
-      );
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `Motion generate failed (${res.status})`);
+      }
 
-      const result = await mmaFetchResult(generationId);
-
-      const rawUrl =
-        result?.outputs?.kling_video_url ||
-        result?.outputs?.video_url ||
-        result?.videoUrl ||
-        result?.outputUrl ||
-        "";
-
-      if (!rawUrl) throw new Error("MMA returned no video URL.");
-
-      const finalUrl = await ensureAssetsUrl(String(rawUrl), "motions");
-
-      historyDirtyRef.current = true;
-      creditsDirtyRef.current = true;
-      void fetchCredits();
+      const json = (await res.json().catch(() => ({}))) as any;
+      const raw = json?.videoUrl || "";
+      const url = raw ? await ensureAssetsUrl(raw, "motions") : "";
+      if (!url) throw new Error("No videoUrl returned.");
 
       const item: MotionItem = {
-        id: generationId,
-        url: finalUrl,
+        id: json?.generationId || `motion_${Date.now()}`,
+        url,
         createdAt: new Date().toISOString(),
-        prompt: String(result?.prompt || motionTextTrimmed),
+        prompt: String(json?.prompt || motionTextTrimmed),
       };
 
       setMotionItems((prev) => {
@@ -2360,6 +2464,7 @@ const handleSuggestMotion = async () => {
       });
 
       setActiveMediaKind("motion");
+      applyCreditsFromResponse(json?.credits);
     } catch (err: any) {
       setMotionError(err?.message || "Unexpected error generating motion.");
     } finally {
@@ -2418,21 +2523,38 @@ const forceSaveUrl = async (url: string, filename: string) => {
 const handleLikeCurrentStill = async () => {
   const targetMedia = currentMotion || currentStill;
   if (!targetMedia) return;
-
   if (!currentPassId) return;
 
   const resultType = currentMotion ? "motion" : "image";
   const likeKey = getCurrentMediaKey();
   const nextLiked = likeKey ? !likedMap[likeKey] : false;
 
-  if (likeKey) {
-    setLikedMap((prev) => ({ ...prev, [likeKey]: nextLiked }));
-  }
+  if (likeKey) setLikedMap((prev) => ({ ...prev, [likeKey]: nextLiked }));
 
+  // Only write to backend when liking (not unliking)
   if (!API_BASE_URL || !nextLiked) return;
 
   try {
     setLikeSubmitting(true);
+
+    if (MMA_ENABLED) {
+      // ✅ EXACT MMA route in your controller
+      await apiFetch("/mma/events", {
+        method: "POST",
+        body: JSON.stringify({
+          passId: currentPassId,
+          generation_id: targetMedia.id || null,
+          event_type: "like",
+          payload: {
+            result_type: resultType,
+            url: targetMedia.url,
+          },
+        }),
+      });
+      return;
+    }
+
+    // legacy
     await apiFetch("/feedback/like", {
       method: "POST",
       body: JSON.stringify({
