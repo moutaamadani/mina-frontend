@@ -728,6 +728,59 @@ margin-bottom: 6px;
   text-overflow: ellipsis;
 }
 
+/* Motion frames (Start -> End) */
+.studio-frames-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.studio-frame-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-frame-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  opacity: 0.55;
+}
+
+.studio-thumb--frame {
+  position: relative;
+}
+
+.studio-frame-mid {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 30px;
+}
+
+.studio-frame-arrow {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.35;
+  user-select: none;
+}
+
+.studio-frame-swap {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.55;
+}
+
+.studio-frame-swap:hover {
+  opacity: 0.95;
+}
+
 /* =============================================================
    Mobile layout fix: stack columns + prevent horizontal overflow
    ============================================================= */
