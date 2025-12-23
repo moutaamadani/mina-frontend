@@ -415,9 +415,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   // pills delay style
   const pillBaseStyle = (index: number): React.CSSProperties => ({
-    transitionDelay: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
     opacity: showPills ? 1 : 0,
     transform: showPills ? "translateY(0)" : "translateY(-8px)",
+    ["--pill-delay" as const]: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
   });
 
   // panel behavior
@@ -644,6 +644,10 @@ const motionStyleLabel =
       const seed = MOTION_STYLES.find((s) => s.key === k)?.seed || "";
       if (seed) onBriefChange(seed);
     }
+  };
+
+  const hoverMotionStyle = (k: MotionStyleKey) => {
+    setMotionStyleKeys((prev) => (prev.includes(k) ? prev : [...prev, k]));
   };
 
   // still style click: allow 0/1/2+ selections just like motion styles
@@ -1166,6 +1170,7 @@ const motionStyleLabel =
                             motionStyleKeys.includes(m.key) && "active"
                           )}
                           onClick={() => pickMotionStyle(m.key)}
+                          onMouseEnter={() => hoverMotionStyle(m.key)}
                         >
                           <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
                             {m.thumb ? <img src={m.thumb} alt="" /> : <span aria-hidden="true">{m.label.slice(0, 1)}</span>}
