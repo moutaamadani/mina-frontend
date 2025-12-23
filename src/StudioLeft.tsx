@@ -385,6 +385,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionStyleKeys = props.motionStyleKeys ?? localMotionStyle;
   const setMotionStyleKeys = props.setMotionStyleKeys ?? setLocalMotionStyle;
 
+  // ✅ Always start movement styles as none-selected when entering motion mode
+  useEffect(() => {
+    if (animateMode) {
+      setMotionStyleKeys([]);
+    }
+  }, [animateMode, setMotionStyleKeys]);
+
   const stillBriefRef = useRef<string>("");
   const motionBriefRef = useRef<string>("");
 
@@ -437,46 +444,48 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // - drop files => onFilesPicked(panel, files)
   // - drop url => onImageUrlPasted(url) (and we open the panel for UX)
   const extractDropUrl = (e: React.DragEvent) => {
-  const dt = e.dataTransfer;
+    const dt = e.dataTransfer;
 
-  const uri = (dt.getData("text/uri-list") || "").trim();
-  const plain = (dt.getData("text/plain") || "").trim();
-  const html = dt.getData("text/html") || "";
+    const uri = (dt.getData("text/uri-list") || "").trim();
+    const plain = (dt.getData("text/plain") || "").trim();
+    const html = dt.getData("text/html") || "";
 
-  const fromHtml =
-    html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] ||
-    html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] ||
-    "";
+    const fromHtml =
+      html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] ||
+      html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] ||
+      "";
 
-  const candidates = [uri, plain, fromHtml].filter(Boolean).map((u) => u.split("\n")[0].trim());
+    const candidates = [uri, plain, fromHtml].filter(Boolean).map((u) => u.split("\n")[0].trim());
 
-  for (const u of candidates) {
-    if (/^https?:\/\//i.test(u)) return u; // ✅ only http(s)
-  }
-  return "";
-};
-
+    for (const u of candidates) {
+      if (/^https?:\/\//i.test(u)) return u; // ✅ only http(s)
+    }
+    return "";
+  };
 
   const handleDropOnPanel = (panel: UploadPanelKey) => (e: React.DragEvent) => {
-  e.preventDefault();
-  e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
 
-  // ✅ First: if the drag contains a URL, treat it as a URL drop (prevents blob/temp-file drags)
-  const url = extractDropUrl(e);
-  if (url) {
-    openPanel(panel);
-    props.onImageUrlPasted?.(url);
-    return;
-  }
+    // ✅ Ignore drags that originate from style thumbnails (prevents accidental style->upload)
+    const isStyleThumbDrag = !!e.dataTransfer?.getData("application/x-mina-style-thumb");
+    if (isStyleThumbDrag) return;
 
-  // ✅ Otherwise: normal file drop (from desktop)
-  const files = e.dataTransfer?.files;
-  if (files && files.length) {
-    props.onFilesPicked(panel, files);
-    return;
-  }
-};
+    // ✅ First: if the drag contains a URL, treat it as a URL drop (prevents blob/temp-file drags)
+    const url = extractDropUrl(e);
+    if (url) {
+      openPanel(panel);
+      props.onImageUrlPasted?.(url);
+      return;
+    }
 
+    // ✅ Otherwise: normal file drop (from desktop)
+    const files = e.dataTransfer?.files;
+    if (files && files.length) {
+      props.onFilesPicked(panel, files);
+      return;
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1049,6 +1058,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           type="button"
                           draggable
                           onDragStart={(e) => {
+                            e.dataTransfer.setData("application/x-mina-style-thumb", "1");
                             e.dataTransfer.setData("text/uri-list", s.thumb);
                             e.dataTransfer.setData("text/plain", s.thumb);
                             e.dataTransfer.effectAllowed = "copy";
@@ -1174,6 +1184,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           type="button"
                           draggable
                           onDragStart={(e) => {
+                            e.dataTransfer.setData("application/x-mina-style-thumb", "1");
                             e.dataTransfer.setData("text/uri-list", m.thumb);
                             e.dataTransfer.setData("text/plain", m.thumb);
                             e.dataTransfer.effectAllowed = "copy";
