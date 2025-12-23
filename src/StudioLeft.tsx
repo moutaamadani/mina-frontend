@@ -1047,15 +1047,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={s.key}
                           type="button"
-                      className={classNames(
-                        "studio-style-card",
-                        stylePresetKeys.includes(s.key) && "active"
-                      )}
-                      onClick={() => toggleStylePreset(s.key)}
-                    >
-                      <div className="studio-style-thumb">
-                        {s.thumb ? <img src={s.thumb} alt="" /> : <span aria-hidden="true">+</span>}
-                      </div>
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/uri-list", s.thumb);
+                            e.dataTransfer.setData("text/plain", s.thumb);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
+                          className={classNames(
+                            "studio-style-card",
+                            stylePresetKeys.includes(s.key) && "active"
+                          )}
+                          onClick={() => toggleStylePreset(s.key)}
+                        >
+                          <div className="studio-style-thumb">
+                            {s.thumb ? <img src={s.thumb} alt="" draggable={false} /> : <span aria-hidden="true">+</span>}
+                          </div>
 
                       <div
                         className="studio-style-label"
@@ -1166,6 +1172,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         <button
                           key={m.key}
                           type="button"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData("text/uri-list", m.thumb);
+                            e.dataTransfer.setData("text/plain", m.thumb);
+                            e.dataTransfer.effectAllowed = "copy";
+                          }}
                           className={classNames(
                             "studio-style-card",
                             "studio-motion-style-card",
@@ -1174,7 +1186,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           onClick={() => pickMotionStyle(m.key)}
                         >
                           <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
-                            {m.thumb ? <img src={m.thumb} alt="" /> : <span aria-hidden="true">{m.label.slice(0, 1)}</span>}
+                            {m.thumb ? <img src={m.thumb} alt="" draggable={false} /> : <span aria-hidden="true">{m.label.slice(0, 1)}</span>}
                           </div>
                           <div className="studio-motion-style-label">{m.label}</div>
                         </button>
