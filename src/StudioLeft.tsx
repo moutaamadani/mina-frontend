@@ -447,21 +447,25 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   const handleDropOnPanel = (panel: UploadPanelKey) => (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  e.preventDefault();
+  e.stopPropagation();
 
-    const files = e.dataTransfer?.files;
-    if (files && files.length) {
-      props.onFilesPicked(panel, files);
-      return;
-    }
+  // ✅ First: if the drag contains a URL, treat it as a URL drop (prevents blob/temp-file drags)
+  const url = extractDropUrl(e);
+  if (url) {
+    openPanel(panel);
+    props.onImageUrlPasted?.(url);
+    return;
+  }
 
-    const url = extractDropUrl(e);
-    if (url) {
-      openPanel(panel);
-      props.onImageUrlPasted?.(url);
-    }
-  };
+  // ✅ Otherwise: normal file drop (from desktop)
+  const files = e.dataTransfer?.files;
+  if (files && files.length) {
+    props.onFilesPicked(panel, files);
+    return;
+  }
+};
+
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
