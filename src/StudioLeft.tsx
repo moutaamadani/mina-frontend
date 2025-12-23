@@ -1123,51 +1123,105 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
                     <div className="studio-panel-row">
                       <div
-                        className="studio-thumbs studio-thumbs--inline"
+                        className="studio-frames-row"
                         onDragOver={handleDragOver}
                         onDrop={handleDropOnPanel("product")}
                       >
-                        {uploads.product.map((it, idx) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className="studio-thumb"
-                            draggable
-                            onDragStart={() => {
-                              (window as any).__minaDragIndex = idx;
-                            }}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const from = Number((window as any).__minaDragIndex);
-                              const to = idx;
-                              if (Number.isFinite(from) && from !== to) {
-                                moveUploadItem("product", from, to);
-                              }
-                              (window as any).__minaDragIndex = null;
-                            }}
-                            onClick={() => removeUploadItem("product", it.id)}
-                            title={idx === 0 ? "Start frame (required) • Click to delete • Drag to reorder" : "End frame (optional) • Click to delete • Drag to reorder"}
-                          >
-                            {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" />
-                            ) : it.uploading ? (
-                              <span className="studio-thumb-spinner" aria-hidden="true" />
-                            ) : null}
-                          </button>
-                        ))}
+                        {/* Start frame slot */}
+                        <div className="studio-frame-slot">
+                          <div className="studio-frame-label">Start</div>
 
-                        {uploads.product.length < 2 && (
-                          <button
-                            type="button"
-                            className="studio-plusbox studio-plusbox--inline"
-                            onClick={() => triggerPick("product")}
-                            title={uploads.product.length === 0 ? "Add start frame" : "Add end frame (optional)"}
-                          >
-                            <span aria-hidden="true">+</span>
-                          </button>
-                        )}
+                          {uploads.product[0] ? (
+                            <button
+                              type="button"
+                              className="studio-thumb studio-thumb--frame"
+                              draggable
+                              onDragStart={() => ((window as any).__minaDragIndex = 0)}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const from = Number((window as any).__minaDragIndex);
+                                if (Number.isFinite(from) && from !== 0) moveUploadItem("product", from, 0);
+                                (window as any).__minaDragIndex = null;
+                              }}
+                              onClick={() => removeUploadItem("product", uploads.product[0].id)}
+                              title="Start frame • Click to delete • Drag to swap"
+                            >
+                              {getDisplayUrl(uploads.product[0]) ? (
+                                <img src={getDisplayUrl(uploads.product[0])} alt="" />
+                              ) : uploads.product[0].uploading ? (
+                                <span className="studio-thumb-spinner" aria-hidden="true" />
+                              ) : null}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="studio-plusbox studio-plusbox--inline"
+                              onClick={() => triggerPick("product")}
+                              title="Add start frame"
+                            >
+                              <span aria-hidden="true">+</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Middle arrow + swap */}
+                        <div className="studio-frame-mid" aria-hidden="true">
+                          <div className="studio-frame-arrow">→</div>
+
+                          {uploads.product[0] && uploads.product[1] && (
+                            <button
+                              type="button"
+                              className="studio-frame-swap"
+                              aria-hidden="false"
+                              aria-label="Swap frames"
+                              title="Swap start/end"
+                              onClick={() => moveUploadItem("product", 0, 1)}
+                            >
+                              ⇄
+                            </button>
+                          )}
+                        </div>
+
+                        {/* End frame slot */}
+                        <div className="studio-frame-slot">
+                          <div className="studio-frame-label">End</div>
+
+                          {uploads.product[1] ? (
+                            <button
+                              type="button"
+                              className="studio-thumb studio-thumb--frame"
+                              draggable
+                              onDragStart={() => ((window as any).__minaDragIndex = 1)}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const from = Number((window as any).__minaDragIndex);
+                                if (Number.isFinite(from) && from !== 1) moveUploadItem("product", from, 1);
+                                (window as any).__minaDragIndex = null;
+                              }}
+                              onClick={() => removeUploadItem("product", uploads.product[1].id)}
+                              title="End frame • Click to delete • Drag to swap"
+                            >
+                              {getDisplayUrl(uploads.product[1]) ? (
+                                <img src={getDisplayUrl(uploads.product[1])} alt="" />
+                              ) : uploads.product[1].uploading ? (
+                                <span className="studio-thumb-spinner" aria-hidden="true" />
+                              ) : null}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="studio-plusbox studio-plusbox--inline"
+                              onClick={() => triggerPick("product")}
+                              title="Add end frame (optional)"
+                            >
+                              <span aria-hidden="true">+</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
