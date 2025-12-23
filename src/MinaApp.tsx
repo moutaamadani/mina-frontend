@@ -2721,7 +2721,9 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const handleToggleAnimateMode = () => {
     setAnimateMode((prev) => {
       const next = !prev;
+
       if (next && latestStill?.url) {
+        // entering Animate: auto-seed start frame with latest still
         setUploads((curr) => ({
           ...curr,
           product: [
@@ -2735,6 +2737,15 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
           ],
         }));
       }
+
+      if (!next) {
+        // leaving Animate: keep only the first product image
+        setUploads((curr) => ({
+          ...curr,
+          product: (curr.product || []).slice(0, 1),
+        }));
+      }
+
       return next;
     });
   };
@@ -2760,102 +2771,116 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
     activePanel === "logo" ? "logo" : activePanel === "inspiration" ? "inspiration" : "product";
 
   // ✅ REPLACE the whole addFilesToPanel() function with this version
-const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
-  const max = capForPanel(panel);
+  const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
+    const max = capForPanel(panel);
 
-  const incoming = Array.from(files || []).filter(
-    (f) => f && typeof f.type === "string" && f.type.startsWith("image/")
-  );
-  if (!incoming.length) return;
+    const incoming = Array.from(files || []).filter(
+      (f) => f && typeof f.type === "string" && f.type.startsWith("image/")
+    );
+    if (!incoming.length) return;
 
-  const replace = panel !== "inspiration";
+    // ✅ NEW RULE:
+    // - Inspiration always appends (max 4)
+    // - Product appends ONLY in animateMode (max 2)
+    // - Logo always replaces
+    const replace = panel === "logo" || (panel === "product" && !animateMode);
 
-  // IMPORTANT: use uploadsRef so drag/drop handlers never use stale `uploads`
-  const current = uploadsRef.current?.[panel] || [];
-  const existingCount = current.length;
+    // IMPORTANT: use uploadsRef so drag/drop handlers never use stale `uploads`
+    const current = uploadsRef.current?.[panel] || [];
+    const existingCount = current.length;
 
-  const remaining = replace ? max : Math.max(0, max - existingCount);
-  const slice = incoming.slice(0, remaining);
-  if (!slice.length) return;
+    const remaining = replace ? max : Math.max(0, max - existingCount);
+    const slice = incoming.slice(0, remaining);
+    if (!slice.length) return;
 
-  // Build new items FIRST (so we can start uploads immediately)
-  const now = Date.now();
-  const created = slice.map((file, i) => {
-    const id = `${panel}_${now}_${i}_${Math.random().toString(16).slice(2)}`;
-    const previewUrl = URL.createObjectURL(file);
+    const now = Date.now();
+    const created = slice.map((file, i) => {
+      const id = `${panel}_${now}_${i}_${Math.random().toString(16).slice(2)}`;
+      const previewUrl = URL.createObjectURL(file);
 
-    const item: UploadItem = {
-      id,
-      kind: "file",
-      url: previewUrl, // blob preview
-      remoteUrl: undefined, // will become https after upload
-      file,
-      uploading: true,
-      error: undefined,
-    };
+      const item: UploadItem = {
+        id,
+        kind: "file",
+        url: previewUrl, // blob preview
+        remoteUrl: undefined, // will become https after upload
+        file,
+        uploading: true,
+        error: undefined,
+      };
 
-    return { id, file, previewUrl, item };
-  });
+      return { id, file, previewUrl, item };
+    });
 
-  // Update state (and revoke old previews if replacing)
-  setUploads((prev) => {
-    if (replace) {
-      prev[panel].forEach((it) => {
-        if (it.kind === "file" && it.url && it.url.startsWith("blob:")) {
+    setUploads((prev) => {
+      // If we're replacing, revoke old blob previews
+      if (replace) {
+        prev[panel].forEach((it) => {
+          if (it.kind === "file" && it.url && it.url.startsWith("blob:")) {
+            try {
+              URL.revokeObjectURL(it.url);
+            } catch {
+              // ignore
+            }
+          }
+        });
+      }
+
+      const base = replace ? [] : prev[panel];
+      const next = [...base, ...created.map((c) => c.item)].slice(0, max);
+
+      // Safety: if anything got trimmed, revoke unused blobs
+      const accepted = new Set(next.map((x) => x.id));
+      created.forEach((c) => {
+        if (!accepted.has(c.id)) {
           try {
-            URL.revokeObjectURL(it.url);
+            URL.revokeObjectURL(c.previewUrl);
           } catch {
             // ignore
           }
         }
       });
-    }
 
-    const base = replace ? [] : prev[panel];
-    const next = [...base, ...created.map((c) => c.item)].slice(0, max);
-
-    // Safety: if anything got trimmed, revoke unused blobs
-    const accepted = new Set(next.map((x) => x.id));
-    created.forEach((c) => {
-      if (!accepted.has(c.id)) {
-        try {
-          URL.revokeObjectURL(c.previewUrl);
-        } catch {
-          // ignore
-        }
-      }
+      return { ...prev, [panel]: next };
     });
 
-    return { ...prev, [panel]: next };
-  });
-
-  // ✅ START uploads immediately (this is what was missing before)
-  created.forEach(({ id, file }) => {
-    void startUploadForFileItem(panel, id, file);
-  });
-};
+    // Start uploads immediately
+    created.forEach(({ id, file }) => {
+      void startUploadForFileItem(panel, id, file);
+    });
+  };
 
 
   const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
     const max = capForPanel(panel);
-    const replace = panel !== "inspiration";
+
+    // ✅ Same rule as files:
+    // - Inspiration appends (max 4)
+    // - Product appends ONLY in animateMode (max 2)
+    // - Logo replaces
+    const replace = panel === "logo" || (panel === "product" && !animateMode);
+
+    const current = uploadsRef.current?.[panel] || [];
+    const existingCount = current.length;
+
+    const remaining = replace ? max : Math.max(0, max - existingCount);
+    if (!remaining) return;
 
     const id = `${panel}_url_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     setUploads((prev) => {
       const base = replace ? [] : prev[panel];
 
-      const next: UploadItem = {
+      const nextItem: UploadItem = {
         id,
         kind: "url",
-        url, // original http url (preview)
-        remoteUrl: undefined, // will become R2 url
+        url,
+        remoteUrl: undefined,
         uploading: true,
       };
 
       return {
         ...prev,
-        [panel]: [...base, next].slice(0, max),
+        [panel]: [...base, nextItem].slice(0, max),
       };
     });
 

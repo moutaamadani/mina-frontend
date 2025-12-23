@@ -1070,8 +1070,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                             e.dataTransfer.setData("text/x-mina-style-thumb", "1");
                             e.dataTransfer.setData("application/x-mina-style-thumb", "1");
                           
-                            e.dataTransfer.setData("text/uri-list", s.thumb /* or m.thumb */);
-                            e.dataTransfer.setData("text/plain", s.thumb /* or m.thumb */);
+                            e.dataTransfer.setData("text/uri-list", s.thumb);
+                            e.dataTransfer.setData("text/plain", s.thumb);
                             e.dataTransfer.effectAllowed = "copy";
                           }}
 
@@ -1131,7 +1131,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <>
                 <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                   <div className="studio-panel">
-                    <div className="studio-panel-title">Add one or two frames</div>
+                    <div className="studio-panel-title">Add frames</div>
 
                     <div className="studio-panel-row">
                       <div
@@ -1139,28 +1139,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         onDragOver={handleDragOver}
                         onDrop={handleDropOnPanel("product")}
                       >
-                        {uploads.product.map((it, idx) => (
+                        {uploads.product.map((it) => (
                           <button
                             key={it.id}
                             type="button"
                             className="studio-thumb"
-                            draggable
-                            onDragStart={() => {
-                              (window as any).__minaDragIndex = idx;
-                            }}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const from = Number((window as any).__minaDragIndex);
-                              const to = idx;
-                              if (Number.isFinite(from) && from !== to) {
-                                moveUploadItem("product", from, to);
-                              }
-                              (window as any).__minaDragIndex = null;
-                            }}
                             onClick={() => removeUploadItem("product", it.id)}
-                            title={idx === 0 ? "Start frame (required) • Click to delete • Drag to reorder" : "End frame (optional) • Click to delete • Drag to reorder"}
+                            title="Click to delete"
                           >
                             {getDisplayUrl(it) ? (
                               <img src={getDisplayUrl(it)} alt="" />
@@ -1200,8 +1185,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                               e.dataTransfer.setData("text/x-mina-style-thumb", "1");
                               e.dataTransfer.setData("application/x-mina-style-thumb", "1");
                             
-                              e.dataTransfer.setData("text/uri-list", s.thumb /* or m.thumb */);
-                              e.dataTransfer.setData("text/plain", s.thumb /* or m.thumb */);
+                              e.dataTransfer.setData("text/uri-list", m.thumb);
+                              e.dataTransfer.setData("text/plain", m.thumb);
                               e.dataTransfer.effectAllowed = "copy";
                             }}
 
