@@ -376,6 +376,100 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // ------------------------------------
+  // Pointer-based reordering (no HTML5 drag/drop)
+  // ------------------------------------
+  const reorderRef = useRef<{
+    panel: UploadPanelKey;
+    index: number;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    active: boolean;
+  } | null>(null);
+
+  const suppressClickRef = useRef(false);
+  const DRAG_THRESHOLD_PX = 6;
+
+  const onThumbPointerDown =
+    (panel: UploadPanelKey, index: number) =>
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      if (e.button !== 0) return; // left click only
+      if ((uploads[panel]?.length || 0) < 2) return; // nothing to reorder
+
+      suppressClickRef.current = false;
+
+      reorderRef.current = {
+        panel,
+        index,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        active: false,
+      };
+
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+  const onThumbPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const st = reorderRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+
+    const dx = e.clientX - st.startX;
+    const dy = e.clientY - st.startY;
+    const dist = Math.hypot(dx, dy);
+
+    if (!st.active) {
+      if (dist < DRAG_THRESHOLD_PX) return;
+      st.active = true;
+      suppressClickRef.current = true; // prevent delete click after drag
+    }
+
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const btn = el?.closest("button.studio-thumb") as HTMLButtonElement | null;
+    const to = btn?.dataset?.index ? Number(btn.dataset.index) : NaN;
+    if (!Number.isFinite(to)) return;
+
+    if (to !== st.index) {
+      moveUploadItem(st.panel, st.index, to);
+      st.index = to;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onThumbPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const st = reorderRef.current;
+    if (!st || st.pointerId !== e.pointerId) return;
+
+    reorderRef.current = null;
+
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+
+    // keep suppressClick true for the immediate click event, then reset
+    if (st.active) {
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+  };
+
+  const handleThumbClick = (panel: UploadPanelKey, id: string) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    removeUploadItem(panel, id);
+  };
+
   // ✅ motion mode (with local fallback)
   const [localAnimate, setLocalAnimate] = useState(false);
   const animateMode = props.animateMode ?? localAnimate;
@@ -1139,16 +1233,22 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         onDragOver={handleDragOver}
                         onDrop={handleDropOnPanel("product")}
                       >
-                        {uploads.product.map((it) => (
+                        {uploads.product.map((it, idx) => (
                           <button
                             key={it.id}
                             type="button"
                             className="studio-thumb"
-                            onClick={() => removeUploadItem("product", it.id)}
-                            title="Click to delete"
+                            data-index={idx}
+                            style={{ touchAction: "none" }} // ✅ smooth drag on mobile too
+                            onPointerDown={onThumbPointerDown("product", idx)}
+                            onPointerMove={onThumbPointerMove}
+                            onPointerUp={onThumbPointerUp}
+                            onPointerCancel={onThumbPointerUp}
+                            onClick={() => handleThumbClick("product", it.id)}
+                            title={idx === 0 ? "Start frame • Drag to reorder • Click to delete" : "End frame • Drag to reorder • Click to delete"}
                           >
                             {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" />
+                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
                             ) : it.uploading ? (
                               <span className="studio-thumb-spinner" aria-hidden="true" />
                             ) : null}

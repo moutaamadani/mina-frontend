@@ -2779,13 +2779,9 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
     );
     if (!incoming.length) return;
 
-    // ✅ NEW RULE:
-    // - Inspiration always appends (max 4)
-    // - Product appends ONLY in animateMode (max 2)
-    // - Logo always replaces
-    const replace = panel === "logo" || (panel === "product" && !animateMode);
+    // ✅ inspiration behaves as append; animate(product) should ALSO append up to 2
+    const replace = panel === "inspiration" ? false : !(panel === "product" && animateMode);
 
-    // IMPORTANT: use uploadsRef so drag/drop handlers never use stale `uploads`
     const current = uploadsRef.current?.[panel] || [];
     const existingCount = current.length;
 
@@ -2801,8 +2797,8 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       const item: UploadItem = {
         id,
         kind: "file",
-        url: previewUrl, // blob preview
-        remoteUrl: undefined, // will become https after upload
+        url: previewUrl,
+        remoteUrl: undefined,
         file,
         uploading: true,
         error: undefined,
@@ -2812,15 +2808,12 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
     });
 
     setUploads((prev) => {
-      // If we're replacing, revoke old blob previews
       if (replace) {
         prev[panel].forEach((it) => {
           if (it.kind === "file" && it.url && it.url.startsWith("blob:")) {
             try {
               URL.revokeObjectURL(it.url);
-            } catch {
-              // ignore
-            }
+            } catch {}
           }
         });
       }
@@ -2828,22 +2821,18 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
       const base = replace ? [] : prev[panel];
       const next = [...base, ...created.map((c) => c.item)].slice(0, max);
 
-      // Safety: if anything got trimmed, revoke unused blobs
       const accepted = new Set(next.map((x) => x.id));
       created.forEach((c) => {
         if (!accepted.has(c.id)) {
           try {
             URL.revokeObjectURL(c.previewUrl);
-          } catch {
-            // ignore
-          }
+          } catch {}
         }
       });
 
       return { ...prev, [panel]: next };
     });
 
-    // Start uploads immediately
     created.forEach(({ id, file }) => {
       void startUploadForFileItem(panel, id, file);
     });
@@ -2853,24 +2842,15 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
   const addUrlToPanel = (panel: UploadPanelKey, url: string) => {
     const max = capForPanel(panel);
 
-    // ✅ Same rule as files:
-    // - Inspiration appends (max 4)
-    // - Product appends ONLY in animateMode (max 2)
-    // - Logo replaces
-    const replace = panel === "logo" || (panel === "product" && !animateMode);
-
-    const current = uploadsRef.current?.[panel] || [];
-    const existingCount = current.length;
-
-    const remaining = replace ? max : Math.max(0, max - existingCount);
-    if (!remaining) return;
+    // ✅ inspiration append; animate(product) append up to 2
+    const replace = panel === "inspiration" ? false : !(panel === "product" && animateMode);
 
     const id = `${panel}_url_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
     setUploads((prev) => {
       const base = replace ? [] : prev[panel];
 
-      const nextItem: UploadItem = {
+      const next: UploadItem = {
         id,
         kind: "url",
         url,
@@ -2878,10 +2858,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
         uploading: true,
       };
 
-      return {
-        ...prev,
-        [panel]: [...base, nextItem].slice(0, max),
-      };
+      return { ...prev, [panel]: [...base, next].slice(0, max) };
     });
 
     void startStoreForUrlItem(panel, id, url);
