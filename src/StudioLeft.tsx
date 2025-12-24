@@ -898,18 +898,43 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               ) : (
                 <>
                           {/* Type for me */}
-                          <button
-                            type="button"
-                            className={classNames("studio-pill", motionSuggesting && "active")}
-                            style={pillBaseStyle(0)}
-                            onClick={() => onTypeForMe?.()}
-                            disabled={
-                              motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk
-                            }
-                          >
-                            {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
-                            <span className="studio-pill-main">{typeForMeLabel}</span>
-                          </button>
+                          {(() => {
+                            const typeForMeDisabled =
+                              motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk;
+                          
+                            const typeForMeTitle = !hasMotionImage
+                              ? "Upload at least 1 frame first"
+                              : !motionCreditsOk
+                                ? "Not enough Matcha"
+                                : motionGenerating
+                                  ? "Animating…"
+                                  : motionSuggesting
+                                    ? "Typing…"
+                                    : "Type for me";
+                          
+                            return (
+                              <button
+                                type="button"
+                                className={classNames(
+                                  "studio-pill",
+                                  motionSuggesting && "active",
+                                  typeForMeDisabled && "studio-pill--ghost"
+                                )}
+                                style={pillBaseStyle(0)}
+                                onClick={() => {
+                                  if (typeForMeDisabled) return;
+                                  onTypeForMe?.();
+                                }}
+                                disabled={typeForMeDisabled}
+                                aria-disabled={typeForMeDisabled}
+                                title={typeForMeTitle}
+                              >
+                                {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
+                                <span className="studio-pill-main">{typeForMeLabel}</span>
+                              </button>
+                            );
+                          })()}
+
 
                           {/* Image */}
                           <button
