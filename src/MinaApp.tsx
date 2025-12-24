@@ -2704,79 +2704,146 @@ const handleGenerateMotion = async () => {
     }
   };
 
-  const onTweak = useCallback(async () => {
-  const tweak = window.prompt(
-    "What should I tweak? (e.g. brighter, tighter crop, less text, more contrast)"
-  );
-  const tweakText = (tweak || "").trim();
-  if (!tweakText) return;
+  const onTweak = useCallback(
+  async (rawText: string) => {
+    const tweak = String(rawText || "").trim();
+    if (!tweak) return;
 
-  if (!API_BASE_URL) return;
+    // pick what is currently displayed
+    const isMotion = activeMediaKind === "motion" && !!currentMotion?.id;
+    const parentId = isMotion ? String(currentMotion?.id || "") : String(currentStill?.id || "");
+    if (!parentId) return;
 
-  // Decide what the user is currently viewing (still vs motion)
-  const displayKind =
-    activeMediaKind ?? (newestMotionAt > newestStillAt ? "motion" : newestStillAt ? "still" : "still");
+    if (!API_BASE_URL || !currentPassId) return;
 
-  try {
-    if (MMA_ENABLED) {
-      if (displayKind === "motion") {
-        const parentId = currentMotion?.id;
-        if (!parentId) {
-          setMotionError("Nothing to tweak yet (no motion generation).");
-          return;
-        }
-        if (!currentPassId) {
-          setMotionError("Missing Pass ID for MEGA session.");
-          return;
-        }
+    setFeedbackSending(true);
+    setFeedbackError(null);
 
-        setMotionGenerating(true);
-        setMotionError(null);
+    try {
+      // If MMA disabled, fallback to your legacy behavior (optional safety)
+      if (!MMA_ENABLED) {
+        setBrief((prev) => {
+          const base = (prev || "").trim();
+          return base ? `${base}\n\nTWEAK: ${tweak}` : `TWEAK: ${tweak}`;
+        });
 
-        // frames (optional, but safe to include)
-        const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
-        const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
-        const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
-        const endFrame = isHttpUrl(frame1) ? frame1 : "";
+        if (isMotion) await handleGenerateMotion();
+        else await handleGenerateStill();
+
+        setFeedbackText("");
+        return;
+      }
+
+      // Progress overlay (same UX as create)
+      const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
+        const last = scanLines.slice(-1)[0] || "";
+        const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
+        if (overlay) setMinaOverrideText(overlay);
+      };
+
+      if (!isMotion) {
+        // STILL TWEAK (MMA)
+        const safeAspectRatio =
+          REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3";
 
         const mmaBody = {
           passId: currentPassId,
           inputs: {
-            // send tweak in multiple keys so controller can pick any
-            tweak: tweakText,
-            tweak_text: tweakText,
-            user_tweak: tweakText,
+            intent: "tweak",
+            tweak,
+            tweak_text: tweak,
+            user_tweak: tweak,
 
-            // keep context
-            motionDescription: motionTextTrimmed,
-            platform: animateAspectOption.platformKey,
-            aspect_ratio: animateAspectOption.ratio,
+            // keep context so backend can re-prompt cleanly
+            brief: (stillBrief || brief || "").trim(),
+            platform: currentAspect.platformKey,
+            aspect_ratio: safeAspectRatio,
             stylePresetKeys: stylePresetKeysForApi,
             minaVisionEnabled,
           },
+          settings: {},
+          history: { sessionId: sessionId || null, sessionTitle: sessionTitle || null },
+          feedback: { comment: tweak },
+          prompts: {},
+        };
+
+        const { generationId } = await mmaCreateAndWait(
+          `/mma/still/${encodeURIComponent(parentId)}/tweak`,
+          mmaBody,
+          onProgress
+        );
+
+        const result = await mmaFetchResult(generationId);
+        if (result?.status === "error") {
+          const msg = result?.error?.message || result?.error?.code || "MMA tweak failed.";
+          throw new Error(String(msg));
+        }
+
+        const rawUrl =
+          result?.outputs?.seedream_image_url ||
+          result?.outputs?.image_url ||
+          result?.imageUrl ||
+          result?.outputUrl ||
+          "";
+
+        const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
+        if (!url) throw new Error("MMA tweak returned no image URL.");
+
+        const item: StillItem = {
+          id: generationId,
+          url,
+          createdAt: new Date().toISOString(),
+          prompt: String(result?.prompt || stillBrief || brief || ""),
+          aspectRatio: currentAspect.ratio,
+        };
+
+        setStillItems((prev) => {
+          const next = [item, ...prev];
+          setStillIndex(0);
+          return next;
+        });
+
+        setActiveMediaKind("still");
+      } else {
+        // VIDEO TWEAK (MMA)
+        const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+        const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
+
+        const startFrame = isHttpUrl(frame0) ? frame0 : (motionReferenceImageUrl || "");
+        const endFrame = isHttpUrl(frame1) ? frame1 : "";
+
+        const mmaBody = {
+          passId: currentPassId,
           assets: {
             start_image_url: startFrame,
             end_image_url: endFrame || "",
             kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
           },
+          inputs: {
+            intent: "tweak",
+            tweak,
+            tweak_text: tweak,
+            user_tweak: tweak,
+
+            motionDescription: (motionTextTrimmed || motionDescription || brief || "").trim(),
+            platform: animateAspectOption.platformKey,
+            aspect_ratio: animateAspectOption.ratio,
+            stylePresetKeys: stylePresetKeysForApi,
+            minaVisionEnabled,
+          },
           settings: {},
           history: { sessionId: sessionId || null, sessionTitle: sessionTitle || null },
-          feedback: {},
+          feedback: { comment: tweak },
           prompts: {},
         };
 
         const { generationId } = await mmaCreateAndWait(
-          `/mma/video/${encodeURIComponent(String(parentId))}/tweak`,
+          `/mma/video/${encodeURIComponent(parentId)}/tweak`,
           mmaBody,
-          ({ status, scanLines }) => {
-            const last = scanLines.slice(-1)[0] || "";
-            const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
-            if (overlay) setMinaOverrideText(overlay);
-          }
+          onProgress
         );
 
         const result = await mmaFetchResult(generationId);
-
         if (result?.status === "error") {
           const msg = result?.error?.message || result?.error?.code || "MMA tweak failed.";
           throw new Error(String(msg));
@@ -2790,17 +2857,13 @@ const handleGenerateMotion = async () => {
           "";
 
         const url = rawUrl ? await ensureAssetsUrl(rawUrl, "motions") : "";
-        if (!url) throw new Error("MMA returned no tweaked video URL.");
-
-        historyDirtyRef.current = true;
-        creditsDirtyRef.current = true;
-        void fetchCredits();
+        if (!url) throw new Error("MMA tweak returned no video URL.");
 
         const item: MotionItem = {
           id: generationId,
           url,
           createdAt: new Date().toISOString(),
-          prompt: String(result?.prompt || motionTextTrimmed),
+          prompt: String(result?.prompt || motionTextTrimmed || motionDescription || brief || ""),
         };
 
         setMotionItems((prev) => {
@@ -2810,158 +2873,51 @@ const handleGenerateMotion = async () => {
         });
 
         setActiveMediaKind("motion");
-        return;
       }
 
-      // -------- STILL tweak --------
-      const parentId = currentStill?.id;
-      if (!parentId) {
-        setStillError("Nothing to tweak yet (no still generation).");
-        return;
-      }
-      if (!currentPassId) {
-        setStillError("Missing Pass ID for MEGA session.");
-        return;
-      }
-
-      setStillGenerating(true);
-      setStillError(null);
-
-      const safeAspectRatio =
-        REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3";
-
-      const productItem = uploads.product[0];
-      const productUrl = productItem?.remoteUrl || productItem?.url || "";
-
-      const logoItem = uploads.logo[0];
-      const logoUrl = logoItem?.remoteUrl || logoItem?.url || "";
-
-      const inspirationUrls = (uploads.inspiration || [])
-        .map((u) => u.remoteUrl || u.url)
-        .filter((u) => isHttpUrl(u))
-        .slice(0, 4);
-
-      const mmaBody = {
-        passId: currentPassId,
-        inputs: {
-          tweak: tweakText,
-          tweak_text: tweakText,
-          user_tweak: tweakText,
-
-          // context
-          brief: (stillBrief || brief || "").trim(),
-          platform: currentAspect.platformKey,
-          aspect_ratio: safeAspectRatio,
-          stylePresetKeys: stylePresetKeysForApi,
-          minaVisionEnabled,
-        },
-        assets: {
-          product_image_url: isHttpUrl(productUrl) ? productUrl : "",
-          logo_image_url: isHttpUrl(logoUrl) ? logoUrl : "",
-          inspiration_image_urls: inspirationUrls,
-        },
-        settings: {},
-        history: { sessionId: sessionId || null, sessionTitle: sessionTitle || null },
-        feedback: {},
-        prompts: {},
-      };
-
-      const { generationId } = await mmaCreateAndWait(
-        `/mma/still/${encodeURIComponent(String(parentId))}/tweak`,
-        mmaBody,
-        ({ status, scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
-          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
-          if (overlay) setMinaOverrideText(overlay);
-        }
-      );
-
-      const result = await mmaFetchResult(generationId);
-
-      if (result?.status === "error") {
-        const msg = result?.error?.message || result?.error?.code || "MMA tweak failed.";
-        throw new Error(String(msg));
-      }
-
-      const rawUrl =
-        result?.outputs?.seedream_image_url ||
-        result?.outputs?.image_url ||
-        result?.imageUrl ||
-        result?.outputUrl ||
-        "";
-
-      const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
-      if (!url) throw new Error("MMA returned no tweaked image URL.");
-
+      // refresh credits/profile caches
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
       void fetchCredits();
 
-      const item: StillItem = {
-        id: generationId,
-        url,
-        createdAt: new Date().toISOString(),
-        prompt: String(result?.prompt || stillBrief || brief || ""),
-        aspectRatio: currentAspect.ratio,
-      };
-
-      setStillItems((prev) => {
-        const next = [item, ...prev];
-        setStillIndex(0);
-        return next;
-      });
-
-      setActiveMediaKind("still");
-      setLastStillPrompt(item.prompt);
-      return;
+      // clear tweak box
+      setFeedbackText("");
+    } catch (err: any) {
+      setFeedbackError(err?.message || "Tweak failed.");
+    } finally {
+      setFeedbackSending(false);
     }
+  },
+  [
+    API_BASE_URL,
+    MMA_ENABLED,
+    currentPassId,
+    activeMediaKind,
+    currentMotion?.id,
+    currentStill?.id,
+    stillBrief,
+    brief,
+    currentAspect.ratio,
+    currentAspect.platformKey,
+    stylePresetKeysForApi,
+    minaVisionEnabled,
+    sessionId,
+    sessionTitle,
+    mmaCreateAndWait,
+    mmaFetchResult,
+    ensureAssetsUrl,
+    fetchCredits,
+    uploads.product,
+    motionReferenceImageUrl,
+    motionTextTrimmed,
+    motionDescription,
+    animateAspectOption.platformKey,
+    animateAspectOption.ratio,
+    handleGenerateMotion,
+    handleGenerateStill,
+  ]
+);
 
-    // If MMA disabled, keep your existing behavior
-    if (animateMode) await handleGenerateMotion();
-    else await handleGenerateStill();
-  } catch (err: any) {
-    const msg = err?.message || "Tweak failed.";
-    if ((activeMediaKind ?? (newestMotionAt > newestStillAt ? "motion" : "still")) === "motion") {
-      setMotionError(msg);
-    } else {
-      setStillError(msg);
-    }
-  } finally {
-    setStillGenerating(false);
-    setMotionGenerating(false);
-  }
-}, [
-  API_BASE_URL,
-  MMA_ENABLED,
-  activeMediaKind,
-  newestMotionAt,
-  newestStillAt,
-  currentPassId,
-  currentMotion?.id,
-  currentStill?.id,
-  uploads.product,
-  uploads.logo,
-  uploads.inspiration,
-  motionReferenceImageUrl,
-  motionTextTrimmed,
-  animateAspectOption,
-  stylePresetKeysForApi,
-  minaVisionEnabled,
-  sessionId,
-  sessionTitle,
-  currentAspect,
-  stillBrief,
-  brief,
-  mmaCreateAndWait,
-  mmaFetchResult,
-  ensureAssetsUrl,
-  fetchCredits,
-  handleGenerateMotion,
-  handleGenerateStill,
-  animateMode,
-  REPLICATE_ASPECT_RATIO_MAP,
-  isHttpUrl,
-]);
 
 // ========================================================================
 // [PART 10 END]
