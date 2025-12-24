@@ -1171,57 +1171,30 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   
 useEffect(() => {
   const url = currentMotion?.url || currentStill?.url;
+
   if (!url) {
     setIsRightMediaDark(false);
     return;
   }
 
-  // Avoid CORS issues: we only sample pixels when the image is same-origin.
-  // Cross-origin images can still display fine, but browsers block canvas pixel access
-  // unless the remote server sends proper CORS headers.
-  const isSameOrigin = url.startsWith("/") || url.startsWith(window.location.origin);
-
-  if (!isSameOrigin) {
+  // We only attempt pixel sampling for same-origin OR assets.faltastudio.com.
+  // Everything else: don’t try (prevents SecurityError + avoids weird edge-cases).
+  if (!canSamplePixelsFromUrl(url)) {
     setIsRightMediaDark(false);
     return;
   }
 
   let cancelled = false;
-  const img = new Image();
 
-  img.onload = () => {
-    if (cancelled) return;
-
+  (async () => {
     try {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const w = 48;
-      const h = 48;
-      canvas.width = w;
-      canvas.height = h;
-
-      ctx.drawImage(img, 0, 0, w, h);
-
-      const data = ctx.getImageData(0, 0, w, h).data;
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-      }
-      const avg = sum / (data.length / 4);
-
+      const avg = await sampleAverageLuma(url);
+      if (cancelled) return;
       setIsRightMediaDark(avg < 110);
     } catch {
-      setIsRightMediaDark(false);
+      if (!cancelled) setIsRightMediaDark(false);
     }
-  };
-
-  img.onerror = () => {
-    if (!cancelled) setIsRightMediaDark(false);
-  };
-
-  img.src = url;
+  })();
 
   return () => {
     cancelled = true;
@@ -2011,6 +1984,144 @@ function isAssetsUrl(url: string) {
 function isVideoUrl(url: string) {
   const base = (url || "").split("?")[0].split("#")[0].toLowerCase();
   return base.endsWith(".mp4") || base.endsWith(".webm") || base.endsWith(".mov") || base.endsWith(".m4v");
+}
+
+// Pixel sampling policy (for light/dark header theme)
+// ==============================
+// We only try to read pixels from:
+// - same-origin (mina.faltastudio.com)
+// - assets.faltastudio.com (your R2 public domain with CORS enabled)
+function canSamplePixelsFromUrl(url: string) {
+  try {
+    const u = new URL(url, window.location.origin);
+    const host = u.hostname.toLowerCase();
+    const originHost = window.location.hostname.toLowerCase();
+
+    const isSameOriginHost = host === originHost || host.endsWith(`.${originHost}`);
+    const isAssetsHost = host === ASSETS_HOST || host.endsWith(`.${ASSETS_HOST}`);
+
+    return isSameOriginHost || isAssetsHost;
+  } catch {
+    // Relative urls like "/api/..." are same-origin
+    return url.startsWith("/");
+  }
+}
+
+function avgLumaFromCanvas(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+  }
+  return sum / (data.length / 4);
+}
+
+async function sampleAverageLuma(url: string): Promise<number> {
+  const W = 48;
+  const H = 48;
+
+  const makeCanvas = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No canvas context");
+    return ctx;
+  };
+
+  // If it's a video, sample first frame via <video>
+  if (isVideoUrl(url)) {
+    return await new Promise<number>((resolve, reject) => {
+      const video = document.createElement("video");
+      video.crossOrigin = "anonymous";
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = "auto";
+
+      const cleanup = () => {
+        try {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+        } catch {}
+      };
+
+      const fail = (e?: unknown) => {
+        cleanup();
+        reject(e || new Error("Video sample failed"));
+      };
+
+      const onLoaded = () => {
+        try {
+          const ctx = makeCanvas();
+          ctx.drawImage(video, 0, 0, W, H);
+          const avg = avgLumaFromCanvas(ctx, W, H);
+          cleanup();
+          resolve(avg);
+        } catch (err) {
+          fail(err);
+        }
+      };
+
+      // Some browsers need "loadeddata" before drawImage works
+      video.addEventListener("loadeddata", onLoaded, { once: true });
+      video.addEventListener("error", fail, { once: true });
+
+      // hard timeout so we never hang
+      const t = window.setTimeout(() => fail(new Error("Video sample timeout")), 4500);
+
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          window.clearTimeout(t);
+        },
+        { once: true }
+      );
+
+      video.src = url;
+    });
+  }
+
+  // Otherwise sample as image
+  return await new Promise<number>((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous"; // IMPORTANT: must be set before src
+
+    const onError = () => reject(new Error("Image sample failed"));
+
+    img.onload = () => {
+      try {
+        const ctx = makeCanvas();
+        ctx.drawImage(img, 0, 0, W, H);
+        const avg = avgLumaFromCanvas(ctx, W, H);
+        resolve(avg);
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    img.onerror = onError;
+
+    // hard timeout so we never hang
+    const t = window.setTimeout(() => reject(new Error("Image sample timeout")), 4500);
+    img.onload = () => {
+      window.clearTimeout(t);
+      try {
+        const ctx = makeCanvas();
+        ctx.drawImage(img, 0, 0, W, H);
+        const avg = avgLumaFromCanvas(ctx, W, H);
+        resolve(avg);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => {
+      window.clearTimeout(t);
+      onError();
+    };
+
+    img.src = url;
+  });
 }
 
 /**
@@ -3542,7 +3653,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
       <div className="studio-frame">
-        <div className={classNames("studio-header-overlay", isRightMediaDark && "is-dark")}>
+        <div className={classNames("studio-header-overlay", isRightMediaDark ? "is-dark" : "is-light")}>
           <div className="studio-header-left">
           <a href="https://mina.faltastudio.com" className="studio-logo-link">
             <img
