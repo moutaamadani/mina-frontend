@@ -1,15 +1,7 @@
 // src/StudioRight.tsx
-// -----------------------------------------------------------------------------
-// File map
-// 1) Imports: React + styling.
-// 2) Types: tiny shapes for still/motion items and props.
-// 3) Component body: derived media state, carousel helpers, click handlers, UI.
-// -----------------------------------------------------------------------------
-// [PART 1] Imports
 import React, { useEffect, useMemo, useState } from "react";
 import "./StudioRight.css";
 
-// [PART 2] Local types (kept light so the viewer understands the props)
 type StillItem = { id: string; url: string };
 type MotionItem = { id: string; url: string };
 
@@ -21,10 +13,15 @@ type StudioRightProps = {
   stillIndex: number;
   setStillIndex: (i: number) => void;
 
-  onTweak?: () => void;
+  // ✅ This textarea is the TWEAK input (you called it feedback before)
+  tweakText: string;
+  setTweakText: (v: string) => void;
+  onSendTweak: (text: string) => void;
+
+  sending?: boolean;
+  error?: string | null;
 };
 
-// [PART 3] UI component (preview pane + feedback box)
 export default function StudioRight(props: StudioRightProps) {
   const {
     currentStill,
@@ -32,7 +29,11 @@ export default function StudioRight(props: StudioRightProps) {
     stillItems,
     stillIndex,
     setStillIndex,
-    onTweak,
+    tweakText,
+    setTweakText,
+    onSendTweak,
+    sending,
+    error,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -43,10 +44,8 @@ export default function StudioRight(props: StudioRightProps) {
     return null;
   }, [currentMotion, currentStill]);
 
-  // Center click = zoom toggle (cover <-> contain)
   const [containMode, setContainMode] = useState(false);
 
-  // Reset zoom when switching media
   useEffect(() => {
     setContainMode(false);
   }, [media?.url]);
@@ -65,10 +64,6 @@ export default function StudioRight(props: StudioRightProps) {
     setStillIndex((stillIndex + 1) % n);
   };
 
-  // Click zones:
-  // - left 18% => previous
-  // - right 18% => next
-  // - middle => zoom toggle
   const handleFrameClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
     if (!media) return;
 
@@ -79,17 +74,14 @@ export default function StudioRight(props: StudioRightProps) {
 
     const EDGE = 0.18;
 
-    if (hasCarousel && pct <= EDGE) {
-      goPrev();
-      return;
-    }
-    if (hasCarousel && pct >= 1 - EDGE) {
-      goNext();
-      return;
-    }
+    if (hasCarousel && pct <= EDGE) return goPrev();
+    if (hasCarousel && pct >= 1 - EDGE) return goNext();
 
     setContainMode((v) => !v);
   };
+
+  const trimmed = (tweakText || "").trim();
+  const canSend = !isEmpty && !!trimmed && !sending;
 
   return (
     <div className="studio-right">
@@ -98,7 +90,12 @@ export default function StudioRight(props: StudioRightProps) {
           <div className="studio-empty-text">New ideas don’t exist, just recycle.</div>
         ) : (
           <>
-            <button type="button" className="studio-output-click" onClick={handleFrameClick} aria-label="Toggle zoom / Navigate">
+            <button
+              type="button"
+              className="studio-output-click"
+              onClick={handleFrameClick}
+              aria-label="Toggle zoom / Navigate"
+            >
               <div className={`studio-output-frame ${containMode ? "is-contain" : ""}`}>
                 {media?.type === "video" ? (
                   <video
@@ -148,17 +145,37 @@ export default function StudioRight(props: StudioRightProps) {
         )}
       </div>
 
+      {/* ✅ TWEAK AREA (this is your “feedback” area) */}
       {!isEmpty && (
-        <div className="studio-feedbackbar">
-          <button
-            type="button"
-            className="studio-feedbackbar-btn"
-            onClick={() => onTweak?.()}
-            disabled={!onTweak}
-            title={!onTweak ? "Wire onTweak in MinaApp" : undefined}
-          >
-            Tweak
-          </button>
+        <div className="studio-feedback">
+          <textarea
+            className="studio-feedback-textarea"
+            placeholder="Type your tweak… (ex: brighter, less text, tighter crop, more contrast)"
+            value={tweakText}
+            onChange={(e) => setTweakText(e.target.value)}
+            disabled={!!sending}
+            rows={3}
+            onKeyDown={(e) => {
+              // Ctrl+Enter (or Cmd+Enter) sends tweak
+              if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                e.preventDefault();
+                if (canSend) onSendTweak(trimmed);
+              }
+            }}
+          />
+
+          <div className="studio-feedback-actions">
+            <button
+              type="button"
+              className="studio-feedbackbar-btn"
+              onClick={() => onSendTweak(trimmed)}
+              disabled={!canSend}
+            >
+              {sending ? "Tweaking…" : "Tweak"}
+            </button>
+          </div>
+
+          {!!error && <div className="studio-feedback-error">{error}</div>}
         </div>
       )}
     </div>
