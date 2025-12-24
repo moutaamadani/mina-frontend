@@ -2326,12 +2326,84 @@ const extractSuggestedText = (json: any): string => {
 const onTypeForMe = useCallback(async () => {
   if (motionSuggesting) return;
 
-  const start = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
-  const end = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
-  if (!start) return;
+  // Start/end frames (Kling) come from product uploads in Animate mode.
+  const frame0 = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
+  const frame1 = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
+
+  // Fallback: if user didn’t upload, use whatever we already have as reference
+  const startFrame = isHttpUrl(frame0) ? frame0 : (motionReferenceImageUrl || "");
+  const endFrame = isHttpUrl(frame1) ? frame1 : "";
+
+  if (!startFrame) return;
 
   setMotionSuggesting(true);
+
   try {
+    // ✅ MMA suggestion via /mma/video/animate (NO credits)
+    if (MMA_ENABLED) {
+      const mmaBody = {
+        passId: currentPassId,
+        assets: {
+          start_image_url: startFrame,
+          end_image_url: endFrame || "",
+          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+        },
+        inputs: {
+          // flags your backend should use to stop after suggesting + avoid charging
+          intent: "type_for_me",
+          type_for_me: true,
+          suggest_only: true,
+
+          // user context
+          motion_user_brief: (brief || motionDescription || "").trim(),
+          selected_movement_style: (motionStyleKeys?.[0] || "").trim(),
+
+          platform: animateAspectOption.platformKey,
+          aspect_ratio: animateAspectOption.ratio,
+          stylePresetKeys: stylePresetKeysForApi,
+          minaVisionEnabled,
+        },
+        settings: {},
+        history: {
+          sessionId: sessionId || null,
+          sessionTitle: sessionTitle || null,
+        },
+        feedback: {},
+        prompts: {},
+      };
+
+      const { generationId } = await mmaCreateAndWait(
+        "/mma/video/animate",
+        mmaBody,
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || "";
+          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
+          if (overlay) setMinaOverrideText(overlay);
+        }
+      );
+
+      const final = await mmaFetchResult(generationId);
+
+      const suggested =
+        String(
+          final?.mma_vars?.prompts?.suggested_prompt ||
+            final?.mma_vars?.prompts?.sugg_prompt ||
+            final?.mma_vars?.suggested_prompt ||
+            final?.prompt ||
+            final?.suggestion ||
+            ""
+        ).trim();
+
+      if (!suggested) throw new Error("MMA returned no suggestion.");
+
+      // Smooth UX (updates both brief + motionDescription)
+      await applyMotionSuggestionText(suggested);
+      return;
+    }
+
+    // ----------------
+    // Legacy fallback
+    // ----------------
     const res = await fetch(`${API_BASE_URL}/motion/suggest`, {
       method: "POST",
       headers: {
@@ -2342,8 +2414,8 @@ const onTypeForMe = useCallback(async () => {
         brief,
         motionStyleKeys,
         assets: {
-          startImageUrl: start,
-          endImageUrl: end || undefined,
+          startImageUrl: startFrame,
+          endImageUrl: endFrame || undefined,
         },
         aspect_ratio: currentAspect?.ratio || undefined,
       }),
@@ -2353,76 +2425,116 @@ const onTypeForMe = useCallback(async () => {
     if (!res.ok) throw new Error(json?.error || json?.message || `HTTP ${res.status}`);
 
     const suggested = extractSuggestedText(json);
-    if (suggested) setBrief(suggested);
+    if (suggested) await applyMotionSuggestionText(suggested);
   } catch (e) {
-    console.error("motion/suggest failed:", e);
+    console.error("type-for-me failed:", e);
   } finally {
     setMotionSuggesting(false);
   }
-}, [motionSuggesting, uploads.product, API_BASE_URL, passId, brief, motionStyleKeys, currentAspect]);
+}, [
+  motionSuggesting,
+  uploads.product,
+  motionReferenceImageUrl,
+  MMA_ENABLED,
+  currentPassId,
+  brief,
+  motionDescription,
+  motionStyleKeys,
+  animateAspectOption,
+  stylePresetKeysForApi,
+  minaVisionEnabled,
+  sessionId,
+  sessionTitle,
+  mmaCreateAndWait,
+  mmaFetchResult,
+  applyMotionSuggestionText,
+  API_BASE_URL,
+  passId,
+  currentAspect?.ratio,
+]);
 
 
 const handleSuggestMotion = async () => {
-  const item = motionItems[motionIndex];
-  if (!item?.inputStillUrl) return;
-
   setMotionSuggestError(null);
   setMotionSuggestLoading(true);
   setMotionSuggestTyping(true);
 
   try {
-    // MMA-only backend: use MMA pipeline for suggestions too
-    if (MMA_ENABLED) {
-      const body = {
-        intent: "type_for_me",
-        inputs: {
-          // what the user chose
-          start_image_url: item.inputStillUrl,
-          motion_user_brief: motionDescription || "",
-          selected_movement_style: motionSelectedStyleKey || "",
+    // Pick frames exactly like generate
+    const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+    const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
 
-          // flags to avoid credit charge + stop after suggestion
+    const startFrame = isHttpUrl(frame0) ? frame0 : (motionReferenceImageUrl || "");
+    const endFrame = isHttpUrl(frame1) ? frame1 : "";
+
+    if (!startFrame) throw new Error("Missing start frame for suggestion.");
+
+    if (MMA_ENABLED) {
+      const mmaBody = {
+        passId: currentPassId,
+        assets: {
+          start_image_url: startFrame,
+          end_image_url: endFrame || "",
+          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+        },
+        inputs: {
+          intent: "type_for_me",
           type_for_me: true,
           suggest_only: true,
 
-          // context
-          platform: "web",
-          session_id: sessionId || undefined,
-          title: "Motion suggestion",
+          motion_user_brief: (motionDescription || brief || "").trim(),
+          selected_movement_style: (motionStyleKeys?.[0] || "").trim(),
+
+          platform: animateAspectOption.platformKey,
+          aspect_ratio: animateAspectOption.ratio,
+          stylePresetKeys: stylePresetKeysForApi,
+          minaVisionEnabled,
         },
+        settings: {},
+        history: {
+          sessionId: sessionId || null,
+          sessionTitle: sessionTitle || null,
+        },
+        feedback: {},
+        prompts: {},
       };
 
       const { generationId } = await mmaCreateAndWait(
         "/mma/video/animate",
-        body,
-        (p) => {
-          // keep the "typing" indicator alive while backend works
-          if (p.status === "error") setMotionSuggestError(p.error || "MMA suggestion failed");
+        mmaBody,
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || "";
+          const overlay = `${String(status || "").toUpperCase()}\n${last}`.trim();
+          if (overlay) setMinaOverrideText(overlay);
         }
       );
 
       const final = await mmaFetchResult(generationId);
+
       const suggestedPrompt =
-        String(final?.prompt || final?.mma_vars?.prompts?.sugg_prompt || "").trim();
+        String(
+          final?.mma_vars?.prompts?.suggested_prompt ||
+            final?.mma_vars?.prompts?.sugg_prompt ||
+            final?.mma_vars?.suggested_prompt ||
+            final?.prompt ||
+            ""
+        ).trim();
 
-      if (!suggestedPrompt) {
-        throw new Error("No suggestion returned");
-      }
+      if (!suggestedPrompt) throw new Error("No suggestion returned");
 
-      // smooth UX: simulate typing like the legacy endpoint
       const out = await simulateTyping(suggestedPrompt, 12, 1200);
-      applyMotionSuggestionText(out);
+      await applyMotionSuggestionText(out);
       return;
     }
 
-    // Legacy backend (shouldn't happen if MMA_ENABLED is true)
+    // Legacy (only if MMA disabled)
     const resp = await apiFetch("/motion/suggest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        inputStillUrl: item.inputStillUrl,
+        inputStillUrl: startFrame,
         motionText: motionDescription,
-        movementStyle: motionSelectedStyleKey,
+        movementStyle: (motionStyleKeys?.[0] || "").trim(),
       }),
     });
 
@@ -2436,7 +2548,7 @@ const handleSuggestMotion = async () => {
     if (!suggestedPrompt) throw new Error("No suggestion returned");
 
     const out = await simulateTyping(suggestedPrompt, 12, 1200);
-    applyMotionSuggestionText(out);
+    await applyMotionSuggestionText(out);
   } catch (e: any) {
     setMotionSuggestError(e?.message || "Motion suggest failed");
   } finally {
