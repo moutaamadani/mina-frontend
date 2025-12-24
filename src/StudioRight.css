@@ -129,6 +129,38 @@
   gap: 14px;
 }
 
+.studio-feedbackbar {
+  position: relative;
+  flex: 0 0 auto;
+
+  width: 100%;
+  padding: 18px 18px;
+
+  background: #F2F2E9;
+  border-radius: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.studio-feedbackbar-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+
+  font-weight: 700;
+  font-size: 13px;
+  color: rgba(0, 0, 0, 0.9);
+
+  text-decoration: none;
+}
+
+.studio-feedbackbar-btn:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 /* “Speak to me” */
 .studio-feedback-input--compact {
   flex: 1 1 auto;

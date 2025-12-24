@@ -9,35 +9,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "./StudioRight.css";
 
-async function downloadToDisk(url: string, filename: string) {
-  try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) throw new Error(`download_failed_${res.status}`);
-
-    const blob = await res.blob();
-    const objUrl = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = objUrl;
-    a.download = filename;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    URL.revokeObjectURL(objUrl);
-  } catch (e) {
-    // Fallback: try native download attribute (may open on some browsers if cross-origin blocks)
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.rel = "noopener";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
-}
-
 // [PART 2] Local types (kept light so the viewer understands the props)
 type StillItem = { id: string; url: string };
 type MotionItem = { id: string; url: string };
@@ -50,11 +21,7 @@ type StudioRightProps = {
   stillIndex: number;
   setStillIndex: (i: number) => void;
 
-  feedbackText: string;
-  setFeedbackText: (v: string) => void;
-  feedbackSending: boolean;
-  feedbackError: string | null;
-  onSubmitFeedback: () => void;
+  onTweak?: () => void;
 };
 
 // [PART 3] UI component (preview pane + feedback box)
@@ -65,11 +32,7 @@ export default function StudioRight(props: StudioRightProps) {
     stillItems,
     stillIndex,
     setStillIndex,
-    feedbackText,
-    setFeedbackText,
-    feedbackSending,
-    feedbackError,
-    onSubmitFeedback,
+    onTweak,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -82,7 +45,6 @@ export default function StudioRight(props: StudioRightProps) {
 
   // Center click = zoom toggle (cover <-> contain)
   const [containMode, setContainMode] = useState(false);
-  const [downloading, setDownloading] = useState(false);
 
   // Reset zoom when switching media
   useEffect(() => {
@@ -128,8 +90,6 @@ export default function StudioRight(props: StudioRightProps) {
 
     setContainMode((v) => !v);
   };
-
-  const canSend = !feedbackSending && feedbackText.trim().length > 0;
 
   return (
     <div className="studio-right">
@@ -189,45 +149,16 @@ export default function StudioRight(props: StudioRightProps) {
       </div>
 
       {!isEmpty && (
-        <div className="studio-feedback-bar">
-          <input
-            className="studio-feedback-input--compact"
-            placeholder="Speak to me tell me, what you like and dislike about my generation"
-            value={feedbackText}
-            onChange={(e) => setFeedbackText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && canSend) onSubmitFeedback();
-            }}
-          />
-
-          <div className="studio-feedback-actions">
-            <button
-              type="button"
-              className="studio-action-btn"
-              disabled={!media?.url || downloading}
-              onClick={async () => {
-                if (!media?.url) return;
-                setDownloading(true);
-                try {
-                  const filename =
-                    media.type === "video"
-                      ? `mina_motion_${currentMotion?.id || "export"}.mp4`
-                      : `mina_still_${currentStill?.id || "export"}.png`;
-                  await downloadToDisk(media.url, filename);
-                } finally {
-                  setDownloading(false);
-                }
-              }}
-            >
-              {downloading ? "Downloading…" : "Download"}
-            </button>
-
-            <button type="button" className="studio-action-btn" onClick={onSubmitFeedback} disabled={!canSend}>
-              Send
-            </button>
-          </div>
-
-          {feedbackError && <div className="studio-feedback-error">{feedbackError}</div>}
+        <div className="studio-feedbackbar">
+          <button
+            type="button"
+            className="studio-feedbackbar-btn"
+            onClick={() => onTweak?.()}
+            disabled={!onTweak}
+            title={!onTweak ? "Wire onTweak in MinaApp" : undefined}
+          >
+            Tweak
+          </button>
         </div>
       )}
     </div>

@@ -682,6 +682,7 @@ const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
   const [motionIndex, setMotionIndex] = useState(0);
   const [motionDescription, setMotionDescription] = useState("");
   const [motionStyleKeys, setMotionStyleKeys] = useState<MotionStyleKey[]>([]);
+  const [motionSuggesting, setMotionSuggesting] = useState(false);
   const [motionSuggestLoading, setMotionSuggestLoading] = useState(false);
   const [motionSuggestError, setMotionSuggestError] = useState<string | null>(null);
   const [motionSuggestTyping, setMotionSuggestTyping] = useState(false);
@@ -1228,8 +1229,10 @@ useEffect(() => {
 }, [currentMotion?.url, currentStill?.url]);
 
   const motionTextTrimmed = motionDescription.trim();
-  const canCreateMotion = !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping;
-  const minaBusy = stillGenerating || motionGenerating || motionSuggestLoading || motionSuggestTyping;
+  const canCreateMotion =
+    !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping && !motionSuggesting;
+  const minaBusy =
+    stillGenerating || motionGenerating || motionSuggestLoading || motionSuggestTyping || motionSuggesting;
   // ========================================================================
   // [PART 5 END]
   // ========================================================================
@@ -2297,6 +2300,67 @@ const applyMotionSuggestionText = async (text: string) => {
   setMotionSuggestTyping(false);
 };
 
+const extractSuggestedText = (json: any): string => {
+  if (!json) return "";
+  if (typeof json === "string") return json;
+  const candidates = [
+    json.suggestion,
+    json.text,
+    json.prompt,
+    json.brief,
+    json.message,
+    json?.data?.suggestion,
+    json?.data?.text,
+    json?.data?.prompt,
+    json?.data?.brief,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  if (Array.isArray(json.suggestions) && typeof json.suggestions[0] === "string") {
+    return String(json.suggestions[0]).trim();
+  }
+  return "";
+};
+
+const onTypeForMe = useCallback(async () => {
+  if (motionSuggesting) return;
+
+  const start = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
+  const end = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
+  if (!start) return;
+
+  setMotionSuggesting(true);
+  try {
+    const res = await fetch(`${API_BASE_URL}/motion/suggest`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(passId ? { "X-Mina-Pass-Id": passId } : {}),
+      },
+      body: JSON.stringify({
+        brief,
+        motionStyleKeys,
+        assets: {
+          startImageUrl: start,
+          endImageUrl: end || undefined,
+        },
+        aspect_ratio: currentAspect?.ratio || undefined,
+      }),
+    });
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json?.error || json?.message || `HTTP ${res.status}`);
+
+    const suggested = extractSuggestedText(json);
+    if (suggested) setBrief(suggested);
+  } catch (e) {
+    console.error("motion/suggest failed:", e);
+  } finally {
+    setMotionSuggesting(false);
+  }
+}, [motionSuggesting, uploads.product, API_BASE_URL, passId, brief, motionStyleKeys, currentAspect]);
+
 
 const handleSuggestMotion = async () => {
   const item = motionItems[motionIndex];
@@ -2379,7 +2443,9 @@ const handleSuggestMotion = async () => {
     setMotionSuggestTyping(false);
     setMotionSuggestLoading(false);
   }
-};const handleGenerateMotion = async () => {
+};
+
+const handleGenerateMotion = async () => {
     if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
 
     if (!currentPassId) {
@@ -2526,6 +2592,23 @@ const handleSuggestMotion = async () => {
     }
   };
 
+  const onTweak = useCallback(() => {
+    const tweak = window.prompt("What should I tweak? (e.g. brighter, tighter crop, less text, more contrast)");
+    if (!tweak || !tweak.trim()) return;
+
+    setBrief((prev) => {
+      const base = (prev || "").trim();
+      const t = tweak.trim();
+      if (!base) return `TWEAK: ${t}`;
+      return `${base}\n\nTWEAK: ${t}`;
+    });
+
+    if (animateMode) {
+      void handleGenerateMotion();
+    } else {
+      void handleGenerateStill();
+    }
+  }, [animateMode, handleGenerateMotion, handleGenerateStill, setBrief]);
 
 // ========================================================================
 // [PART 10 END]
@@ -3351,11 +3434,7 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
         stillItems={stillItems}
         stillIndex={stillIndex}
         setStillIndex={setStillIndex}
-        feedbackText={feedbackText}
-        setFeedbackText={setFeedbackText}
-        feedbackSending={feedbackSending}
-        feedbackError={feedbackError}
-        onSubmitFeedback={handleSubmitFeedback}
+        onTweak={onTweak}
       />
     );
   };
@@ -3567,15 +3646,15 @@ const isCurrentLiked = currentMediaKey ? likedMap[currentMediaKey] : false;
               onCreateStill={handleGenerateStill}
               motionStyleKeys={motionStyleKeys}
               setMotionStyleKeys={setMotionStyleKeys}
-              motionSuggesting={motionSuggestLoading || motionSuggestTyping}
+              motionSuggesting={motionSuggesting}
               canCreateMotion={canCreateMotion}
-              motionHasImage={!!motionReferenceImageUrl}
+              motionHasImage={(uploads.product?.length ?? 0) > 0}
               motionCreditsOk={motionCreditsOk}
               motionBlockReason={motionBlockReason}
               motionGenerating={motionGenerating}
               motionError={motionError}
               onCreateMotion={handleGenerateMotion}
-              onTypeForMe={handleSuggestMotion}
+              onTypeForMe={onTypeForMe}
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
               minaMessage={minaMessage}
