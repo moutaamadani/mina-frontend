@@ -13,7 +13,7 @@
   margin: 0;
 }
 
-/* FULL BLEED grey surface (NO radius) */
+/* FULL BLEED surface (NO radius) */
 .studio-right-surface {
   position: relative;
   flex: 1 1 auto;
@@ -25,7 +25,6 @@
   overflow: hidden;
   border-radius: 0;
 
-  /* ✅ same “black opacity system” */
   background: #F2F2E9;
 }
 
@@ -113,6 +112,10 @@
   background: rgba(255, 255, 255, 0.85);
 }
 
+/* =========================================================
+   ✅ RESTORED: Feedback/Tweak bar (original look)
+   ========================================================= */
+
 /* Feedback bar (beige) — NO radius, full width */
 .studio-feedback-bar {
   position: relative;
@@ -121,7 +124,7 @@
   width: 100%;
   padding: 18px 18px;
 
-  background: #F2F2E9;
+  background: #EEEEE2; /* ✅ original beige */
   border-radius: 0;
 
   display: flex;
@@ -129,39 +132,7 @@
   gap: 14px;
 }
 
-.studio-feedbackbar {
-  position: relative;
-  flex: 0 0 auto;
-
-  width: 100%;
-  padding: 18px 18px;
-
-  background: #F2F2E9;
-  border-radius: 0;
-
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.studio-feedbackbar-btn {
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-
-  font-weight: 700;
-  font-size: 13px;
-  color: rgba(0, 0, 0, 0.9);
-
-  text-decoration: none;
-}
-
-.studio-feedbackbar-btn:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
-/* “Speak to me” */
+/* Compact input (looks like old) */
 .studio-feedback-input--compact {
   flex: 1 1 auto;
   height: 26px;
@@ -181,7 +152,7 @@
   font-weight: 700;
 }
 
-/* ✅ actions aligned right */
+/* actions aligned right */
 .studio-feedback-actions {
   display: inline-flex;
   align-items: center;
@@ -189,7 +160,7 @@
   flex: 0 0 auto;
 }
 
-/* ✅ Like / Download / Send = same vibe as old Send */
+/* Old CTA style (now used for Tweak) */
 .studio-action-btn {
   border: 0;
   background: transparent;
@@ -199,7 +170,7 @@
   font-size: 13px;
   color: rgba(0, 0, 0, 0.9);
 
-  text-decoration: none; /* ✅ no underline */
+  text-decoration: none;
 }
 
 .studio-action-btn:disabled {
@@ -211,7 +182,7 @@
   color: var(--mina-accent, #858e47);
 }
 
-/* Error (if any) floats above bar without changing layout */
+/* Error floats above bar without changing layout */
 .studio-feedback-error {
   position: absolute;
   left: 18px;
@@ -249,14 +220,17 @@
     padding: 12px 0 4px;
   }
 
+  /* keep same bar feel on mobile too */
   .studio-feedback-bar {
     position: sticky;
     bottom: 0;
+
     align-items: center;
     gap: 10px;
     padding: 16px 20px 18px;
-    background: var(--mina-bg);
-    box-shadow: 0 -1px 0 rgba(8, 10, 0, 0.06);
+
+    background: #EEEEE2; /* ✅ same beige */
+    box-shadow: none; /* ✅ original had no shadow */
   }
 
   .studio-feedback-input--compact {
@@ -270,27 +244,25 @@
     flex-shrink: 0;
   }
 }
+
 /* =========================================
    Header CTA buttons: auto-invert on dark media
    Uses .studio-header-overlay.is-dark from MinaApp.tsx
-   Paste at END of your CSS to override safely.
    ========================================= */
 
 .studio-header-overlay {
-  /* Light background (default): black text */
   --cta-fg: #080a00;
-  --cta-bg: rgba(255, 255, 255, 0.0);
-  --cta-border: rgba(0, 0, 0, 0.0);
-  --cta-bg-hover: rgba(255, 255, 255, 0.0);
-  --cta-border-hover: rgba(0, 0, 0, 0.0);
+  --cta-bg: rgba(255, 255, 255, 0);
+  --cta-border: rgba(0, 0, 0, 0);
+  --cta-bg-hover: rgba(255, 255, 255, 0);
+  --cta-border-hover: rgba(0, 0, 0, 0);
 }
 
 .studio-header-overlay.is-dark {
-  /* Dark background: white text */
   --cta-fg: #FCFAF4;
-  --cta-bg: rgba(0, 0, 0, 0.0);
-  --cta-border: rgba(255, 255, 255, 0.0);
-  --cta-bg-hover: rgba(0, 0, 0, 0.0);
+  --cta-bg: rgba(0, 0, 0, 0);
+  --cta-border: rgba(255, 255, 255, 0);
+  --cta-bg-hover: rgba(0, 0, 0, 0);
   --cta-border-hover: rgba(255, 255, 255, 0);
 }
 
