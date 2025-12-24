@@ -279,19 +279,19 @@
 .studio-header-overlay {
   /* Light background (default): black text */
   --cta-fg: #000;
-  --cta-bg: rgba(255, 255, 255, 0.78);
-  --cta-border: rgba(0, 0, 0, 0.18);
-  --cta-bg-hover: rgba(255, 255, 255, 0.92);
-  --cta-border-hover: rgba(0, 0, 0, 0.28);
+  --cta-bg: rgba(255, 255, 255, 0.0);
+  --cta-border: rgba(0, 0, 0, 0.0);
+  --cta-bg-hover: rgba(255, 255, 255, 0.0);
+  --cta-border-hover: rgba(0, 0, 0, 0.0);
 }
 
 .studio-header-overlay.is-dark {
   /* Dark background: white text */
   --cta-fg: #fff;
-  --cta-bg: rgba(0, 0, 0, 0.45);
-  --cta-border: rgba(255, 255, 255, 0.22);
-  --cta-bg-hover: rgba(0, 0, 0, 0.62);
-  --cta-border-hover: rgba(255, 255, 255, 0.34);
+  --cta-bg: rgba(0, 0, 0, 0.0);
+  --cta-border: rgba(255, 255, 255, 0.0);
+  --cta-bg-hover: rgba(0, 0, 0, 0.0);
+  --cta-border-hover: rgba(255, 255, 255, 0);
 }
 
 .studio-header-cta {
