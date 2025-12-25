@@ -1001,35 +1001,52 @@ const [hasEverTyped, setHasEverTyped] = useState(false);
   // ========================================================================
 
   // ========================================================================
-  // UI Stage reveal
-  // ========================================================================
-  useEffect(() => {
-    if (briefLength <= 0) {
-      if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
-      if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
-      stageT2Ref.current = null;
-      stageT3Ref.current = null;
+// UI Stage reveal (✅ stage 0 ONLY before first typing)
+// ========================================================================
+useEffect(() => {
+  // clear any pending timers first (safe)
+  if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
+  if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
+  stageT2Ref.current = null;
+  stageT3Ref.current = null;
 
-      setUiStage(0);
-      setActivePanel(null);
-      setGlobalDragging(false);
-      dragDepthRef.current = 0;
-      return;
-    }
+  // If empty brief:
+  // - before first typing -> stage 0 (hide)
+  // - after first typing  -> stage 1 (keep UI visible)
+  if (briefLength <= 0) {
+    const nextStage: 0 | 1 = hasEverTyped ? 1 : 0;
 
-    if (uiStage === 0) {
-      setUiStage(1);
+    setUiStage(nextStage);
+
+    if (hasEverTyped) {
+      // keep panels ready (don’t collapse everything)
       setActivePanel((prev) => prev ?? "product");
-
-      stageT2Ref.current = window.setTimeout(() => {
-        setUiStage((s) => (s < 2 ? 2 : s));
-      }, PANEL_REVEAL_DELAY_MS);
-
-      stageT3Ref.current = window.setTimeout(() => {
-        setUiStage((s) => (s < 3 ? 3 : s));
-      }, CONTROLS_REVEAL_DELAY_MS);
+    } else {
+      // first time ever: fully reset
+      setActivePanel(null);
     }
-  }, [briefLength, uiStage]);
+
+    setGlobalDragging(false);
+    dragDepthRef.current = 0;
+    return;
+  }
+
+  // Non-empty brief: ensure stage at least 1
+  if (uiStage < 1) {
+    setUiStage(1);
+    setActivePanel((prev) => prev ?? "product");
+  }
+
+  // Schedule reveal to stage 2 then 3 every time user has text
+  stageT2Ref.current = window.setTimeout(() => {
+    setUiStage((s) => (s < 2 ? 2 : s));
+  }, PANEL_REVEAL_DELAY_MS);
+
+  stageT3Ref.current = window.setTimeout(() => {
+    setUiStage((s) => (s < 3 ? 3 : s));
+  }, CONTROLS_REVEAL_DELAY_MS);
+}, [briefLength, uiStage, hasEverTyped]);
+
 
   // ========================================================================
   // MINA “thinking out loud” UI
@@ -2831,6 +2848,11 @@ const styleHeroUrls = (stylePresetKeys || [])
     setShowDescribeMore(false);
 
     const trimmedLength = trimmedToMax.trim().length;
+    // ✅ once user typed at least 1 char, never go back to stage 0 again
+    if (!hasEverTyped && trimmedLength > 0) {
+      setHasEverTyped(true);
+    }
+
     if (trimmedLength > 0 && trimmedLength < 20) {
       describeMoreTimeoutRef.current = window.setTimeout(() => setShowDescribeMore(true), 1200);
     }
