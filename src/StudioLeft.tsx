@@ -2,15 +2,16 @@
 // ============================================================================
 // Mina Studio — LEFT SIDE (Input + pills + panels + style + create + motion)
 // ---------------------------------------------------------------------------
-// Fixes in this version:
-// ✅ Pills never get clipped on small screens (horizontal scroll, no wrap)
-// ✅ Left column never gets stuck in "stage 0" while cursor is inside left studio
-// ✅ No "hide while typing" while cursor is inside left studio
-// ✅ Left panels area gets its own vertical scroll (page still doesn't scroll)
-// ✅ Double click on custom style asks delete (YES/NO bold); single click selects
-// ✅ Create (still) mode allows ONLY 1 style selected (0 or 1)
+// File map
+// 1) Imports: React + CSS.
+// 2) Types: local shapes for uploads, presets, props (kept self-contained).
+// 3) Helpers: classNames + stable Collapse wrapper for animated panels.
+// 4) Timelines: keyframe map + inline style helpers.
+// 5) Components: pill row, upload panels, prompts, toggles, motion controls.
+// 6) Main component: StudioLeft UI wiring and rendering.
 // ============================================================================
 
+// [PART 1] Imports
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import "./StudioLeft.css";
 
@@ -54,14 +55,7 @@ export type AspectOptionLike = {
   platformKey?: string;
 };
 
-export type MotionStyleKey =
-  | "melt"
-  | "drop"
-  | "expand"
-  | "satisfying"
-  | "slow_motion"
-  | "fix_camera"
-  | "loop";
+export type MotionStyleKey = "melt" | "drop" | "expand" | "satisfying" | "slow_motion" | "fix_camera" | "loop";
 
 type StudioLeftProps = {
   globalDragging: boolean;
@@ -290,13 +284,11 @@ const TYPE_FOR_ME_ICON = "https://assets.faltastudio.com/Website%20Assets/icon-t
 const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const {
     globalDragging,
-
-    // IMPORTANT: keep these as *prop* names so we can override behavior locally
-    typingHidden: typingHiddenProp,
-    showPills: showPillsProp,
-    showPanels: showPanelsProp,
-    showControls: showControlsProp,
-    uiStage: uiStageProp,
+    typingHidden,
+    showPills,
+    showPanels,
+    showControls,
+    uiStage,
 
     brief,
     briefHintVisible,
@@ -335,8 +327,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stylePresets,
     customStyles,
     getStyleLabel,
+    deleteCustomStyle, // ✅ IMPORTANT: needed for confirm delete
 
-    deleteCustomStyle, // ✅ FIX: was missing in your pasted code
     onOpenCustomStylePanel,
     onImageUrlPasted,
 
@@ -363,34 +355,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     onGoProfile,
   } = props;
-
-  // ------------------------------------
-  // ✅ FORCE-SHOW UX (fixes "state 0" & "hide while typing")
-  // - If mouse is inside left studio OR focus is inside left studio => keep UI visible
-  // - On touch devices => always visible (no hover)
-  // ------------------------------------
-  const [leftHover, setLeftHover] = useState(false);
-  const [leftFocus, setLeftFocus] = useState(false);
-
-  const isTouchLike = useMemo(() => {
-    try {
-      return typeof window !== "undefined" && !!window.matchMedia?.("(hover: none)").matches;
-    } catch {
-      return false;
-    }
-  }, []);
-
-  const forceShowUi = isTouchLike || leftHover || leftFocus;
-
-  const typingHidden = forceShowUi ? false : typingHiddenProp;
-  const showPills = forceShowUi ? true : showPillsProp;
-  const showPanels = forceShowUi ? true : showPanelsProp;
-  const showControls = forceShowUi ? true : showControlsProp;
-  const uiStage: 0 | 1 | 2 | 3 = (forceShowUi ? (Math.max(uiStageProp, 1) as any) : uiStageProp) as
-    | 0
-    | 1
-    | 2
-    | 3;
 
   const imageCreditsOk = imageCreditsOkProp ?? true;
   const hasMotionImage = !!motionHasImageProp;
@@ -575,7 +539,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     }
 
     prevAnimateModeRef.current = animateMode;
-  }, [animateMode, brief, openPanel]);
+  }, [animateMode, brief, onBriefChange, openPanel]);
 
   const isMotion = animateMode;
 
@@ -586,15 +550,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     transitionDelay: showPills ? `${pillInitialDelayMs + index * pillStaggerMs}ms` : "0ms",
     opacity: showPills ? 1 : 0,
     transform: showPills ? "translateY(0)" : "translateY(-8px)",
-    flex: "0 0 auto", // ✅ IMPORTANT: prevents shrinking/cutting on small screens
   });
 
   // panel behavior
-  const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
+  const effectivePanel: PanelKey = uiStage === 0 ? null : activePanel ?? "product";
 
   const getFirstImageUrl = (items: UploadItem[]) => items[0]?.remoteUrl || items[0]?.url || "";
 
-  // Prefer permanent URLs. Hide blob: previews (user asked: no blobs in UI).
+  // Prefer permanent URLs. Hide blob: previews
   const getDisplayUrl = (it: UploadItem) => {
     const u = it?.remoteUrl || it?.url || "";
     if (!u) return "";
@@ -604,7 +567,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   // Drag/drop support:
   // - drop files => onFilesPicked(panel, files)
-  // - drop url => onImageUrlPasted(url) (and we open the panel for UX)
+  // - drop url => onImageUrlPasted(url)
   const extractDropUrl = (e: React.DragEvent) => {
     const dt = e.dataTransfer;
 
@@ -613,9 +576,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     const html = dt.getData("text/html") || "";
 
     const fromHtml =
-      html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] ||
-      html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] ||
-      "";
+      html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || "";
 
     const candidates = [uri, plain, fromHtml].filter(Boolean).map((u) => u.split("\n")[0].trim());
 
@@ -629,7 +590,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // ✅ Ignore drags that originate from style thumbnails (prevents accidental style->upload)
+    // ✅ Ignore drags that originate from style thumbnails
     const dt = e.dataTransfer;
     const types = Array.from(dt?.types ?? []);
 
@@ -641,7 +602,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     if (isStyleThumbDrag) return;
 
-    // ✅ First: if the drag contains a URL, treat it as a URL drop
+    // URL drop
     const url = extractDropUrl(e);
     if (url) {
       openPanel(panel);
@@ -649,7 +610,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       return;
     }
 
-    // ✅ Otherwise: normal file drop (from desktop)
+    // file drop
     const files = e.dataTransfer?.files;
     if (files && files.length) {
       props.onFilesPicked(panel, files);
@@ -696,6 +657,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionStyleCards = MOTION_STYLES;
   const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
 
+  // none selected => no thumb => pill shows "+"
   const motionStyleThumb = selectedMotionCards[0]?.thumb || "";
   const motionStyleLabel =
     selectedMotionCards.length === 0
@@ -727,16 +689,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // -------------------------
   const hasMotionHandler = typeof props.onCreateMotion === "function";
 
-  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
-    stillGenerating
-      ? "creating"
-      : uploadsPending
-      ? "uploading"
-      : !imageCreditsOk
-      ? "describe_more"
-      : briefLen < 20
-      ? "describe_more"
-      : "ready";
+  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" = stillGenerating
+    ? "creating"
+    : uploadsPending
+    ? "uploading"
+    : !imageCreditsOk
+    ? "describe_more"
+    : briefLen < 20
+    ? "describe_more"
+    : "ready";
 
   const motionSuggesting = !!props.motionSuggesting;
   const motionHasImage = !!props.motionHasImage;
@@ -791,7 +752,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const handleCreateClick = () => {
     if (createState === "ready") {
       if (isMotion) {
-        props.onCreateMotion?.();
+        onCreateMotion?.();
       } else {
         onCreateStill();
       }
@@ -803,7 +764,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         window.open(matchaUrl, "_blank", "noopener");
         return;
       }
-
       requestAnimationFrame(() => briefInputRef.current?.focus());
     }
   };
@@ -846,64 +806,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         return exists ? [] : [key];
       }
 
-      // Motion: keep multi-select (for movement styles we already have a separate list)
+      // Motion mode: keep multi-select (if you later enable it)
       return exists ? prev.filter((k) => k !== key) : [...prev, key];
     });
 
     openPanel("style");
-  };
-
-  // ✅ Pills row: prevent wrapping & allow horizontal scroll on small laptops
-  const pillsRowRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    // always start at left (avoids "only last pill visible" if browser restores scroll)
-    try {
-      pillsRowRef.current?.scrollTo({ left: 0 });
-    } catch {}
-  }, []);
-
-  const pillsRowStyle: React.CSSProperties = {
-    display: "flex",
-    flexWrap: "nowrap",
-    overflowX: "auto",
-    overflowY: "hidden",
-    WebkitOverflowScrolling: "touch",
-    gap: 10,
-    paddingBottom: 4,
-  };
-
-  // ✅ Left layout: keep page non-scrollable, but left panels scroll internally
-  const rootStyle: React.CSSProperties = {
-    ...(timingVars || {}),
-    height: "100vh",
-    minHeight: "100vh",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-  };
-
-  const mainStyle: React.CSSProperties = {
-    flex: 1,
-    minHeight: 0,
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-  };
-
-  const panelsScrollerStyle: React.CSSProperties = {
-    flex: 1,
-    minHeight: 0,
-    overflowY: "auto",
-    overflowX: "hidden",
-    overscrollBehavior: "contain",
-  };
-
-  const stickyControlsStyle: React.CSSProperties = {
-    position: "sticky",
-    bottom: 0,
-    zIndex: 10,
-    background: "#fff",
-    paddingBottom: 8,
   };
 
   return (
@@ -914,25 +821,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         typingHidden && "is-typing-hidden",
         minaTalking && "is-thinking"
       )}
-      style={rootStyle}
-      onMouseEnter={() => setLeftHover(true)}
-      onMouseLeave={() => setLeftHover(false)}
-      onFocusCapture={() => setLeftFocus(true)}
-      onBlurCapture={(e) => {
-        const next = e.relatedTarget as Node | null;
-        if (!next || !e.currentTarget.contains(next)) setLeftFocus(false);
-      }}
+      style={timingVars}
     >
-      <div className="studio-left-main" style={mainStyle}>
+      <div className="studio-left-main">
         {/* Input 1 */}
         <div className="studio-input1-block">
           {/* Pills slot */}
           <div className="studio-pills-slot">
-            <div
-              ref={pillsRowRef}
-              className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}
-              style={pillsRowStyle}
-            >
+            <div className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}>
               {!isMotion ? (
                 <>
                   {/* Product */}
@@ -945,11 +841,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     style={pillBaseStyle(0)}
                     onClick={() => {
-                      if (!productThumb) {
-                        triggerPick("product");
-                      } else {
-                        openPanel("product");
-                      }
+                      if (!productThumb) triggerPick("product");
+                      else openPanel("product");
                     }}
                     onMouseEnter={() => openPanel("product")}
                   >
@@ -967,11 +860,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     style={pillBaseStyle(1)}
                     onClick={() => {
-                      if (!logoThumb) {
-                        triggerPick("logo");
-                      } else {
-                        openPanel("logo");
-                      }
+                      if (!logoThumb) triggerPick("logo");
+                      else openPanel("logo");
                     }}
                     onMouseEnter={() => openPanel("logo")}
                   >
@@ -989,11 +879,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     style={pillBaseStyle(2)}
                     onClick={() => {
-                      if (!inspirationThumb) {
-                        triggerPick("inspiration");
-                      } else {
-                        openPanel("inspiration");
-                      }
+                      if (!inspirationThumb) triggerPick("inspiration");
+                      else openPanel("inspiration");
                     }}
                     onMouseEnter={() => openPanel("inspiration")}
                   >
@@ -1004,11 +891,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   {/* Style */}
                   <button
                     type="button"
-                    className={classNames(
-                      "studio-pill",
-                      activePanel === "style" && "active",
-                      !styleThumb && "studio-pill--solo-plus"
-                    )}
+                    className={classNames("studio-pill", activePanel === "style" && "active", !styleThumb && "studio-pill--solo-plus")}
                     style={pillBaseStyle(3)}
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
@@ -1070,7 +953,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     );
                   })()}
 
-                  {/* Image */}
+                  {/* Frames */}
                   <button
                     type="button"
                     className={classNames(
@@ -1080,11 +963,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     )}
                     style={pillBaseStyle(1)}
                     onClick={() => {
-                      if (!productThumb) {
-                        triggerPick("product");
-                      } else {
-                        openPanel("product");
-                      }
+                      if (!productThumb) triggerPick("product");
+                      else openPanel("product");
                     }}
                     onMouseEnter={() => openPanel("product")}
                   >
@@ -1109,12 +989,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   </button>
 
                   {/* Ratio */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(3)}
-                    disabled
-                  >
+                  <button type="button" className={classNames("studio-pill", "studio-pill--aspect")} style={pillBaseStyle(3)} disabled>
                     <span className="studio-pill-icon">
                       <img
                         src={animateAspectIconUrl || currentAspectIconUrl}
@@ -1132,19 +1007,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
           {/* Textarea */}
           <div className="studio-brief-block">
-            <div
-              className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
-              ref={briefShellRef}
-              onScroll={onBriefScroll}
-            >
+            <div className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")} ref={briefShellRef} onScroll={onBriefScroll}>
               <textarea
                 ref={briefInputRef}
                 className="studio-brief-input"
                 maxLength={1000}
                 placeholder={
-                  isMotion
-                    ? "Describe the motion you want (loop, camera, drips, melt, etc.)"
-                    : "Describe how you want your still life image to look like"
+                  isMotion ? "Describe the motion you want (loop, camera, drips, melt, etc.)" : "Describe how you want your still life image to look like"
                 }
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
@@ -1166,8 +1035,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           </div>
         </div>
 
-        {/* Panels + Controls (scrollable area) */}
-        <div className="mina-left-block" style={panelsScrollerStyle}>
+        {/* Panels */}
+        <div className="mina-left-block">
           {!isMotion ? (
             <>
               <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
@@ -1200,12 +1069,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       ))}
 
                       {uploads.product.length === 0 && (
-                        <button
-                          type="button"
-                          className="studio-plusbox studio-plusbox--inline"
-                          onClick={() => triggerPick("product")}
-                          title="Add image"
-                        >
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("product")} title="Add image">
                           <span aria-hidden="true">+</span>
                         </button>
                       )}
@@ -1221,28 +1085,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("logo")}>
                       {uploads.logo.map((it) => (
-                        <button
-                          key={it.id}
-                          type="button"
-                          className="studio-thumb"
-                          onClick={() => removeUploadItem("logo", it.id)}
-                          title="Click to delete"
-                        >
-                          {getDisplayUrl(it) ? (
-                            <img src={getDisplayUrl(it)} alt="" />
-                          ) : it.uploading ? (
-                            <span className="studio-thumb-spinner" aria-hidden="true" />
-                          ) : null}
+                        <button key={it.id} type="button" className="studio-thumb" onClick={() => removeUploadItem("logo", it.id)} title="Click to delete">
+                          {getDisplayUrl(it) ? <img src={getDisplayUrl(it)} alt="" /> : it.uploading ? <span className="studio-thumb-spinner" aria-hidden="true" /> : null}
                         </button>
                       ))}
 
                       {uploads.logo.length === 0 && (
-                        <button
-                          type="button"
-                          className="studio-plusbox studio-plusbox--inline"
-                          onClick={() => triggerPick("logo")}
-                          title="Add image"
-                        >
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("logo")} title="Add image">
                           <span aria-hidden="true">+</span>
                         </button>
                       )}
@@ -1256,11 +1105,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <div className="studio-panel-title">Add inspiration</div>
 
                   <div className="studio-panel-row">
-                    <div
-                      className="studio-thumbs studio-thumbs--inline"
-                      onDragOver={handleDragOver}
-                      onDrop={handleDropOnPanel("inspiration")}
-                    >
+                    <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("inspiration")}>
                       {uploads.inspiration.map((it, idx) => (
                         <button
                           key={it.id}
@@ -1278,12 +1123,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           title="Drag to reorder • Click to delete"
                         >
                           {getDisplayUrl(it) ? (
-                            <img
-                              src={getDisplayUrl(it)}
-                              alt=""
-                              draggable={false}
-                              style={{ WebkitUserDrag: "none", userSelect: "none" }}
-                            />
+                            <img src={getDisplayUrl(it)} alt="" draggable={false} style={{ WebkitUserDrag: "none", userSelect: "none" }} />
                           ) : it.uploading ? (
                             <span className="studio-thumb-spinner" aria-hidden="true" />
                           ) : null}
@@ -1291,12 +1131,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       ))}
 
                       {uploads.inspiration.length < 4 && (
-                        <button
-                          type="button"
-                          className="studio-plusbox studio-plusbox--inline"
-                          onClick={() => triggerPick("inspiration")}
-                          title="Add image"
-                        >
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("inspiration")} title="Add image">
                           <span aria-hidden="true">+</span>
                         </button>
                       )}
@@ -1316,6 +1151,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         type="button"
                         draggable
                         onDragStart={(e) => {
+                          // marker (use BOTH types for cross-browser reliability)
                           e.dataTransfer.setData("text/x-mina-style-thumb", "1");
                           e.dataTransfer.setData("application/x-mina-style-thumb", "1");
 
@@ -1327,19 +1163,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          onStyleSingleClick(s.key);
+                          onStyleSingleClick(s.key); // single click = select
                         }}
                         onDoubleClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          onStyleDoubleClick(s);
+                          onStyleDoubleClick(s); // double click = confirm delete (custom only)
                         }}
                         title={s.isCustom ? "Double click to delete" : undefined}
                       >
                         <div className="studio-style-thumb">
                           {s.thumb ? <img src={s.thumb} alt="" draggable={false} /> : <span aria-hidden="true">+</span>}
                         </div>
-
                         <div className="studio-style-label">{s.label}</div>
                       </button>
                     ))}
@@ -1378,11 +1213,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           onClick={() => handleThumbClick("product", it.id)}
                           title="Drag to reorder • Click to delete"
                         >
-                          {getDisplayUrl(it) ? (
-                            <img src={getDisplayUrl(it)} alt="" draggable={false} />
-                          ) : it.uploading ? (
-                            <span className="studio-thumb-spinner" aria-hidden="true" />
-                          ) : null}
+                          {getDisplayUrl(it) ? <img src={getDisplayUrl(it)} alt="" draggable={false} /> : it.uploading ? <span className="studio-thumb-spinner" aria-hidden="true" /> : null}
                         </button>
                       ))}
 
@@ -1414,16 +1245,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         onDragStart={(e) => {
                           e.dataTransfer.setData("text/x-mina-style-thumb", "1");
                           e.dataTransfer.setData("application/x-mina-style-thumb", "1");
-
                           e.dataTransfer.setData("text/uri-list", m.thumb);
                           e.dataTransfer.setData("text/plain", m.thumb);
                           e.dataTransfer.effectAllowed = "copy";
                         }}
-                        className={classNames(
-                          "studio-style-card",
-                          "studio-motion-style-card",
-                          motionStyleKeys.includes(m.key) && "active"
-                        )}
+                        className={classNames("studio-style-card", "studio-motion-style-card", motionStyleKeys.includes(m.key) && "active")}
                         onClick={() => pickMotionStyle(m.key)}
                       >
                         <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
@@ -1444,22 +1270,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
           {/* Controls */}
           {showControls && (
-            <div className="studio-controls" style={stickyControlsStyle}>
+            <div className="studio-controls">
               <div className="studio-controls-divider" />
 
               <button type="button" className="studio-vision-toggle" onClick={onToggleVision}>
                 Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
               </button>
 
+              {isMotion && motionBlockReason ? <div className="error-text">{motionBlockReason}</div> : null}
+
               <div className="studio-create-block">
                 <button
                   type="button"
                   aria-busy={createDisabled}
-                  className={classNames(
-                    "studio-create-link",
-                    createDisabled && "disabled",
-                    createState === "describe_more" && "state-describe"
-                  )}
+                  className={classNames("studio-create-link", createDisabled && "disabled", createState === "describe_more" && "state-describe")}
                   disabled={createDisabled}
                   onClick={handleCreateClick}
                   title={isMotion && !hasMotionHandler ? "Wire onCreateMotion in MinaApp" : undefined}
@@ -1470,12 +1294,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
               {!isMotion && stillError && <div className="error-text">{stillError}</div>}
               {isMotion && motionError && <div className="error-text">{motionError}</div>}
-              {isMotion && motionBlockReason && <div className="error-text">{motionBlockReason}</div>}
             </div>
           )}
         </div>
 
-        {/* Delete confirmation */}
+        {/* Delete confirm modal */}
         {deleteConfirm && (
           <div
             onClick={confirmDeleteNo}
