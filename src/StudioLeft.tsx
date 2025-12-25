@@ -41,20 +41,10 @@ export type StylePreset = {
 };
 
 export type CustomStyle = {
-  id: string;
   key: string;
   label: string;
-
-  // Used by the UI list thumbnail (now a real https URL)
   thumbUrl: string;
-
-  // ✅ Treat like preset.hero: we store Hero + 2 others (all https URLs)
-  heroUrls: string[];
-
-  // Optional: keep all uploaded refs (up to 10) for future upgrades
-  allUrls?: string[];
-
-  createdAt: string;
+  createdAt?: string;
 };
 
 
