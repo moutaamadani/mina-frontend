@@ -545,8 +545,7 @@ const [hasEverTyped, setHasEverTyped] = useState(false);
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
 
-  // Right media contrast
-  const [isRightMediaDark, setIsRightMediaDark] = useState(false);
+ 
   const [activeMediaKind, setActiveMediaKind] = useState<"still" | "motion" | null>(null);
 
   // Feedback (tweak)
@@ -1020,87 +1019,6 @@ const showControls = uiStage >= 3 || hasEverTyped;
       cancelled = true;
     };
   }, [animateImage?.remoteUrl, animateImage?.url, latestStill?.aspectRatio, latestStill?.url, currentAspect.ratio]);
-
-  // Sample pixels for same-origin OR assets.faltastudio.com (requires CORS enabled on that domain)
-useEffect(() => {
-  const rawUrl = currentMotion?.url || currentStill?.url;
-  if (!rawUrl) {
-    setIsRightMediaDark(false);
-    return;
-  }
-
-  // If it's a video url, sampling with Image() will fail.
-  // Fallback: try the still if it exists.
-  const isVideo = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl);
-  const urlToSample = isVideo ? (currentStill?.url || "") : rawUrl;
-
-  if (!urlToSample) {
-    setIsRightMediaDark(false);
-    return;
-  }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(urlToSample, window.location.origin);
-  } catch {
-    setIsRightMediaDark(false);
-    return;
-  }
-
-  const host = parsed.hostname.toLowerCase();
-  const isSameOrigin = parsed.origin === window.location.origin;
-  const isAssets = host === "assets.faltastudio.com" || host.endsWith(".assets.faltastudio.com");
-
-  // Only try canvas sampling when we expect CORS to allow it:
-  if (!isSameOrigin && !isAssets) {
-    setIsRightMediaDark(false);
-    return;
-  }
-
-  let cancelled = false;
-  const img = new Image();
-
-  // ✅ required for cross-origin canvas sampling
-  if (!isSameOrigin) img.crossOrigin = "anonymous";
-  (img as any).decoding = "async";
-
-  img.onload = () => {
-    if (cancelled) return;
-    try {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-
-      const w = 48;
-      const h = 48;
-      canvas.width = w;
-      canvas.height = h;
-
-      ctx.drawImage(img, 0, 0, w, h);
-
-      const data = ctx.getImageData(0, 0, w, h).data;
-      let sum = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-      }
-      const avg = sum / (data.length / 4);
-      setIsRightMediaDark(avg < 110); // true => background is dark => make text/buttons white
-    } catch {
-      // If CORS isn’t correctly configured, canvas will throw here.
-      setIsRightMediaDark(false);
-    }
-  };
-
-  img.onerror = () => {
-    if (!cancelled) setIsRightMediaDark(false);
-  };
-
-  img.src = parsed.toString();
-
-  return () => {
-    cancelled = true;
-  };
-}, [currentMotion?.url, currentStill?.url]);
 
 
   const motionTextTrimmed = motionDescription.trim();
@@ -3363,12 +3281,17 @@ const styleHeroUrls = (stylePresetKeys || [])
   // FINAL LAYOUT
   // ========================================================================
   const topBarActive = pendingRequests > 0 || uploadsPending || stillGenerating || motionGenerating || customStyleTraining;
+  const HEADER_CTA_BLEND_STYLE: React.CSSProperties = {
+    color: "#FCFAF4",
+    background: "transparent",
+    mixBlendMode: "difference" as any,
+  };
 
   const appUi = (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
       <div className="studio-frame">
-        <div className={classNames("studio-header-overlay", isRightMediaDark && "is-dark")}>
+        <div className="studio-header-overlay">
           <div className="studio-header-left">
             <a href="https://mina.faltastudio.com" className="studio-logo-link">
               <img
@@ -3385,24 +3308,27 @@ const styleHeroUrls = (stylePresetKeys || [])
                 <button
                   type="button"
                   className="studio-header-cta"
+                  style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleToggleAnimateMode}
                   disabled={stillGenerating || motionGenerating}
                 >
                   {animateMode ? "Create" : "Animate"}
                 </button>
-
+          
                 <button
                   type="button"
                   className="studio-header-cta"
+                  style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleLikeCurrent}
                   disabled={(!currentStill && !currentMotion) || likeSubmitting}
                 >
                   {isCurrentLiked ? "ok" : "Save it"}
                 </button>
-
+          
                 <button
                   type="button"
                   className="studio-header-cta"
+                  style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleDownloadCurrent}
                   disabled={!currentStill && !currentMotion}
                 >
@@ -3411,7 +3337,8 @@ const styleHeroUrls = (stylePresetKeys || [])
               </>
             )}
           </div>
-        </div>
+          </div>
+
 
         {activeTab === "studio" ? (
           <div className={classNames("studio-body", "studio-body--two-col")}>
