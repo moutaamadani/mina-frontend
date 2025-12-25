@@ -1,6 +1,8 @@
 // =============================================================
 // FILE: src/Profile.tsx
 // Mina — Profile (Render-only, data comes from MinaApp)
+// Patch: show real user prompt, confirm delete + fade out, better download,
+// remove refresh, still: Re-create (left) + Animate (right), text-only buttons
 // =============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +11,6 @@ import TopLoadingBar from "./components/TopLoadingBar";
 
 type Row = Record<string, any>;
 
-/** ✅ FIX: safeString was used but never defined */
 function safeString(v: any, fallback = ""): string {
   if (v === null || v === undefined) return fallback;
   const s = String(v);
@@ -22,6 +23,20 @@ function pick(row: any, keys: string[], fallback = ""): string {
     if (v !== undefined && v !== null && String(v).trim() !== "") return String(v);
   }
   return fallback;
+}
+
+function tryParseJson<T = any>(v: any): T | null {
+  if (!v) return null;
+  if (typeof v === "object") return v as T;
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (!s) return null;
+  if (!(s.startsWith("{") || s.startsWith("["))) return null;
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
+  }
 }
 
 function isVideoUrl(url: string) {
@@ -54,7 +69,7 @@ function fmtDate(iso: string | null) {
 }
 
 function guessDownloadExt(url: string, fallbackExt: string) {
-  const lower = url.toLowerCase();
+  const lower = (url || "").toLowerCase().split("?")[0].split("#")[0];
   if (lower.endsWith(".mp4")) return ".mp4";
   if (lower.endsWith(".webm")) return ".webm";
   if (lower.endsWith(".mov")) return ".mov";
@@ -66,21 +81,37 @@ function guessDownloadExt(url: string, fallbackExt: string) {
   return fallbackExt;
 }
 
-function buildDownloadName(url: string) {
-  const base = "Mina_v3_prompt";
+function buildDownloadName(url: string, id?: string | null) {
   const ext = guessDownloadExt(url, ".png");
+  const short = (id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 10);
+  const base = short ? `Mina_${short}` : "Mina_export";
   return base.endsWith(ext) ? base : `${base}${ext}`;
 }
 
-function triggerDownload(url: string, id?: string | null) {
+async function downloadMedia(url: string, id?: string | null) {
   if (!url) return;
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = buildDownloadName(url);
-  if (id) a.setAttribute("data-id", id);
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+
+  // Best effort: try blob download (works when CORS allows)
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error("fetch failed");
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = objectUrl;
+    a.download = buildDownloadName(url, id);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // cleanup
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+    return;
+  } catch {
+    // Fallback: open the asset (user can save)
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
@@ -114,7 +145,10 @@ function normalizeAspectRatio(raw: string | null | undefined) {
     const h = parseFloat(m[2]);
     if (Number.isFinite(w) && Number.isFinite(h) && h > 0) {
       const val = w / h;
-      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = { opt: null, diff: Infinity };
+      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = {
+        opt: null,
+        diff: Infinity,
+      };
       for (const opt of ASPECT_OPTIONS) {
         const [aw, ah] = opt.ratio.split(":").map((p) => parseFloat(p));
         if (!Number.isFinite(aw) || !Number.isFinite(ah) || ah === 0) continue;
@@ -132,8 +166,9 @@ function normalizeAspectRatio(raw: string | null | undefined) {
 // Likes are feedback rows where comment is empty.
 function findLikeUrl(row: Row) {
   const payload = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const payloadObj = tryParseJson<any>(payload) ?? payload;
 
-  const payloadComment = typeof payload?.comment === "string" ? payload.comment.trim() : null;
+  const payloadComment = typeof payloadObj?.comment === "string" ? payloadObj.comment.trim() : null;
 
   const commentFieldPresent =
     Object.prototype.hasOwnProperty.call(row, "mg_comment") ||
@@ -169,21 +204,54 @@ type RecreateDraft = {
   };
 };
 
-function extractInputsForDisplay(row: Row) {
-  const payload = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
-  const meta = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
+function looksLikeSystemPrompt(s: string) {
+  const t = (s || "").trim();
+  if (!t) return false;
+  // Heuristics: long + instruction-y
+  if (t.length > 350) return true;
+  const low = t.toLowerCase();
+  if (low.includes("you are") && (low.includes("assistant") || low.includes("system"))) return true;
+  if (low.includes("do not") && low.includes("must")) return true;
+  return false;
+}
 
-  // ✅ User brief only (never show generated/system prompt)
-      const brief =
-      pick(row, ["mg_user_prompt", "userPrompt", "promptUser", "prompt_raw", "promptOriginal", "user_message", "mg_user_message"], "") ||
-      pick(payload, ["userPrompt", "user_prompt", "userMessage", "brief", "user_message"], "");
-    
+function extractInputsForDisplay(row: Row) {
+  const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
+  const varsRaw =
+    (row as any)?.mg_mma_vars ??
+    (row as any)?.mg_vars ??
+    (row as any)?.vars ??
+    (row as any)?.mma_vars ??
+    null;
+
+  const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? null;
+  const meta = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
+  const vars = tryParseJson<any>(varsRaw) ?? varsRaw ?? null;
+
+  // ✅ USER PROMPT extraction (stronger)
+  const briefCandidates: string[] = [
+    pick(row, ["mg_user_prompt", "mg_user_message", "userPrompt", "user_prompt", "promptUser", "brief", "mg_brief"], ""),
+    pick(payload, ["userPrompt", "user_prompt", "userMessage", "user_message", "brief"], ""),
+    pick(payload?.inputs, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
+    pick(payload?.settings, ["brief"], ""),
+    pick(meta, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
+    pick(vars, ["brief", "user_prompt", "userPrompt", "prompt", "userMessage"], ""),
+  ].map((s) => String(s || "").trim()).filter(Boolean);
+
+  // Fallback prompt (only if it doesn't look like a system prompt)
+  const rawFallback = safeString(pick(row, ["mg_prompt", "prompt"], ""), "").trim();
+  const fallbackPrompt = rawFallback && !looksLikeSystemPrompt(rawFallback) ? rawFallback : "";
+
+  const brief = (briefCandidates[0] || fallbackPrompt || "").trim();
 
   const aspect =
     normalizeAspectRatio(
       pick(row, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
         pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
-        pick(payload, ["aspect_ratio", "aspectRatio"], "")
+        pick(payload, ["aspect_ratio", "aspectRatio"], "") ||
+        pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "") ||
+        pick(vars, ["aspect_ratio", "aspectRatio"], "")
     ) || "";
 
   const stylePresetKeysRaw =
@@ -192,6 +260,9 @@ function extractInputsForDisplay(row: Row) {
     payload?.settings?.stylePresetKeys ??
     payload?.settings?.style_preset_keys ??
     payload?.inputs?.stylePresetKeys ??
+    payload?.inputs?.style_preset_keys ??
+    vars?.stylePresetKeys ??
+    vars?.style_preset_keys ??
     null;
 
   const stylePresetKeyRaw =
@@ -199,6 +270,10 @@ function extractInputsForDisplay(row: Row) {
     meta?.style_preset_key ??
     payload?.settings?.stylePresetKey ??
     payload?.settings?.style_preset_key ??
+    payload?.inputs?.stylePresetKey ??
+    payload?.inputs?.style_preset_key ??
+    vars?.stylePresetKey ??
+    vars?.style_preset_key ??
     null;
 
   const stylePresetKeys: string[] = Array.isArray(stylePresetKeysRaw)
@@ -214,13 +289,17 @@ function extractInputsForDisplay(row: Row) {
         ? payload.settings.minaVisionEnabled
         : typeof payload?.inputs?.minaVisionEnabled === "boolean"
           ? payload.inputs.minaVisionEnabled
-          : undefined;
+          : typeof vars?.minaVisionEnabled === "boolean"
+            ? vars.minaVisionEnabled
+            : undefined;
 
   const productImageUrl =
     meta?.productImageUrl ||
     payload?.assets?.productImageUrl ||
     payload?.assets?.product_image_url ||
     payload?.assets?.product_image ||
+    vars?.productImageUrl ||
+    vars?.product_image_url ||
     "";
 
   const logoImageUrl =
@@ -228,6 +307,8 @@ function extractInputsForDisplay(row: Row) {
     payload?.assets?.logoImageUrl ||
     payload?.assets?.logo_image_url ||
     payload?.assets?.logo_image ||
+    vars?.logoImageUrl ||
+    vars?.logo_image_url ||
     "";
 
   const styleImageUrls =
@@ -235,17 +316,19 @@ function extractInputsForDisplay(row: Row) {
     payload?.assets?.styleImageUrls ||
     payload?.assets?.style_image_urls ||
     payload?.assets?.inspiration_image_urls ||
+    vars?.styleImageUrls ||
+    vars?.style_image_urls ||
     [];
 
   const styleImages: string[] = Array.isArray(styleImageUrls)
     ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
     : [];
 
-  const tone = String(meta?.tone || payload?.inputs?.tone || payload?.tone || "").trim();
-  const platform = String(meta?.platform || payload?.inputs?.platform || payload?.platform || "").trim();
+  const tone = String(meta?.tone || payload?.inputs?.tone || payload?.tone || vars?.tone || "").trim();
+  const platform = String(meta?.platform || payload?.inputs?.platform || payload?.platform || vars?.platform || "").trim();
 
   return {
-    brief: String(brief || "").trim(),
+    brief,
     aspectRatio: aspect,
     stylePresetKeys,
     minaVisionEnabled,
@@ -271,7 +354,9 @@ type ProfileProps = {
   onBackToStudio?: () => void;
   onLogout?: () => void;
 
+  // keep prop for compatibility, but UI no longer shows Refresh
   onRefresh?: () => void;
+
   onDelete?: (id: string) => Promise<void> | void;
   onRecreate?: (draft: RecreateDraft) => void;
 };
@@ -286,12 +371,14 @@ export default function Profile({
   error = null,
   onBackToStudio,
   onLogout,
-  onRefresh,
   onDelete,
   onRecreate,
 }: ProfileProps) {
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
+  const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
+  const [removedIds, setRemovedIds] = useState<Record<string, boolean>>({});
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [confirmDeleteIds, setConfirmDeleteIds] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
 
   // Filters
@@ -334,13 +421,45 @@ export default function Profile({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lightbox]);
 
+  const askDelete = (id: string) => {
+    setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
+    setConfirmDeleteIds((prev) => ({ ...prev, [id]: true }));
+  };
+
+  const cancelDelete = (id: string) => {
+    setConfirmDeleteIds((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   const deleteItem = async (id: string) => {
     setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
+
+    // instant fade out
+    setRemovingIds((prev) => ({ ...prev, [id]: true }));
     setDeletingIds((prev) => ({ ...prev, [id]: true }));
+    cancelDelete(id);
+
     try {
       if (!onDelete) throw new Error("Delete not available.");
       await onDelete(id);
+
+      // keep it gone even before parent refresh
+      setRemovedIds((prev) => ({ ...prev, [id]: true }));
+      setExpandedPromptIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     } catch (e: any) {
+      // bring it back if delete failed
+      setRemovingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
       setDeleteErrors((prev) => ({ ...prev, [id]: e?.message || "Delete failed" }));
     } finally {
       setDeletingIds((prev) => {
@@ -365,7 +484,9 @@ export default function Profile({
     // liked generation ids from feedback payloads
     const likedGenIdSet = new Set<string>();
     for (const f of feedbacks) {
-      const fp: any = (f as any)?.mg_payload ?? (f as any)?.payload ?? {};
+      const fpRaw: any = (f as any)?.mg_payload ?? (f as any)?.payload ?? {};
+      const fp = tryParseJson<any>(fpRaw) ?? fpRaw;
+
       const rawLiked = fp?.liked ?? fp?.isLiked ?? fp?.like ?? (f as any)?.liked;
       const isLiked = rawLiked === true || rawLiked === 1 || rawLiked === "true";
       if (!isLiked) continue;
@@ -390,12 +511,16 @@ export default function Profile({
 
     let base = baseRows
       .map(({ row: g, source }, idx) => {
-        // ✅ FIX: these were referenced but not defined in your file
-        const payload: any = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
-        const meta: any = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
+        const payloadRaw: any = (g as any)?.mg_payload ?? (g as any)?.payload ?? null;
+        const metaRaw: any = (g as any)?.mg_meta ?? (g as any)?.meta ?? null;
+        const payload: any = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? null;
+        const meta: any = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
 
         const generationId = safeString(pick(g, ["mg_generation_id", "generation_id", "generationId", "id"]), "").trim();
         const id = generationId || safeString(pick(g, ["mg_id", "id"]), `row_${idx}`).trim();
+
+        // local optimistic deletes
+        if (removedIds[id]) return null;
 
         const createdAt = safeString(pick(g, ["created_at", "mg_created_at", "ts", "timestamp"]), "").trim();
 
@@ -406,7 +531,8 @@ export default function Profile({
         const aspectRaw =
           pick(g, ["mg_aspect_ratio", "aspect_ratio", "aspectRatio"], "") ||
           pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
-          pick(payload, ["aspect_ratio", "aspectRatio"], "");
+          pick(payload, ["aspect_ratio", "aspectRatio"], "") ||
+          pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "");
 
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
@@ -435,12 +561,15 @@ export default function Profile({
 
         const inputs = extractInputsForDisplay(g);
 
-        const canRecreate = source === "generation" && !!onRecreate && !!inputs.brief;
+        // ✅ ensure we show something if user prompt was missing
+        const prompt = (inputs.brief || "").trim();
+
+        const canRecreate = source === "generation" && !!onRecreate && !!prompt;
 
         const draft: RecreateDraft | null = canRecreate
           ? {
               mode: isMotion ? "motion" : "still",
-              brief: inputs.brief,
+              brief: prompt,
               settings: {
                 aspect_ratio: inputs.aspectRatio || undefined,
                 minaVisionEnabled: inputs.minaVisionEnabled,
@@ -454,12 +583,10 @@ export default function Profile({
             }
           : null;
 
-        const fallbackPrompt = safeString(pick(g, ["mg_prompt", "prompt", "mg_user_prompt", "userPrompt"]), "").trim();
-
         return {
           id,
           createdAt,
-          prompt: inputs.brief,
+          prompt,
           url,
           liked,
           isMotion,
@@ -514,7 +641,16 @@ export default function Profile({
 
     const activeCount = out.filter((it) => !it.dimmed).length;
     return { items: out, activeCount };
-  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter, onRecreate]);
+  }, [
+    generations,
+    feedbacks,
+    likedUrlSet,
+    motion,
+    likedOnly,
+    activeAspectFilter,
+    onRecreate,
+    removedIds,
+  ]);
 
   // Reset paging when list changes
   useEffect(() => {
@@ -612,7 +748,8 @@ export default function Profile({
     };
   }, [visibleItems.length]);
 
-  const onTogglePrompt = (id: string) => setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  const onTogglePrompt = (id: string) =>
+    setExpandedPromptIds((prev) => ({ ...prev, [id]: !prev[id] }));
 
   return (
     <>
@@ -644,15 +781,6 @@ export default function Profile({
                   Back to studio
                 </a>
               )}
-
-              {onRefresh ? (
-                <>
-                  <span className="profile-topsep">|</span>
-                  <button className="profile-toplink" type="button" onClick={onRefresh}>
-                    Refresh
-                  </button>
-                </>
-              ) : null}
 
               <span className="profile-topsep">|</span>
               <a
@@ -696,7 +824,7 @@ export default function Profile({
                 {error ? (
                   <span className="profile-error">{error}</span>
                 ) : loading ? (
-                  "Loading stills and shots…"
+                  "Loading…"
                 ) : items.length ? (
                   `${activeCount} creation${activeCount === 1 ? "" : "s"}`
                 ) : (
@@ -737,18 +865,28 @@ export default function Profile({
           {visibleItems.map((it) => {
             const expanded = Boolean(expandedPromptIds[it.id]);
             const showViewMore = (it.prompt || "").length > 90 || it.canRecreate;
+
             const deleting = Boolean(deletingIds[it.id]);
+            const removing = Boolean(removingIds[it.id]);
             const deleteErr = deleteErrors[it.id];
+            const confirming = Boolean(confirmDeleteIds[it.id]);
 
             const inputs = it.inputs || null;
 
+            const canAnimate = !!it.draft && !it.isMotion && isImageUrl(it.url);
+
             return (
-              <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""}`}>
+              <div
+                key={it.id}
+                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${
+                  removing ? "is-removing" : ""
+                }`}
+              >
                 <div className="profile-card-top">
                   <button
                     className="profile-card-show"
                     type="button"
-                    onClick={() => triggerDownload(it.url, it.id)}
+                    onClick={() => downloadMedia(it.url, it.id)}
                     disabled={!it.url}
                   >
                     Download
@@ -757,16 +895,37 @@ export default function Profile({
                   <div className="profile-card-top-right">
                     {it.liked ? <span className="profile-card-liked">Liked</span> : null}
 
-                    <button
-                      className="profile-card-delete"
-                      type="button"
-                      onClick={() => deleteItem(it.id)}
-                      disabled={deleting || !onDelete}
-                      title="Delete"
-                      aria-label="Delete"
-                    >
-                      −
-                    </button>
+                    {confirming ? (
+                      <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
+                        <button
+                          className="profile-card-confirm-yes"
+                          type="button"
+                          onClick={() => deleteItem(it.id)}
+                          disabled={deleting || !onDelete}
+                        >
+                          delete
+                        </button>
+                        <button
+                          className="profile-card-confirm-no"
+                          type="button"
+                          onClick={() => cancelDelete(it.id)}
+                          disabled={deleting}
+                        >
+                          cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="profile-card-delete"
+                        type="button"
+                        onClick={() => askDelete(it.id)}
+                        disabled={deleting || !onDelete}
+                        title="Delete"
+                        aria-label="Delete"
+                      >
+                        −
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -801,7 +960,7 @@ export default function Profile({
 
                 <div className="profile-card-promptline">
                   <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
-                    {it.prompt || ""}
+                    {it.prompt || "—"}
 
                     {expanded && inputs ? (
                       <div className="profile-card-details">
@@ -814,20 +973,6 @@ export default function Profile({
                           <div className="profile-card-detailrow">
                             <span className="k">Aspect</span>
                             <span className="v">{inputs.aspectRatio}</span>
-                          </div>
-                        ) : null}
-
-                        {inputs.tone ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Tone</span>
-                            <span className="v">{inputs.tone}</span>
-                          </div>
-                        ) : null}
-
-                        {inputs.platform ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Platform</span>
-                            <span className="v">{inputs.platform}</span>
                           </div>
                         ) : null}
 
@@ -895,6 +1040,7 @@ export default function Profile({
 
                         {it.canRecreate && it.draft ? (
                           <div className="profile-card-actions">
+                            {/* LEFT: Re-create (always) */}
                             <button
                               type="button"
                               className="profile-card-recreate"
@@ -905,6 +1051,30 @@ export default function Profile({
                             >
                               Re-create
                             </button>
+
+                            {/* RIGHT: Animate (only for still images) */}
+                            {canAnimate ? (
+                              <button
+                                type="button"
+                                className="profile-card-animate"
+                                onClick={() => {
+                                  const motionDraft: RecreateDraft = {
+                                    ...it.draft!,
+                                    mode: "motion",
+                                    assets: {
+                                      ...it.draft!.assets,
+                                      kling_start_image_url: it.url,
+                                    },
+                                  };
+                                  onRecreate?.(motionDraft);
+                                  onBackToStudio?.();
+                                }}
+                              >
+                                Animate
+                              </button>
+                            ) : (
+                              <span />
+                            )}
                           </div>
                         ) : null}
                       </div>
