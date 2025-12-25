@@ -27,8 +27,8 @@ const normalizeBase = (raw?: string | null) => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
-const MATCHA_URL =
-  "https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw";
+const MATCHA_URL = "https://www.faltastudio.com/cart/<VARIANT_ID>:1";
+
 
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied.
