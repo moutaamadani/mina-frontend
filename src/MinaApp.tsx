@@ -3438,17 +3438,108 @@ const styleHeroUrls = (stylePresetKeys || [])
   customStyleTraining ||
   feedbackSending;
 
-  const HEADER_CTA_BLEND_STYLE: React.CSSProperties = {
-  color: "var(--mina-paper)" as any,
-  background: "transparent",
-  mixBlendMode: "difference" as any,
-};
+  // --------------------------------------------------------------------------
+// Header CTA contrast (Animate / Love it / Download)
+// - Makes text dark on light images, light on dark images
+// - No backgrounds (text-only)
+// --------------------------------------------------------------------------
+const [headerIsDark, setHeaderIsDark] = useState<boolean | null>(null);
+
+// sample the area behind the header buttons (top-right of the current media)
+const headerSampleUrl =
+  (mediaKindForDisplay === "motion" ? motionReferenceImageUrl : displayedStill?.url) || "";
+
+// tiny luminance sampler (safe + fast)
+const computeHeaderLuma = useCallback(async (url: string): Promise<number | null> => {
+  try {
+    if (!url || !isHttpUrl(url)) return null;
+
+    return await new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      (img as any).decoding = "async";
+
+      img.onload = () => {
+        try {
+          const W = 64;
+          const H = 64;
+
+          const canvas = document.createElement("canvas");
+          canvas.width = W;
+          canvas.height = H;
+
+          const ctx = canvas.getContext("2d", { willReadFrequently: true } as any);
+          if (!ctx) return resolve(null);
+
+          ctx.drawImage(img, 0, 0, W, H);
+
+          const data = ctx.getImageData(0, 0, W, H).data;
+
+          // sample top-right region (where the buttons sit)
+          const x0 = Math.floor(W * 0.55);
+          const y0 = 0;
+          const x1 = W;
+          const y1 = Math.floor(H * 0.35);
+
+          let sum = 0;
+          let count = 0;
+
+          for (let y = y0; y < y1; y++) {
+            for (let x = x0; x < x1; x++) {
+              const i = (y * W + x) * 4;
+              const r = data[i];
+              const g = data[i + 1];
+              const b = data[i + 2];
+              sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+              count++;
+            }
+          }
+
+          resolve(count ? sum / count : null);
+        } catch {
+          resolve(null);
+        }
+      };
+
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+  } catch {
+    return null;
+  }
+}, []);
+
+useEffect(() => {
+  let cancelled = false;
+
+  const run = async () => {
+    const luma = await computeHeaderLuma(headerSampleUrl);
+    if (cancelled) return;
+
+    // if we can't sample (CORS), fallback to "light background" (dark text)
+    if (typeof luma !== "number") {
+      setHeaderIsDark(false);
+      return;
+    }
+
+    // threshold tweak: lower = more often "dark"
+    setHeaderIsDark(luma < 145);
+  };
+
+  void run();
+  return () => {
+    cancelled = true;
+  };
+}, [headerSampleUrl, computeHeaderLuma]);
+
+const headerOverlayClass =
+  headerIsDark === true ? "header-on-dark" : "header-on-light";
 
   const appUi = (
     <div className="mina-studio-root">
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
       <div className="studio-frame">
-        <div className="studio-header-overlay">
+        <div className={classNames("studio-header-overlay", headerOverlayClass)}>
           <div className="studio-header-left">
             <a href="https://mina.faltastudio.com" className="studio-logo-link">
               <img
@@ -3471,7 +3562,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                 <button
                   type="button"
                   className="studio-header-cta"
-                  style={HEADER_CTA_BLEND_STYLE}
+                   
                   onClick={handleToggleAnimateMode}
                   disabled={stillGenerating || motionGenerating || feedbackSending}
                 >
@@ -3489,7 +3580,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                 <button
                   type="button"
                   className="studio-header-cta"
-                  style={HEADER_CTA_BLEND_STYLE}
+                   
                   onClick={handleLikeCurrent}
                   disabled={
                     (!currentStill && !currentMotion) ||
@@ -3505,7 +3596,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                 <button
                   type="button"
                   className="studio-header-cta"
-                  style={HEADER_CTA_BLEND_STYLE}
+                   
                   onClick={handleDownloadCurrent}
                   disabled={
                     (!currentStill && !currentMotion) ||
