@@ -538,6 +538,8 @@ const [hasEverTyped, setHasEverTyped] = useState(false);
   const [motionItems, setMotionItems] = useState<MotionItem[]>([]);
   const [motionIndex, setMotionIndex] = useState(0);
   const [motionDescription, setMotionDescription] = useState("");
+  const [motionFinalPrompt, setMotionFinalPrompt] = useState("");
+
   const [motionStyleKeys, setMotionStyleKeys] = useState<MotionStyleKey[]>([]);
   const [motionSuggesting, setMotionSuggesting] = useState(false);
   const [motionSuggestTyping, setMotionSuggestTyping] = useState(false);
@@ -2008,7 +2010,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           sessionId: sid || sessionId || null,
           sessionTitle: sessionTitle || null,
         },
-        feedback: {},
+        feedback: {still_feedback: trimmed},
         prompts: {},
       };
 
@@ -2124,48 +2126,59 @@ const styleHeroUrls = (stylePresetKeys || [])
     try {
       const sid = await ensureSession();
 
-      const mmaBody = {
-        passId: currentPassId,
-        assets: {
-          start_image_url: startFrame,
-          end_image_url: endFrame || "",
-          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
-        },
-        inputs: {
-          intent: "type_for_me",
-          type_for_me: true,
-          suggest_only: true,
+      const typedBrief = (brief || motionDescription || "").trim();
 
-          motion_user_brief: (brief || motionDescription || "").trim(),
-          selected_movement_style: (motionStyleKeys?.[0] || "").trim(),
+          const mmaBody = {
+            passId: currentPassId,
+            assets: {
+              start_image_url: startFrame,
+              end_image_url: endFrame || "",
+              kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+            },
+            inputs: {
+              intent: "type_for_me",
+              type_for_me: true,
+              suggest_only: true,
+          
+              // redundant on purpose (backend mapping safety)
+              motion_user_brief: typedBrief,
+              motionDescription: typedBrief,
+              motion_description: typedBrief,
+          
+              selected_movement_style: (motionStyleKeys?.[0] || "").trim(),
+          
+              platform: animateAspectOption.platformKey,
+              aspect_ratio: animateAspectOption.ratio,
+          
+              stylePresetKeys: stylePresetKeysForApi,
+              stylePresetKey: primaryStyleKeyForApi,
+          
+              minaVisionEnabled,
+            },
+            settings: {},
+            history: {
+              sessionId: sid || sessionId || null,
+              sessionTitle: sessionTitle || null,
+            },
+          
+            // send both so backend never misses it
+            feedback: {
+              motion_feedback: typedBrief,
+              still_feedback: typedBrief,
+            },
+          
+            prompts: {},
+          };
 
-          platform: animateAspectOption.platformKey,
-          aspect_ratio: animateAspectOption.ratio,
 
-          stylePresetKeys: stylePresetKeysForApi,
-          stylePresetKey: primaryStyleKeyForApi,
-
-          minaVisionEnabled,
-        },
-        settings: {},
-        history: {
-          sessionId: sid || sessionId || null,
-          sessionTitle: sessionTitle || null,
-        },
-        feedback: {},
-        prompts: {},
-      };
-
-      const { generationId } = await mmaCreateAndWait(
-        "/mma/video/animate",
-        mmaBody,
-        ({ status, scanLines }) => {
-          const last = scanLines.slice(-1)[0] || status || "";
-          if (last) setMinaOverrideText(last);
-        }
-
-      );
-
+        const { generationId } = await mmaCreateAndWait(
+          "/mma/video/animate",
+          mmaBody,
+          ({ status, scanLines }) => {
+            const last = scanLines.slice(-1)[0] || status || "";
+            if (last) setMinaOverrideText(last);
+          }
+        );
 
       const final = await mmaWaitForFinal(generationId);
 
@@ -2180,6 +2193,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         ).trim();
 
       if (!suggested) throw new Error("MMA returned no suggestion.");
+      setMotionFinalPrompt(suggested);
 
       await applyMotionSuggestionText(suggested);
     } catch (e) {
@@ -2236,7 +2250,9 @@ const styleHeroUrls = (stylePresetKeys || [])
           kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
         },
         inputs: {
-          motionDescription: motionTextTrimmed,
+          motionDescription: (motionFinalPrompt || motionTextTrimmed).trim(),
+          prompt_override: (motionFinalPrompt || motionTextTrimmed).trim(),
+          use_prompt_override: !!(motionFinalPrompt || motionTextTrimmed).trim(),
           tone,
           platform: animateAspectOption.platformKey,
           aspect_ratio: animateAspectOption.ratio,
@@ -2377,7 +2393,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             },
             settings: {},
             history: { sessionId: sid || sessionId || null, sessionTitle: sessionTitle || null },
-            feedback: { comment: tweak },
+            feedback: { comment: tweak, motion_feedback: tweak, still_feedback: tweak },
             prompts: {},
           };
 
@@ -2451,7 +2467,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             },
             settings: {},
             history: { sessionId: sid || sessionId || null, sessionTitle: sessionTitle || null },
-            feedback: { comment: tweak },
+            feedback: { comment: tweak, motion_feedback: tweak },
             prompts: {},
           };
 
@@ -2999,6 +3015,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   const handleBriefChange = (value: string) => {
     const trimmedToMax = (value || "").slice(0, MAX_BRIEF_CHARS);
     setBrief(trimmedToMax);
+    setMotionFinalPrompt("");
     if (animateMode) setMotionDescription(trimmedToMax);
     else setStillBrief(trimmedToMax);
 
@@ -3422,7 +3439,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   feedbackSending;
 
   const HEADER_CTA_BLEND_STYLE: React.CSSProperties = {
-    color: "#FCFAF4",
+    color: "#EEEEE2",
     background: "transparent",
     mixBlendMode: "difference" as any,
   };
@@ -3445,15 +3462,28 @@ const styleHeroUrls = (stylePresetKeys || [])
           <div className="studio-header-right">
             {activeTab === "studio" && (
               <>
+                {/* lock everything while creating/animating/tweaking */}
+                {/*
+                  stillGenerating = creating image
+                  motionGenerating = generating video
+                  feedbackSending = tweaking
+                */}
                 <button
                   type="button"
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleToggleAnimateMode}
                   disabled={stillGenerating || motionGenerating || feedbackSending}
-
                 >
-                  {feedbackSending ? "Tweaking…" : animateMode ? "Create" : "Animate"}
+                  {feedbackSending
+                    ? "Tweaking…"
+                    : stillGenerating
+                      ? "Creating…"
+                      : motionGenerating
+                        ? "Animating…"
+                        : animateMode
+                          ? "Create"
+                          : "Animate"}
                 </button>
           
                 <button
@@ -3461,9 +3491,15 @@ const styleHeroUrls = (stylePresetKeys || [])
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleLikeCurrent}
-                  disabled={(!currentStill && !currentMotion) || likeSubmitting || feedbackSending}
+                  disabled={
+                    (!currentStill && !currentMotion) ||
+                    likeSubmitting ||
+                    feedbackSending ||
+                    stillGenerating ||
+                    motionGenerating
+                  }
                 >
-                  {isCurrentLiked ? "ok" : "Save it"}
+                  {isCurrentLiked ? "Thanks" : "Love it"}
                 </button>
           
                 <button
@@ -3471,14 +3507,19 @@ const styleHeroUrls = (stylePresetKeys || [])
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleDownloadCurrent}
-                  disabled={(!currentStill && !currentMotion) || feedbackSending}
+                  disabled={
+                    (!currentStill && !currentMotion) ||
+                    feedbackSending ||
+                    stillGenerating ||
+                    motionGenerating
+                  }
                 >
                   Download
                 </button>
               </>
             )}
           </div>
-          </div>
+
 
 
         {activeTab === "studio" ? (
