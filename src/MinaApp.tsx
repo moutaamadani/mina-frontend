@@ -915,7 +915,7 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const creditBalance = credits?.balance;
   const imageCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= imageCost;
   const motionCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= motionCost;
-  const motionBlockReason = motionCreditsOk ? null : "Buy more credits to animate.";
+  const motionBlockReason = motionCreditsOk ? null : "Buy more matchas for more animatimon.";
 
   const briefHintVisible = showDescribeMore;
 
