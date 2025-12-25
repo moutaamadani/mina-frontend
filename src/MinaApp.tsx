@@ -3656,7 +3656,7 @@ const styleHeroUrls = (stylePresetKeys || [])
     <>
       <TopLoadingBar active={topBarActive} />
       {appUi}
-    </>
+          </div>
   );
 };
 
