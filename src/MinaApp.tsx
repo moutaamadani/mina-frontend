@@ -252,64 +252,40 @@ const REPLICATE_ASPECT_RATIO_MAP: Record<string, string> = {
   "1:1": "1:1",
 };
 
-const MINA_THINKING_DEFAULT = [
-  "Pouring my matcha over ice…",
-  "Sip… sipsip… calibrating the vibe…",
-  "Clink—setting the cup down gently…",
-  "Brushing light onto your scene…",
-  "Painting pixels one by one…",
-  "Finding the perfect soft shadow…",
-  "Tuning the colors like a playlist…",
-  "Stirring in a little sparkle… (quietly)",
-  "Listening for the photo’s heartbeat…",
-  "Adding that ‘fresh café window’ glow…",
-  "Making the details feel expensive…",
-  "Letting the background breathe…",
-  "Smoothing edges like steamed milk…",
-  "Saving the best highlight for last…",
-  "Dreaming—if I had hands, I’d frame this for you…",
-  "One day I’ll be human… but for now, I’ll be your artist…",
-  "If I could blink, I’d blink at this lighting…",
-  "Okay… tiny magic time…",
-  "Hold on—Mina is locking in the mood…",
-  "Almost there… the pixels are listening…",
-];
-
-const MINA_FILLER_DEFAULT = [
-  "sip…",
-  "sipsip…",
-  "clink.",
-  "ice clatter…",
-  "stir stir…",
-  "soft pour…",
-  "tiny hum…",
-  "tap tap…",
-  "mm…",
-  "breathing…",
-  "refining…",
-  "one more little brushstroke…",
-];
-
 const STYLE_PRESETS = [
   {
     key: "vintage",
     label: "Vintage",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-thumb.png",
-    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-hero.png",
+    thumb: "https://assets.faltastudio.com/mma/still/c0e36258-3c2d-4509-93f0-6d29a65ce291.jpg",
+    hero: [
+      "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-hero.png",//luxury pearl
+      "https://assets.faltastudio.com/mma/still/c0e36258-3c2d-4509-93f0-6d29a65ce291.jpg",//brown wood
+      "https://assets.faltastudio.com/mma/still/8089c15b-895a-41e4-a46f-b3d0790da584.jpg", //brown eggplant
+    ],
   },
   {
     key: "gradient",
     label: "Luxury",
     thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-thumb.png",
-    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-hero.png",
+    hero: [
+      "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-hero.png", //horse
+      "https://assets.faltastudio.com/mma/still/1163bcdd-5dbf-4fe0-adc4-8348f3b1b5df.jpg", //candle
+      "https://assets.faltastudio.com/mma/still/c106e481-3cbb-47b1-a4bc-52d383c62875.jpg", //tomato
+    ],
   },
   {
     key: "back-light",
     label: "Minimal",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
-    hero: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/backlight-hero.png",
+    thumb: "https://assets.faltastudio.com/mma/still/d70ea648-bf74-4e1f-8a39-83f6d3f962af.jpg",
+    hero: [
+      "https://assets.faltastudio.com/mma/still/c8b0c214-bd61-4b39-ae27-7af2f4de5460.jpg", //Poire
+      "https://assets.faltastudio.com/mma/still/d70ea648-bf74-4e1f-8a39-83f6d3f962af.jpg", //Vanilla Sticks
+      "https://assets.faltastudio.com/mma/still/7f1615a9-95f7-4659-a293-960b287d8c96.jpg", //Cerise bowl
+      "",
+    ],
   },
 ] as const;
+
 
 const CUSTOM_STYLES_LS_KEY = "minaCustomStyles_v1";
 
@@ -823,20 +799,16 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const motionReferenceImageUrl = animateImageHttp || currentStill?.url || latestStill?.url || "";
 
   const personalityThinking = useMemo(
-    () =>
-      adminConfig.ai?.personality?.thinking?.length
-        ? adminConfig.ai.personality.thinking
-        : MINA_THINKING_DEFAULT,
-    [adminConfig.ai?.personality?.thinking]
-  );
+  () => (adminConfig.ai?.personality?.thinking?.length ? adminConfig.ai.personality.thinking : []),
+  [adminConfig.ai?.personality?.thinking]
+);
+
 
   const personalityFiller = useMemo(
-    () =>
-      adminConfig.ai?.personality?.filler?.length
-        ? adminConfig.ai.personality.filler
-        : MINA_FILLER_DEFAULT,
-    [adminConfig.ai?.personality?.filler]
-  );
+  () => (adminConfig.ai?.personality?.filler?.length ? adminConfig.ai.personality.filler : []),
+  [adminConfig.ai?.personality?.filler]
+);
+
 
   const imageCost = credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1;
   const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
@@ -1068,7 +1040,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       const nextChar = charIndex + 1;
       const nextSlice = phrase.slice(0, Math.min(nextChar, phrase.length));
 
-      setMinaMessage(nextSlice || personalityFiller[0] || "typing…");
+      setMinaMessage(nextSlice || "typing…");
 
       const reachedEnd = nextChar > phrase.length;
       charIndex = reachedEnd ? 0 : nextChar;
@@ -1182,7 +1154,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
     };
   }, []);
 
-  const mmaCreateAndWait = async (
+    const mmaCreateAndWait = async (
     createPath: string,
     body: any,
     onProgress?: (s: MmaStreamState) => void
@@ -1192,26 +1164,35 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       const errJson = await res.json().catch(() => null);
       throw new Error(errJson?.message || `MMA create failed (${res.status})`);
     }
+
     const created = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse> & any;
 
     const generationId = created.generation_id || created.generationId || created.id || null;
     if (!generationId) throw new Error("MMA create returned no generation id.");
 
     const relSse = created.sse_url || created.sseUrl || `/mma/stream/${encodeURIComponent(String(generationId))}`;
-
     const sseUrl = `${API_BASE_URL}${relSse}`;
+
     const scanLines: string[] = [];
     let status = created.status || "queued";
+
+    // push at least an initial state so UI can show something immediately
+    try {
+      onProgress?.({ status, scanLines: [...scanLines] });
+    } catch {
+      // ignore UI errors
+    }
 
     try {
       mmaStreamRef.current?.close();
     } catch {
       // ignore
     }
-    mmaStreamRef.current = new EventSource(sseUrl);
+
+    const es = new EventSource(sseUrl);
+    mmaStreamRef.current = es;
 
     await new Promise<void>((resolve, reject) => {
-      const es = mmaStreamRef.current!;
       const cleanup = () => {
         try {
           es.close();
@@ -1221,20 +1202,67 @@ const MinaApp: React.FC<MinaAppProps> = () => {
         if (mmaStreamRef.current === es) mmaStreamRef.current = null;
       };
 
+      // ✅ IMPORTANT: Some servers send the first payload as default "message" (no custom event name)
+      es.onmessage = (ev: MessageEvent) => {
+        try {
+          const raw = (ev as any)?.data;
+
+          // allow plain text or JSON
+          if (typeof raw === "string" && raw.trim() && (raw.trim()[0] !== "{" && raw.trim()[0] !== "[")) {
+            status = raw.trim();
+            onProgress?.({ status, scanLines: [...scanLines] });
+            return;
+          }
+
+          const data = JSON.parse(raw || "{}");
+
+          const nextStatus =
+            data.status ||
+            data.status_text ||
+            data.statusText ||
+            data.text ||
+            data.message ||
+            null;
+
+          if (typeof nextStatus === "string" && nextStatus.trim()) status = nextStatus.trim();
+
+          const incoming =
+            (Array.isArray(data.scanLines) && data.scanLines) ||
+            (Array.isArray(data.scan_lines) && data.scan_lines) ||
+            [];
+
+          if (incoming.length) {
+            // treat as snapshot
+            scanLines.length = 0;
+            incoming.forEach((x: any) => {
+              const t = typeof x === "string" ? x : x?.text;
+              if (t) scanLines.push(String(t));
+            });
+          }
+
+          onProgress?.({ status, scanLines: [...scanLines] });
+        } catch {
+          // ignore
+        }
+      };
+
+      // custom "status" event
       es.addEventListener("status", (ev: any) => {
         try {
           const data = JSON.parse(ev.data || "{}");
-          status = data.status || status;
+          const next = data.status || data.status_text || data.statusText || data.text || null;
+          if (typeof next === "string" && next.trim()) status = next.trim();
           onProgress?.({ status, scanLines: [...scanLines] });
         } catch {
           // ignore
         }
       });
 
+      // custom "scan_line" event
       es.addEventListener("scan_line", (ev: any) => {
         try {
           const data = JSON.parse(ev.data || "{}");
-          const text = String(data.text || "");
+          const text = String(data.text || data.message || data.line || "");
           if (text) scanLines.push(text);
           onProgress?.({ status, scanLines: [...scanLines] });
         } catch {
@@ -1242,6 +1270,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
         }
       });
 
+      // done event
       es.addEventListener("done", (ev: any) => {
         try {
           const data = JSON.parse(ev.data || "{}");
@@ -1256,6 +1285,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       });
 
       es.onerror = () => {
+        // if the server closes without "done", don't block the UI forever
         window.setTimeout(() => {
           cleanup();
           resolve();
@@ -1746,10 +1776,26 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       const logoItem = uploads.logo[0];
       const logoUrl = logoItem?.remoteUrl || logoItem?.url || "";
 
-      const inspirationUrls = (uploads.inspiration || [])
+        // ✅ include selected style preset hero urls + user inspiration uploads
+      const styleHeroUrls = (stylePresetKeys || [])
+        .flatMap((k) => {
+          const preset = (computedStylePresets as any[])?.find((p) => String(p.key) === String(k));
+          const hero = preset?.hero;
+
+          if (Array.isArray(hero)) return hero;
+          if (typeof hero === "string" && hero.trim()) return [hero.trim()];
+          if (typeof preset?.thumb === "string" && preset.thumb.trim()) return [preset.thumb.trim()];
+          return [];
+        })
+        .filter((u) => isHttpUrl(u));
+
+      const userInspirationUrls = (uploads.inspiration || [])
         .map((u) => u.remoteUrl || u.url)
-        .filter((u) => isHttpUrl(u))
-        .slice(0, 4);
+        .filter((u) => isHttpUrl(u));
+
+      // final list sent to backend (cap to 4)
+      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
+
 
       const mmaBody = {
         passId: currentPassId,
@@ -1779,8 +1825,8 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       const { generationId } = await mmaCreateAndWait(
         "/mma/still/create",
         mmaBody,
-       ({ scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
+       ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
         }
 
@@ -1923,10 +1969,11 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       const { generationId } = await mmaCreateAndWait(
         "/mma/video/animate",
         mmaBody,
-        ({ scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
         }
+
       );
 
 
@@ -2021,10 +2068,11 @@ const MinaApp: React.FC<MinaAppProps> = () => {
      const { generationId } = await mmaCreateAndWait(
         "/mma/video/animate",
         mmaBody,
-        ({ scanLines }) => {
-          const last = scanLines.slice(-1)[0] || "";
+        ({ status, scanLines }) => {
+          const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
         }
+
       );
 
 
@@ -2092,10 +2140,11 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       try {
         const sid = await ensureSession();
 
-       const onProgress = ({ scanLines }: { status: string; scanLines: string[] }) => {
-        const last = scanLines.slice(-1)[0] || "";
-        if (last) setMinaOverrideText(last);
-      };
+       const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
+          const last = scanLines.slice(-1)[0] || status || "";
+          if (last) setMinaOverrideText(last);
+        };
+
 
 
         if (!isMotion) {
