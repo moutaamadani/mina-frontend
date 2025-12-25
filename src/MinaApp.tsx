@@ -3656,8 +3656,8 @@ const styleHeroUrls = (stylePresetKeys || [])
     <>
       <TopLoadingBar active={topBarActive} />
       {appUi}
-          </div>
-  );
+     </div>
+    </>  );
 };
 
 export default MinaApp;
