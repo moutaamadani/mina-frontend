@@ -1362,11 +1362,48 @@ useEffect(() => {
       };
 
 
-  const mmaFetchResult = async (generationId: string): Promise<MmaGenerationResponse> => {
-    const res = await apiFetch(`/mma/generations/${encodeURIComponent(generationId)}`);
-    if (!res.ok) throw new Error(`MMA fetch failed (${res.status})`);
-    return (await res.json().catch(() => ({}))) as MmaGenerationResponse;
-  };
+  // ✅ Wait for a generation to reach a terminal state by polling
+// (useful if some flow uses generation_id but doesn't rely on SSE)
+const mmaWaitForFinal = async (
+  generationId: string,
+  opts?: { timeoutMs?: number; intervalMs?: number }
+): Promise<MmaGenerationResponse> => {
+  const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 180_000)); // 3 min default
+  const intervalMs = Math.max(400, Number(opts?.intervalMs ?? 900));
+
+  const started = Date.now();
+  let last: MmaGenerationResponse = { generation_id: generationId, status: "queued" } as any;
+
+  // small helper
+  const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+
+  while (Date.now() - started < timeoutMs) {
+    last = await mmaFetchResult(generationId);
+
+    const st = String(last?.status || "").toLowerCase();
+
+    // terminal statuses
+    if (st === "done" || st === "error" || st === "suggested") return last;
+
+    // sometimes outputs appear before status flips
+    const hasOutputs =
+      !!last?.outputs?.seedream_image_url ||
+      !!last?.outputs?.kling_video_url ||
+      !!last?.outputs?.image_url ||
+      !!last?.outputs?.video_url ||
+      !!(last as any)?.outputUrl ||
+      !!(last as any)?.imageUrl ||
+      !!(last as any)?.videoUrl;
+
+    if (hasOutputs) return last;
+
+    await sleep(intervalMs);
+  }
+
+  // timeout: return last known snapshot (so UI can still try to use it)
+  return last;
+};
+
 
   const handleCheckHealth = async () => {
     if (!API_BASE_URL) return;
