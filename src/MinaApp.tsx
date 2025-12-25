@@ -18,6 +18,7 @@ import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { useAuthContext, usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
 import TopLoadingBar from "./components/TopLoadingBar";
+import { downloadMinaAsset } from "./lib/minaDownload";
 
 // ============================================================================
 // [PART 1 START] Imports & environment
@@ -2614,64 +2615,28 @@ const styleHeroUrls = (stylePresetKeys || [])
     }
   };
 
+   // ========================================================================
+  // Download helpers (extracted)
   // ========================================================================
-  // Download helpers
-  // ========================================================================
-  const guessDownloadExt = (url: string, fallbackExt: string) => {
-    const lower = url.toLowerCase();
-    if (lower.endsWith(".mp4")) return ".mp4";
-    if (lower.endsWith(".webm")) return ".webm";
-    if (lower.endsWith(".mov")) return ".mov";
-    if (lower.endsWith(".m4v")) return ".m4v";
-    if (lower.match(/\.jpe?g$/)) return ".jpg";
-    if (lower.endsWith(".png")) return ".png";
-    if (lower.endsWith(".gif")) return ".gif";
-    if (lower.endsWith(".webp")) return ".webp";
-    return fallbackExt;
-  };
-
-  const buildDownloadName = (url: string, _fallbackBase: string, fallbackExt: string) => {
-    const base = "Mina_v3_prompt";
-    const ext = guessDownloadExt(url, fallbackExt);
-    return base.endsWith(ext) ? base : `${base}${ext}`;
-  };
-
-  const forceSaveUrl = async (url: string, filename: string) => {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Download failed with ${res.status}`);
-
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(blobUrl);
-  };
-
   const handleDownloadCurrent = async () => {
     const target = activeMediaKind === "motion" ? currentMotion?.url : currentStill?.url;
     if (!target) return;
 
-    const safePrompt =
-      (lastStillPrompt || stillBrief || brief || "Mina-image")
-        .replace(/[^a-z0-9]+/gi, "-")
-        .toLowerCase()
-        .slice(0, 80) || "mina-image";
+    const kind = activeMediaKind === "motion" ? "motion" : "still";
 
-    const fallbackBase = activeMediaKind === "motion" ? `mina-motion-${safePrompt}` : `mina-image-${safePrompt}`;
-    const filename = buildDownloadName(
-      target,
-      fallbackBase,
-      guessDownloadExt(target, activeMediaKind === "motion" ? ".mp4" : ".png")
-    );
+    const prompt =
+      kind === "motion"
+        ? (motionFinalPrompt || motionTextTrimmed || motionDescription || brief || "")
+        : (lastStillPrompt || stillBrief || brief || "");
 
     try {
-      await forceSaveUrl(target, filename);
+      await downloadMinaAsset({
+        url: target,
+        kind,
+        prompt,
+        // If you want the old fixed filename behavior, uncomment:
+        // baseNameOverride: "Mina_v3_prompt",
+      });
     } catch (err: any) {
       const msg = err?.message || "Download failed.";
       if (activeMediaKind === "motion") setMotionError(msg);
