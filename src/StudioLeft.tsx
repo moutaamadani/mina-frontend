@@ -13,6 +13,7 @@
 
 // [PART 1] Imports
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import MatchaQtyModal from "./components/MatchaQtyModal";
 import "./StudioLeft.css";
 
 // ------------------------------------
@@ -365,6 +366,58 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // - single click = select
   // - double click (custom only) = ask to delete with bold YES/NO
   const [deleteConfirm, setDeleteConfirm] = useState<{ key: string; label: string } | null>(null);
+  // ============================================================
+  // Matcha quantity popup (opens Shopify with chosen quantity)
+  // ============================================================
+  const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
+  const [matchaQty, setMatchaQty] = useState(1);
+
+  const clampQty = (n: number) => Math.max(1, Math.min(10, Math.floor(Number(n || 1))));
+
+  // Build a Shopify URL that actually sets quantity (best effort).
+  // Works best if matchaUrl is a cart permalink like:
+  //   https://www.faltastudio.com/cart/<VARIANT_ID>:1
+  // Or:
+  //   https://www.faltastudio.com/cart/add?id=<VARIANT_ID>&quantity=1
+  const buildMatchaCheckoutUrl = (base: string, qty: number) => {
+    const q = clampQty(qty);
+
+    try {
+      const u = new URL(String(base || ""));
+
+      // 1) cart permalink: /cart/123:1  -> /cart/123:q
+      const m = u.pathname.match(/\/cart\/(\d+)(?::(\d+))?/);
+      if (m?.[1]) {
+        const id = m[1];
+        u.pathname = `/cart/${id}:${q}`;
+        return u.toString();
+      }
+
+      // 2) cart/add form
+      if (u.pathname.includes("/cart/add")) {
+        u.searchParams.set("quantity", String(q));
+        return u.toString();
+      }
+
+      // 3) fallback: add quantity param (may or may not be used by checkout links)
+      u.searchParams.set("quantity", String(q));
+      return u.toString();
+    } catch {
+      // If it isn't a valid URL, just return as-is
+      return String(base || "");
+    }
+  };
+
+  const openMatchaQty = () => {
+    setMatchaQty(1);
+    setMatchaQtyOpen(true);
+  };
+
+  const confirmMatchaQty = (qty: number) => {
+    const url = buildMatchaCheckoutUrl(matchaUrl, qty);
+    setMatchaQtyOpen(false);
+    window.open(url, "_blank", "noopener");
+  };
 
   const styleClickTimerRef = useRef<number | null>(null);
   const pendingStyleKeyRef = useRef<string | null>(null);
@@ -749,19 +802,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
         (!isMotion && (!canCreateStill || !imageCreditsOk)));
 
-  const handleCreateClick = () => {
+   const handleCreateClick = () => {
     if (createState === "ready") {
-      if (isMotion) {
-        onCreateMotion?.();
-      } else {
-        onCreateStill();
-      }
+      if (isMotion) onCreateMotion?.();
+      else onCreateStill();
       return;
     }
 
     if (createState === "describe_more") {
       if (wantsMatcha) {
-        window.open(matchaUrl, "_blank", "noopener");
+        openMatchaQty(); // ✅ open popup instead of direct link
         return;
       }
       requestAnimationFrame(() => briefInputRef.current?.focus());
@@ -822,7 +872,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         minaTalking && "is-thinking"
       )}
       style={timingVars}
-    >
+    >      
+      <MatchaQtyModal
+        open={matchaQtyOpen}
+        qty={matchaQty}
+        setQty={(n) => setMatchaQty(clampQty(n))}
+        onClose={() => setMatchaQtyOpen(false)}
+        onConfirm={(q) => confirmMatchaQty(q)}
+        title="Get more Matcha"
+        min={1}
+        max={10}
+      />
+
       <div className="studio-left-main">
         {/* Input 1 */}
         <div className="studio-input1-block">
