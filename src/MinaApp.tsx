@@ -27,7 +27,7 @@ const normalizeBase = (raw?: string | null) => {
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 };
 
-const MATCHA_URL = "https://www.faltastudio.com/cart/<VARIANT_ID>:1";
+const MATCHA_URL = "https://www.faltastudio.com/cart/43328351928403:1";
 
 
 // Prefer an env override, then fall back to same-origin /api so production
