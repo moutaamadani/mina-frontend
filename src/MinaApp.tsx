@@ -1025,7 +1025,13 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const canCreateMotion =
     !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping && !motionSuggesting;
 
-  const minaBusy = stillGenerating || motionGenerating || motionSuggesting || motionSuggestTyping || customStyleTraining;
+  const minaBusy =
+    stillGenerating ||
+    motionGenerating ||
+    motionSuggesting ||
+    motionSuggestTyping ||
+    customStyleTraining ||
+    feedbackSending;
 
   // ========================================================================
   // [PART 5 END]
@@ -1215,147 +1221,146 @@ useEffect(() => {
     };
   }, []);
 
-    const mmaCreateAndWait = async (
-    createPath: string,
-    body: any,
-    onProgress?: (s: MmaStreamState) => void
-  ): Promise<{ generationId: string }> => {
-    const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(body) });
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => null);
-      throw new Error(errJson?.message || `MMA create failed (${res.status})`);
-    }
-
-    const created = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse> & any;
-
-    const generationId = created.generation_id || created.generationId || created.id || null;
-    if (!generationId) throw new Error("MMA create returned no generation id.");
-
-    const relSse = created.sse_url || created.sseUrl || `/mma/stream/${encodeURIComponent(String(generationId))}`;
-    const sseUrl = `${API_BASE_URL}${relSse}`;
-
-    const scanLines: string[] = [];
-    let status = created.status || "queued";
-
-    // push at least an initial state so UI can show something immediately
-    try {
-      onProgress?.({ status, scanLines: [...scanLines] });
-    } catch {
-      // ignore UI errors
-    }
-
-    try {
-      mmaStreamRef.current?.close();
-    } catch {
-      // ignore
-    }
-
-    const es = new EventSource(sseUrl);
-    mmaStreamRef.current = es;
-
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        try {
-          es.close();
-        } catch {
-          // ignore
+  const mmaCreateAndWait = async (
+        createPath: string,
+        body: any,
+        onProgress?: (s: MmaStreamState) => void
+      ): Promise<{ generationId: string }> => {
+        const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(body) });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          throw new Error(errJson?.message || `MMA create failed (${res.status})`);
         }
-        if (mmaStreamRef.current === es) mmaStreamRef.current = null;
-      };
-
-      // ✅ IMPORTANT: Some servers send the first payload as default "message" (no custom event name)
-      es.onmessage = (ev: MessageEvent) => {
+      
+        const created = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse> & any;
+      
+        const generationId = created.generation_id || created.generationId || created.id || null;
+        if (!generationId) throw new Error("MMA create returned no generation id.");
+      
+        const relSse =
+          created.sse_url || created.sseUrl || `/mma/stream/${encodeURIComponent(String(generationId))}`;
+      
+        // ✅ FIX: backend may return absolute URL
+        const sseUrl = /^https?:\/\//i.test(String(relSse))
+          ? String(relSse)
+          : `${API_BASE_URL}${String(relSse)}`;
+      
+        const scanLines: string[] = [];
+        let status = created.status || "queued";
+      
         try {
-          const raw = (ev as any)?.data;
-
-          // allow plain text or JSON
-          if (typeof raw === "string" && raw.trim() && (raw.trim()[0] !== "{" && raw.trim()[0] !== "[")) {
-            status = raw.trim();
-            onProgress?.({ status, scanLines: [...scanLines] });
-            return;
-          }
-
-          const data = JSON.parse(raw || "{}");
-
-          const nextStatus =
-            data.status ||
-            data.status_text ||
-            data.statusText ||
-            data.text ||
-            data.message ||
-            null;
-
-          if (typeof nextStatus === "string" && nextStatus.trim()) status = nextStatus.trim();
-
-          const incoming =
-            (Array.isArray(data.scanLines) && data.scanLines) ||
-            (Array.isArray(data.scan_lines) && data.scan_lines) ||
-            [];
-
-          if (incoming.length) {
-            // treat as snapshot
-            scanLines.length = 0;
-            incoming.forEach((x: any) => {
-              const t = typeof x === "string" ? x : x?.text;
-              if (t) scanLines.push(String(t));
-            });
-          }
-
           onProgress?.({ status, scanLines: [...scanLines] });
         } catch {
           // ignore
         }
-      };
-
-      // custom "status" event
-      es.addEventListener("status", (ev: any) => {
+      
         try {
-          const data = JSON.parse(ev.data || "{}");
-          const next = data.status || data.status_text || data.statusText || data.text || null;
-          if (typeof next === "string" && next.trim()) status = next.trim();
-          onProgress?.({ status, scanLines: [...scanLines] });
+          mmaStreamRef.current?.close();
         } catch {
           // ignore
         }
-      });
-
-      // custom "scan_line" event
-      es.addEventListener("scan_line", (ev: any) => {
-        try {
-          const data = JSON.parse(ev.data || "{}");
-          const text = String(data.text || data.message || data.line || "");
-          if (text) scanLines.push(text);
-          onProgress?.({ status, scanLines: [...scanLines] });
-        } catch {
-          // ignore
-        }
-      });
-
-      // done event
-      es.addEventListener("done", (ev: any) => {
-        try {
-          const data = JSON.parse(ev.data || "{}");
-          const finalStatus = data.status || "done";
-          cleanup();
-          if (finalStatus === "error") reject(new Error("MMA pipeline failed."));
-          else resolve();
-        } catch {
-          cleanup();
-          resolve();
-        }
-      });
-
-      es.onerror = () => {
-        // if the server closes without "done", don't block the UI forever
-        window.setTimeout(() => {
-          cleanup();
-          resolve();
-        }, 900);
+      
+        const es = new EventSource(sseUrl);
+        mmaStreamRef.current = es;
+      
+        await new Promise<void>((resolve) => {
+          const cleanup = () => {
+            try {
+              es.close();
+            } catch {
+              // ignore
+            }
+            if (mmaStreamRef.current === es) mmaStreamRef.current = null;
+          };
+      
+          es.onmessage = (ev: MessageEvent) => {
+            try {
+              const raw = (ev as any)?.data;
+      
+              if (
+                typeof raw === "string" &&
+                raw.trim() &&
+                raw.trim()[0] !== "{" &&
+                raw.trim()[0] !== "["
+              ) {
+                status = raw.trim();
+                onProgress?.({ status, scanLines: [...scanLines] });
+                return;
+              }
+      
+              const data = JSON.parse(raw || "{}");
+      
+              const nextStatus =
+                data.status || data.status_text || data.statusText || data.text || data.message || null;
+      
+              if (typeof nextStatus === "string" && nextStatus.trim()) status = nextStatus.trim();
+      
+              const incoming =
+                (Array.isArray(data.scanLines) && data.scanLines) ||
+                (Array.isArray(data.scan_lines) && data.scan_lines) ||
+                [];
+      
+              if (incoming.length) {
+                scanLines.length = 0;
+                incoming.forEach((x: any) => {
+                  const t = typeof x === "string" ? x : x?.text;
+                  if (t) scanLines.push(String(t));
+                });
+              }
+      
+              onProgress?.({ status, scanLines: [...scanLines] });
+            } catch {
+              // ignore
+            }
+          };
+      
+          es.addEventListener("status", (ev: any) => {
+            try {
+              const data = JSON.parse(ev.data || "{}");
+              const next = data.status || data.status_text || data.statusText || data.text || null;
+              if (typeof next === "string" && next.trim()) status = next.trim();
+              onProgress?.({ status, scanLines: [...scanLines] });
+            } catch {
+              // ignore
+            }
+          });
+      
+          es.addEventListener("scan_line", (ev: any) => {
+            try {
+              const data = JSON.parse(ev.data || "{}");
+              const text = String(data.text || data.message || data.line || "");
+              if (text) scanLines.push(text);
+              onProgress?.({ status, scanLines: [...scanLines] });
+            } catch {
+              // ignore
+            }
+          });
+      
+          es.addEventListener("done", (ev: any) => {
+            try {
+              const data = JSON.parse(ev.data || "{}");
+              const finalStatus = data.status || "done";
+              cleanup();
+              // resolve even on error; we’ll read real status in polling/fetch
+              resolve();
+            } catch {
+              cleanup();
+              resolve();
+            }
+          });
+      
+          es.onerror = () => {
+            // ✅ don’t block forever if SSE drops
+            window.setTimeout(() => {
+              cleanup();
+              resolve();
+            }, 900);
+          };
+        });
+      
+        return { generationId: String(generationId) };
       };
-    });
 
-    return { generationId: String(generationId) };
-  };
 
   const mmaFetchResult = async (generationId: string): Promise<MmaGenerationResponse> => {
     const res = await apiFetch(`/mma/generations/${encodeURIComponent(generationId)}`);
@@ -1906,7 +1911,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       );
 
-      const result = await mmaFetchResult(generationId);
+      const result = await mmaWaitForFinal(generationId);
 
       if (result?.status === "error") {
         const msg = result?.error?.message || result?.error?.code || "MMA pipeline failed.";
@@ -2051,7 +2056,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       );
 
 
-      const final = await mmaFetchResult(generationId);
+      const final = await mmaWaitForFinal(generationId);
 
       const suggested =
         String(
@@ -2150,7 +2155,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       );
 
 
-      const result = await mmaFetchResult(generationId);
+      const result = await mmaWaitForFinal(generationId);
 
       if (result?.status === "error") {
         const msg = result?.error?.message || result?.error?.code || "MMA pipeline failed.";
@@ -2200,15 +2205,32 @@ const styleHeroUrls = (stylePresetKeys || [])
   const onTweak = useCallback(
     async (rawText: string) => {
       const tweak = String(rawText || "").trim();
-      if (!tweak) return;
-
+      if (!tweak) {
+        setFeedbackError("Type a tweak first.");
+        return;
+      }
+      
       const isMotion = activeMediaKind === "motion" && !!currentMotion?.id;
       const parentId = isMotion ? String(currentMotion?.id || "") : String(currentStill?.id || "");
-      if (!parentId) return;
+      
+      if (!parentId) {
+        setFeedbackError("Create an image/video first, then tweak it.");
+        return;
+      }
+      
+      if (!API_BASE_URL) {
+        setFeedbackError("Missing API base URL.");
+        return;
+      }
+      
+      if (!currentPassId) {
+        setFeedbackError("Missing Pass ID.");
+        return;
+      }
 
-      if (!API_BASE_URL || !currentPassId) return;
 
       setFeedbackSending(true);
+      setMinaOverrideText("got it, tweaking that now");
       setFeedbackError(null);
 
       try {
@@ -2254,7 +2276,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             onProgress
           );
 
-          const result = await mmaFetchResult(generationId);
+          const result = await mmaWaitForFinal(generationId);
           if (result?.status === "error") {
             const msg = result?.error?.message || result?.error?.code || "MMA tweak failed.";
             throw new Error(String(msg));
@@ -2328,7 +2350,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             onProgress
           );
 
-          const result = await mmaFetchResult(generationId);
+          const result = await mmaWaitForFinal(generationId);
           if (result?.status === "error") {
             const msg = result?.error?.message || result?.error?.code || "MMA tweak failed.";
             throw new Error(String(msg));
@@ -3280,7 +3302,14 @@ const styleHeroUrls = (stylePresetKeys || [])
   // ========================================================================
   // FINAL LAYOUT
   // ========================================================================
-  const topBarActive = pendingRequests > 0 || uploadsPending || stillGenerating || motionGenerating || customStyleTraining;
+  const topBarActive =
+  pendingRequests > 0 ||
+  uploadsPending ||
+  stillGenerating ||
+  motionGenerating ||
+  customStyleTraining ||
+  feedbackSending;
+
   const HEADER_CTA_BLEND_STYLE: React.CSSProperties = {
     color: "#FCFAF4",
     background: "transparent",
@@ -3310,7 +3339,8 @@ const styleHeroUrls = (stylePresetKeys || [])
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleToggleAnimateMode}
-                  disabled={stillGenerating || motionGenerating}
+                  disabled={stillGenerating || motionGenerating || feedbackSending}
+
                 >
                   {animateMode ? "Create" : "Animate"}
                 </button>
@@ -3320,7 +3350,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleLikeCurrent}
-                  disabled={(!currentStill && !currentMotion) || likeSubmitting}
+                  disabled={(!currentStill && !currentMotion) || likeSubmitting || feedbackSending}
                 >
                   {isCurrentLiked ? "ok" : "Save it"}
                 </button>
@@ -3330,7 +3360,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                   className="studio-header-cta"
                   style={HEADER_CTA_BLEND_STYLE}
                   onClick={handleDownloadCurrent}
-                  disabled={!currentStill && !currentMotion}
+                  disabled={(!currentStill && !currentMotion) || feedbackSending}
                 >
                   Download
                 </button>
