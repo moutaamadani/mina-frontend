@@ -2750,7 +2750,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   }, [uiStage, activePanel, animateMode]);
 
   // Style hover-select + inline rename
-  const getStyleLabel = (key: string, fallback: string) => (styleLabelOverrides[key] || fallback).trim() || fallback;
+  const getStyleLabel = (_key: string, fallback: string) => fallback;
 
   const beginRenameStyle = (key: string, currentLabel: string) => {
     setEditingStyleKey(key);
@@ -3302,12 +3302,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               stylePresets={computedStylePresets}
               customStyles={customStyles}
               getStyleLabel={getStyleLabel}
-              editingStyleKey={editingStyleKey}
-              editingStyleValue={editingStyleValue}
-              setEditingStyleValue={setEditingStyleValue}
-              beginRenameStyle={beginRenameStyle}
-              commitRenameStyle={commitRenameStyle}
-              cancelRenameStyle={cancelRenameStyle}
+              
               deleteCustomStyle={deleteCustomStyle}
               onOpenCustomStylePanel={handleOpenCustomStylePanel}
               onImageUrlPasted={handlePasteImageUrl}
