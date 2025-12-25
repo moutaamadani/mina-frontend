@@ -1220,76 +1220,6 @@ useEffect(() => {
       mmaStreamRef.current = null;
     };
   }, []);
-    // MMA generation fetch (used by polling / wait-for-final)
-  const mmaFetchResult = async (generationId: string): Promise<MmaGenerationResponse> => {
-    const id = encodeURIComponent(String(generationId || ""));
-    const candidates = [
-      `/mma/generations/${id}`,
-      `/mma/generation/${id}`,
-      `/mma/result/${id}`,
-      `/mma/status/${id}`,
-    ];
-
-    for (const path of candidates) {
-      try {
-        const res = await apiFetch(path);
-        if (!res.ok) continue;
-
-        const json = (await res.json().catch(() => ({}))) as any;
-
-        const gid = json?.generation_id || json?.generationId || json?.id || generationId;
-        const status = json?.status || json?.mma_status || json?.state || "queued";
-
-        const outputs =
-          json?.outputs ||
-          json?.result?.outputs ||
-          json?.data?.outputs ||
-          undefined;
-
-        const prompt =
-          json?.prompt ||
-          json?.result?.prompt ||
-          json?.data?.prompt ||
-          null;
-
-        const credits =
-          json?.credits ||
-          json?.result?.credits ||
-          json?.data?.credits ||
-          undefined;
-
-        const error =
-          json?.error ||
-          json?.result?.error ||
-          json?.data?.error ||
-          undefined;
-
-        const mma_vars =
-          json?.mma_vars ||
-          json?.vars ||
-          json?.result?.mma_vars ||
-          json?.data?.mma_vars ||
-          undefined;
-
-        return {
-          generation_id: String(gid),
-          status: String(status),
-          mode: json?.mode,
-          outputs,
-          prompt,
-          credits,
-          error,
-          mma_vars,
-        } as MmaGenerationResponse;
-      } catch {
-        // try next candidate
-      }
-    }
-
-    // keep UI alive even if endpoint differs; polling will timeout gracefully
-    return { generation_id: String(generationId), status: "queued" } as any;
-  };
-
   const mmaCreateAndWait = async (
         createPath: string,
         body: any,
@@ -3523,7 +3453,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                   disabled={stillGenerating || motionGenerating || feedbackSending}
 
                 >
-                  {animateMode ? "Create" : "Animate"}
+                  {feedbackSending ? "Tweaking…" : animateMode ? "Create" : "Animate"}
                 </button>
           
                 <button
