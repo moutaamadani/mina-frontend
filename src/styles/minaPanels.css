@@ -264,7 +264,7 @@
   border: 0 !important;
   box-shadow: none !important;
   padding: 10px 12px !important;
-  border-radius: 12px !important;
+  border-radius: 0px !important;
 
   font: inherit !important;
   font-size: 13px !important;
@@ -277,12 +277,12 @@
 
 .studio-header-overlay.header-on-light .studio-header-cta {
   color: var(--mina-ink) !important;
-  text-shadow: 0 1px 0 rgba(252, 250, 244, 0.55) !important;
+  text-shadow: 0 0px 0 rgba(252, 250, 244, 0.55) !important;
 }
 
 .studio-header-overlay.header-on-dark .studio-header-cta {
   color: var(--mina-paper) !important;
-  text-shadow: 0 1px 0 rgba(8, 10, 0, 0.35) !important;
+  text-shadow: 0 0px 0 rgba(8, 10, 0, 0.35) !important;
 }
 
 .studio-header-cta:hover { opacity: 0.92 !important; }
