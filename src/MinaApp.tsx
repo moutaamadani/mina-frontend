@@ -1431,28 +1431,103 @@ useEffect(() => {
       };
 
 
-  // ✅ Wait for a generation to reach a terminal state by polling
-// (useful if some flow uses generation_id but doesn't rely on SSE)
-const mmaWaitForFinal = async (
+  // ============================================================================
+// MMA result polling helpers (backend: GET /mma/generations/:generation_id)
+// ============================================================================
+
+async function mmaFetchResult(generationId: string): Promise<MmaGenerationResponse> {
+  const id = encodeURIComponent(String(generationId || ""));
+  const res = await apiFetch(`/mma/generations/${id}`);
+
+  // Keep UI alive even if backend is briefly behind
+  if (!res.ok) {
+    return { generation_id: String(generationId), status: "queued" } as any;
+  }
+
+  const json = (await res.json().catch(() => ({}))) as any;
+
+  const mmaVars = json?.mma_vars ?? json?.mg_mma_vars ?? json?.vars ?? undefined;
+
+  const status =
+    json?.status ??
+    json?.mg_mma_status ??
+    json?.mma_status ??
+    json?.state ??
+    "queued";
+
+  const outputs =
+    json?.outputs ??
+    mmaVars?.outputs ??
+    mmaVars?.provider_outputs ??
+    mmaVars?.result?.outputs ??
+    undefined;
+
+  const prompt =
+    json?.prompt ??
+    json?.mg_prompt ??
+    mmaVars?.prompt ??
+    null;
+
+  const error =
+    json?.error ??
+    json?.mg_error ??
+    mmaVars?.error ??
+    undefined;
+
+  // helpful fallbacks for your later `(result as any)?.outputUrl/imageUrl/videoUrl` checks
+  const outputUrl =
+    json?.outputUrl ??
+    json?.mg_output_url ??
+    outputs?.seedream_image_url ??
+    outputs?.kling_video_url ??
+    outputs?.image_url ??
+    outputs?.video_url ??
+    "";
+
+  return {
+    generation_id: String(json?.generation_id ?? json?.mg_generation_id ?? generationId),
+    status: String(status),
+    mode: json?.mode ?? json?.mg_mma_mode,
+    mma_vars: mmaVars,
+    outputs,
+    prompt,
+    error,
+    credits: json?.credits ?? json?.billing ?? undefined,
+    ...(outputUrl ? { outputUrl } : {}),
+  } as any;
+}
+
+async function mmaWaitForFinal(
   generationId: string,
   opts?: { timeoutMs?: number; intervalMs?: number }
-): Promise<MmaGenerationResponse> => {
+): Promise<MmaGenerationResponse> {
   const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 180_000)); // 3 min default
   const intervalMs = Math.max(400, Number(opts?.intervalMs ?? 900));
 
   const started = Date.now();
   let last: MmaGenerationResponse = { generation_id: generationId, status: "queued" } as any;
 
-  // small helper
   const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
 
   while (Date.now() - started < timeoutMs) {
     last = await mmaFetchResult(generationId);
 
-    const st = String(last?.status || "").toLowerCase();
+    const st = String(last?.status || "").toLowerCase().trim();
 
-    // terminal statuses
-    if (st === "done" || st === "error" || st === "suggested") return last;
+    // terminal statuses (cover common variants)
+    if (
+      st === "done" ||
+      st === "error" ||
+      st === "failed" ||
+      st === "succeeded" ||
+      st === "success" ||
+      st === "completed" ||
+      st === "cancelled" ||
+      st === "canceled" ||
+      st === "suggested"
+    ) {
+      return last;
+    }
 
     // sometimes outputs appear before status flips
     const hasOutputs =
@@ -1469,9 +1544,9 @@ const mmaWaitForFinal = async (
     await sleep(intervalMs);
   }
 
-  // timeout: return last known snapshot (so UI can still try to use it)
   return last;
-};
+}
+
 
 
   const handleCheckHealth = async () => {
