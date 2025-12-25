@@ -777,7 +777,7 @@ const [hasEverTyped, setHasEverTyped] = useState(false);
 
   const stageHasPills = uiStage >= 1;
   const showPanels = uiStage >= 1;
-  const showControls = uiStage >= 3;
+const showControls = uiStage >= 3 || hasEverTyped;
   const showPills = stageHasPills && !typingUiHidden;
 
   const animationTimingVars = useMemo<React.CSSProperties>(
