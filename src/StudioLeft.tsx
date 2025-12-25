@@ -41,11 +41,22 @@ export type StylePreset = {
 };
 
 export type CustomStyle = {
+  id: string;
   key: string;
   label: string;
+
+  // Used by the UI list thumbnail (now a real https URL)
   thumbUrl: string;
-  createdAt?: string;
+
+  // ✅ Treat like preset.hero: we store Hero + 2 others (all https URLs)
+  heroUrls: string[];
+
+  // Optional: keep all uploaded refs (up to 10) for future upgrades
+  allUrls?: string[];
+
+  createdAt: string;
 };
+
 
 export type AspectOptionLike = {
   key: string;
@@ -770,14 +781,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     }
   };
 
-  // still style click: allow 0/1/2+ selections just like motion styles
-  const toggleStylePreset = (key: string) => {
-    setStylePresetKeys((prev) => {
-      const exists = prev.includes(key);
-      return exists ? prev.filter((k) => k !== key) : [...prev, key];
-    });
-    openPanel("style");
-  };
+  // still style click: ✅ STILL (Create) mode = single selection (0 or 1)
+    const toggleStylePreset = (key: string) => {
+      setStylePresetKeys((prev) => {
+        const exists = prev.includes(key);
+        
+            // Create mode (still): only ONE style allowed
+            if (!isMotion) {
+              return exists ? [] : [key];
+            }
+        
+            // (If you ever enable editorial styles in motion later) allow multi-select
+            return exists ? prev.filter((k) => k !== key) : [...prev, key];
+          });
+        
+          openPanel("style");
+        };
+
 
   return (
     <div
