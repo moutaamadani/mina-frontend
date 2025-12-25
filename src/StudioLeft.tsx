@@ -47,7 +47,6 @@ export type CustomStyle = {
   createdAt?: string;
 };
 
-
 export type AspectOptionLike = {
   key: string;
   label: string;
@@ -110,14 +109,6 @@ type StudioLeftProps = {
 
   getStyleLabel: (key: string, fallback: string) => string;
 
-  editingStyleKey: string | null;
-  editingStyleValue: string;
-  setEditingStyleValue: (v: string) => void;
-
-  beginRenameStyle: (key: string, currentLabel: string) => void;
-  commitRenameStyle: () => void;
-  cancelRenameStyle: () => void;
-
   deleteCustomStyle: (key: string) => void;
   onOpenCustomStylePanel: () => void;
 
@@ -156,7 +147,7 @@ type StudioLeftProps = {
   minaTalking?: boolean;
 
   timingVars?: React.CSSProperties;
-  
+
   onGoProfile: () => void;
 };
 
@@ -238,7 +229,7 @@ const Collapse: React.FC<{
 };
 
 // ------------------------------------
-// Motion styles (exactly 6)
+// Motion styles
 // ------------------------------------
 const MOTION_STYLES: Array<{ key: MotionStyleKey; label: string; seed: string; thumb: string }> = [
   {
@@ -336,14 +327,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     stylePresets,
     customStyles,
     getStyleLabel,
-
-    editingStyleKey,
-    editingStyleValue,
-    setEditingStyleValue,
-    beginRenameStyle,
-    commitRenameStyle,
-    cancelRenameStyle,
-    deleteCustomStyle,
+    deleteCustomStyle, // ✅ IMPORTANT: needed for confirm delete
 
     onOpenCustomStylePanel,
     onImageUrlPasted,
@@ -376,6 +360,53 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const hasMotionImage = !!motionHasImageProp;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // ✅ Style UX:
+  // - single click = select
+  // - double click (custom only) = ask to delete with bold YES/NO
+  const [deleteConfirm, setDeleteConfirm] = useState<{ key: string; label: string } | null>(null);
+
+  const styleClickTimerRef = useRef<number | null>(null);
+  const pendingStyleKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (styleClickTimerRef.current !== null) window.clearTimeout(styleClickTimerRef.current);
+    };
+  }, []);
+
+  const onStyleSingleClick = (key: string) => {
+    // delay a bit so double-click can cancel the selection toggle
+    if (styleClickTimerRef.current !== null) window.clearTimeout(styleClickTimerRef.current);
+    pendingStyleKeyRef.current = key;
+
+    styleClickTimerRef.current = window.setTimeout(() => {
+      const k = pendingStyleKeyRef.current;
+      pendingStyleKeyRef.current = null;
+      styleClickTimerRef.current = null;
+      if (k) toggleStylePreset(k);
+    }, 220);
+  };
+
+  const onStyleDoubleClick = (s: { key: string; label: string; isCustom: boolean }) => {
+    // cancel the pending single-click toggle
+    if (styleClickTimerRef.current !== null) window.clearTimeout(styleClickTimerRef.current);
+    styleClickTimerRef.current = null;
+    pendingStyleKeyRef.current = null;
+
+    if (!s.isCustom) return; // never delete built-in presets
+    setDeleteConfirm({ key: s.key, label: s.label });
+  };
+
+  const confirmDeleteYes = () => {
+    if (!deleteConfirm) return;
+    deleteCustomStyle(deleteConfirm.key);
+    setDeleteConfirm(null);
+  };
+
+  const confirmDeleteNo = () => {
+    setDeleteConfirm(null);
+  };
 
   // ------------------------------------
   // Pointer-based reordering (no HTML5 drag/drop)
@@ -522,23 +553,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   });
 
   // panel behavior
-  const effectivePanel: PanelKey = uiStage === 0 ? null : (activePanel ?? "product");
+  const effectivePanel: PanelKey = uiStage === 0 ? null : activePanel ?? "product";
 
   const getFirstImageUrl = (items: UploadItem[]) => items[0]?.remoteUrl || items[0]?.url || "";
 
-  // Prefer permanent URLs. Hide blob: previews (user asked: no blobs in UI).
+  // Prefer permanent URLs. Hide blob: previews
   const getDisplayUrl = (it: UploadItem) => {
     const u = it?.remoteUrl || it?.url || "";
     if (!u) return "";
-    if (u.startsWith("blob:")) return ""; // hide blob previews
+    if (u.startsWith("blob:")) return "";
     return u;
   };
 
-
-
   // Drag/drop support:
   // - drop files => onFilesPicked(panel, files)
-  // - drop url => onImageUrlPasted(url) (and we open the panel for UX)
+  // - drop url => onImageUrlPasted(url)
   const extractDropUrl = (e: React.DragEvent) => {
     const dt = e.dataTransfer;
 
@@ -547,14 +576,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     const html = dt.getData("text/html") || "";
 
     const fromHtml =
-      html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] ||
-      html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] ||
-      "";
+      html.match(/src\s*=\s*["']([^"']+)["']/i)?.[1] || html.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || "";
 
     const candidates = [uri, plain, fromHtml].filter(Boolean).map((u) => u.split("\n")[0].trim());
 
     for (const u of candidates) {
-      if (/^https?:\/\//i.test(u)) return u; // ✅ only http(s)
+      if (/^https?:\/\//i.test(u)) return u;
     }
     return "";
   };
@@ -563,19 +590,19 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // ✅ Ignore drags that originate from style thumbnails (prevents accidental style->upload)
+    // ✅ Ignore drags that originate from style thumbnails
     const dt = e.dataTransfer;
     const types = Array.from(dt?.types ?? []);
-    
+
     const isStyleThumbDrag =
       types.includes("text/x-mina-style-thumb") ||
       types.includes("application/x-mina-style-thumb") ||
       dt?.getData("text/x-mina-style-thumb") === "1" ||
       dt?.getData("application/x-mina-style-thumb") === "1";
-    
-    // ✅ Block style-thumbs from being added as uploads (prevents accidents)
+
     if (isStyleThumbDrag) return;
-    // ✅ First: if the drag contains a URL, treat it as a URL drop (prevents blob/temp-file drags)
+
+    // URL drop
     const url = extractDropUrl(e);
     if (url) {
       openPanel(panel);
@@ -583,7 +610,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       return;
     }
 
-    // ✅ Otherwise: normal file drop (from desktop)
+    // file drop
     const files = e.dataTransfer?.files;
     if (files && files.length) {
       props.onFilesPicked(panel, files);
@@ -595,6 +622,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   };
+
   const productThumb = getFirstImageUrl(uploads.product);
   const logoThumb = getFirstImageUrl(uploads.logo);
   const inspirationThumb = getFirstImageUrl(uploads.inspiration);
@@ -623,21 +651,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     selectedStyleCards.length === 0
       ? "Editorial styles"
       : selectedStyleCards.length === 1
-        ? primaryStyleCard?.label || "Style"
-        : `${selectedStyleCards.length} styles`;
+      ? primaryStyleCard?.label || "Style"
+      : `${selectedStyleCards.length} styles`;
 
-    const motionStyleCards = MOTION_STYLES;
-    const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
-    
-    // none selected => no thumb => pill shows "+"
-    const motionStyleThumb = selectedMotionCards[0]?.thumb || "";
-    const motionStyleLabel =
-      selectedMotionCards.length === 0
-        ? "Movement styles"
-        : selectedMotionCards.length === 1
-          ? selectedMotionCards[0].label
-          : `${selectedMotionCards.length} styles`;
+  const motionStyleCards = MOTION_STYLES;
+  const selectedMotionCards = motionStyleCards.filter((c) => motionStyleKeys.includes(c.key));
 
+  // none selected => no thumb => pill shows "+"
+  const motionStyleThumb = selectedMotionCards[0]?.thumb || "";
+  const motionStyleLabel =
+    selectedMotionCards.length === 0
+      ? "Movement styles"
+      : selectedMotionCards.length === 1
+      ? selectedMotionCards[0].label
+      : `${selectedMotionCards.length} styles`;
 
   const renderPillIcon = (
     src: string,
@@ -662,16 +689,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // -------------------------
   const hasMotionHandler = typeof props.onCreateMotion === "function";
 
-  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" =
-    stillGenerating
-      ? "creating"
-      : uploadsPending
-        ? "uploading"
-        : !imageCreditsOk
-          ? "describe_more"
-          : briefLen < 20
-            ? "describe_more"
-            : "ready";
+  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" = stillGenerating
+    ? "creating"
+    : uploadsPending
+    ? "uploading"
+    : !imageCreditsOk
+    ? "describe_more"
+    : briefLen < 20
+    ? "describe_more"
+    : "ready";
 
   const motionSuggesting = !!props.motionSuggesting;
   const motionHasImage = !!props.motionHasImage;
@@ -684,10 +710,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
     ? "creating"
     : motionSuggesting
-      ? "creating"
-      : canCreateMotion && motionCreditsOk
-        ? "ready"
-        : "describe_more";
+    ? "creating"
+    : canCreateMotion && motionCreditsOk
+    ? "ready"
+    : "describe_more";
 
   const createState = isMotion ? motionCreateState : imageCreateState;
   const canCreateStill = imageCreateState === "ready";
@@ -699,15 +725,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           ? "Typing…"
           : "Animating…"
         : "Creating…"
-    : createState === "uploading"
+      : createState === "uploading"
       ? "Uploading…"
       : createState === "describe_more"
-        ? (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk)
-          ? "I need Matcha"
-          : "Describe more"
-        : isMotion
-          ? "Animate"
-          : "Create";
+      ? (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk)
+        ? "I need Matcha"
+        : "Describe more"
+      : isMotion
+      ? "Animate"
+      : "Create";
 
   const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
 
@@ -718,15 +744,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? wantsMatcha
         ? false
         : isMotion
-          ? !hasMotionHandler || motionSuggesting || !motionCreditsOk || !hasMotionImage || !canCreateMotion
-          : !canCreateStill
+        ? !hasMotionHandler || motionSuggesting || !motionCreditsOk || !motionHasImage || !canCreateMotion
+        : !canCreateStill
       : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
         (!isMotion && (!canCreateStill || !imageCreditsOk)));
 
   const handleCreateClick = () => {
     if (createState === "ready") {
       if (isMotion) {
-        props.onCreateMotion?.();
+        onCreateMotion?.();
       } else {
         onCreateStill();
       }
@@ -738,7 +764,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         window.open(matchaUrl, "_blank", "noopener");
         return;
       }
-
       requestAnimationFrame(() => briefInputRef.current?.focus());
     }
   };
@@ -772,22 +797,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   // still style click: ✅ STILL (Create) mode = single selection (0 or 1)
-    const toggleStylePreset = (key: string) => {
-      setStylePresetKeys((prev) => {
-        const exists = prev.includes(key);
-        
-            // Create mode (still): only ONE style allowed
-            if (!isMotion) {
-              return exists ? [] : [key];
-            }
-        
-            // (If you ever enable editorial styles in motion later) allow multi-select
-            return exists ? prev.filter((k) => k !== key) : [...prev, key];
-          });
-        
-          openPanel("style");
-        };
+  const toggleStylePreset = (key: string) => {
+    setStylePresetKeys((prev) => {
+      const exists = prev.includes(key);
 
+      // Create mode (still): only ONE style allowed
+      if (!isMotion) {
+        return exists ? [] : [key];
+      }
+
+      // Motion mode: keep multi-select (if you later enable it)
+      return exists ? prev.filter((k) => k !== key) : [...prev, key];
+    });
+
+    openPanel("style");
+  };
 
   return (
     <div
@@ -807,89 +831,74 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             <div className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}>
               {!isMotion ? (
                 <>
-                          {/* Product */}
-                            <button
-                              type="button"
-                              className={classNames(
-                                "studio-pill",
-                                effectivePanel === "product" && "active",
-                                !productThumb && "studio-pill--solo-plus"
-                              )}
-                              style={pillBaseStyle(0)}
-                              onClick={() => {
-                                if (!productThumb) {
-                                  triggerPick("product");
-                                } else {
-                                  openPanel("product");
-                                }
-                              }}
-                              onMouseEnter={() => openPanel("product")}
-                            >
-                              {renderPillIcon(productThumb, "+", true)}
-                              <span className="studio-pill-main">Product</span>
-                            </button>
-                    
-                            {/* Logo */}
-                            <button
-                              type="button"
-                              className={classNames(
-                                "studio-pill",
-                                activePanel === "logo" && "active",
-                                !logoThumb && "studio-pill--solo-plus"
-                              )}
-                              style={pillBaseStyle(1)}
-                              onClick={() => {
-                                if (!logoThumb) {
-                                  triggerPick("logo");
-                                } else {
-                                  openPanel("logo");
-                                }
-                              }}
-                              onMouseEnter={() => openPanel("logo")}
-                            >
-                              {renderPillIcon(logoThumb, "+", true)}
-                              <span className="studio-pill-main">Logo</span>
-                            </button>
-                    
-                            {/* Inspiration */}
-                            <button
-                              type="button"
-                              className={classNames(
-                                "studio-pill",
-                                activePanel === "inspiration" && "active",
-                                !inspirationThumb && "studio-pill--solo-plus"
-                              )}
-                              style={pillBaseStyle(2)}
-                              onClick={() => {
-                                if (!inspirationThumb) {
-                                  triggerPick("inspiration");
-                                } else {
-                                  openPanel("inspiration");
-                                }
-                              }}
-                              onMouseEnter={() => openPanel("inspiration")}
-                            >
-                              {renderPillIcon(inspirationThumb, "+", true)}
-                              <span className="studio-pill-main">Inspiration</span>
-                            </button>
+                  {/* Product */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "product" && "active",
+                      !productThumb && "studio-pill--solo-plus"
+                    )}
+                    style={pillBaseStyle(0)}
+                    onClick={() => {
+                      if (!productThumb) triggerPick("product");
+                      else openPanel("product");
+                    }}
+                    onMouseEnter={() => openPanel("product")}
+                  >
+                    {renderPillIcon(productThumb, "+", true)}
+                    <span className="studio-pill-main">Product</span>
+                  </button>
 
+                  {/* Logo */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      activePanel === "logo" && "active",
+                      !logoThumb && "studio-pill--solo-plus"
+                    )}
+                    style={pillBaseStyle(1)}
+                    onClick={() => {
+                      if (!logoThumb) triggerPick("logo");
+                      else openPanel("logo");
+                    }}
+                    onMouseEnter={() => openPanel("logo")}
+                  >
+                    {renderPillIcon(logoThumb, "+", true)}
+                    <span className="studio-pill-main">Logo</span>
+                  </button>
 
-                 {/* Style */}
-                          <button
-                            type="button"
-                            className={classNames(
-                              "studio-pill",
-                              activePanel === "style" && "active",
-                              !styleThumb && "studio-pill--solo-plus"
-                            )}
-                            style={pillBaseStyle(3)}
-                            onClick={() => openPanel("style")}
-                            onMouseEnter={() => openPanel("style")}
-                          >
-                            {renderPillIcon(styleThumb, "+", true)}
-                            <span className="studio-pill-main">{styleLabel}</span>
-                          </button>
+                  {/* Inspiration */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      activePanel === "inspiration" && "active",
+                      !inspirationThumb && "studio-pill--solo-plus"
+                    )}
+                    style={pillBaseStyle(2)}
+                    onClick={() => {
+                      if (!inspirationThumb) triggerPick("inspiration");
+                      else openPanel("inspiration");
+                    }}
+                    onMouseEnter={() => openPanel("inspiration")}
+                  >
+                    {renderPillIcon(inspirationThumb, "+", true)}
+                    <span className="studio-pill-main">Inspiration</span>
+                  </button>
 
+                  {/* Style */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", activePanel === "style" && "active", !styleThumb && "studio-pill--solo-plus")}
+                    style={pillBaseStyle(3)}
+                    onClick={() => openPanel("style")}
+                    onMouseEnter={() => openPanel("style")}
+                  >
+                    {renderPillIcon(styleThumb, "+", true)}
+                    <span className="studio-pill-main">{styleLabel}</span>
+                  </button>
 
                   {/* Ratio */}
                   <button
@@ -907,90 +916,80 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                          {/* Type for me */}
-                          {(() => {
-                            const typeForMeDisabled =
-                              motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk;
-                          
-                            const typeForMeTitle = !hasMotionImage
-                              ? "Upload at least 1 frame first"
-                              : !motionCreditsOk
-                                ? "Not enough Matcha"
-                                : motionGenerating
-                                  ? "Animating…"
-                                  : motionSuggesting
-                                    ? "Typing…"
-                                    : "Type for me";
-                          
-                            return (
-                              <button
-                                type="button"
-                                className={classNames(
-                                  "studio-pill",
-                                  motionSuggesting && "active",
-                                  typeForMeDisabled && "studio-pill--ghost"
-                                )}
-                                style={pillBaseStyle(0)}
-                                onClick={() => {
-                                  if (typeForMeDisabled) return;
-                                  onTypeForMe?.();
-                                }}
-                                disabled={typeForMeDisabled}
-                                aria-disabled={typeForMeDisabled}
-                                title={typeForMeTitle}
-                              >
-                                {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
-                                <span className="studio-pill-main">{typeForMeLabel}</span>
-                              </button>
-                            );
-                          })()}
+                  {/* Type for me */}
+                  {(() => {
+                    const typeForMeDisabled = motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk;
 
+                    const typeForMeTitle = !hasMotionImage
+                      ? "Upload at least 1 frame first"
+                      : !motionCreditsOk
+                      ? "Not enough Matcha"
+                      : motionGenerating
+                      ? "Animating…"
+                      : motionSuggesting
+                      ? "Typing…"
+                      : "Type for me";
 
-                          {/* Image */}
-                          <button
-                            type="button"
-                            className={classNames(
-                              "studio-pill",
-                              effectivePanel === "product" && "active",
-                              !productThumb && "studio-pill--solo-plus"
-                            )}
-                            style={pillBaseStyle(1)}
-                            onClick={() => {
-                              if (!productThumb) {
-                                triggerPick("product");
-                              } else {
-                                openPanel("product");
-                              }
-                            }}
-                            onMouseEnter={() => openPanel("product")}
-                          >
-                            {renderPillIcon(productThumb, "+", true)}
-                            <span className="studio-pill-main">Frames</span>
-                          </button>
+                    return (
+                      <button
+                        type="button"
+                        className={classNames(
+                          "studio-pill",
+                          motionSuggesting && "active",
+                          typeForMeDisabled && "studio-pill--ghost"
+                        )}
+                        style={pillBaseStyle(0)}
+                        onClick={() => {
+                          if (typeForMeDisabled) return;
+                          onTypeForMe?.();
+                        }}
+                        disabled={typeForMeDisabled}
+                        aria-disabled={typeForMeDisabled}
+                        title={typeForMeTitle}
+                      >
+                        {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
+                        <span className="studio-pill-main">{typeForMeLabel}</span>
+                      </button>
+                    );
+                  })()}
 
-                          {/* Mouvement style */}
-                          <button
-                            type="button"
-                            className={classNames(
-                              "studio-pill",
-                              effectivePanel === "style" && "active",
-                              !motionStyleThumb && "studio-pill--solo-plus"
-                            )}
-                            style={pillBaseStyle(2)}
-                            onClick={() => openPanel("style")}
-                            onMouseEnter={() => openPanel("style")}
-                          >
-                            {renderPillIcon(motionStyleThumb, "+", true)}
-                            <span className="studio-pill-main">{motionStyleLabel}</span>
-                          </button>
-
-                          {/* Ratio */}
+                  {/* Frames */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(3)}
-                    disabled
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "product" && "active",
+                      !productThumb && "studio-pill--solo-plus"
+                    )}
+                    style={pillBaseStyle(1)}
+                    onClick={() => {
+                      if (!productThumb) triggerPick("product");
+                      else openPanel("product");
+                    }}
+                    onMouseEnter={() => openPanel("product")}
                   >
+                    {renderPillIcon(productThumb, "+", true)}
+                    <span className="studio-pill-main">Frames</span>
+                  </button>
+
+                  {/* Movement style */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      effectivePanel === "style" && "active",
+                      !motionStyleThumb && "studio-pill--solo-plus"
+                    )}
+                    style={pillBaseStyle(2)}
+                    onClick={() => openPanel("style")}
+                    onMouseEnter={() => openPanel("style")}
+                  >
+                    {renderPillIcon(motionStyleThumb, "+", true)}
+                    <span className="studio-pill-main">{motionStyleLabel}</span>
+                  </button>
+
+                  {/* Ratio */}
+                  <button type="button" className={classNames("studio-pill", "studio-pill--aspect")} style={pillBaseStyle(3)} disabled>
                     <span className="studio-pill-icon">
                       <img
                         src={animateAspectIconUrl || currentAspectIconUrl}
@@ -1008,19 +1007,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
           {/* Textarea */}
           <div className="studio-brief-block">
-            <div
-              className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")}
-              ref={briefShellRef}
-              onScroll={onBriefScroll}
-            >
+            <div className={classNames("studio-brief-shell", briefHintVisible && "has-brief-hint")} ref={briefShellRef} onScroll={onBriefScroll}>
               <textarea
                 ref={briefInputRef}
                 className="studio-brief-input"
                 maxLength={1000}
                 placeholder={
-                  isMotion
-                    ? "Describe the motion you want (loop, camera, drips, melt, etc.)"
-                    : "Describe how you want your still life image to look like"
+                  isMotion ? "Describe the motion you want (loop, camera, drips, melt, etc.)" : "Describe how you want your still life image to look like"
                 }
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
@@ -1034,10 +1027,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   }
                 }}
               />
-              <div
-                className={classNames("studio-brief-overlay", minaTalking && "is-visible")}
-                aria-hidden="true"
-              >
+              <div className={classNames("studio-brief-overlay", minaTalking && "is-visible")} aria-hidden="true">
                 {minaTalking ? minaMessage : ""}
               </div>
               {briefHintVisible && <div className="studio-brief-hint">Describe more</div>}
@@ -1049,343 +1039,327 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         <div className="mina-left-block">
           {!isMotion ? (
             <>
-                <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Add your product</div>
+              <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Add your product</div>
 
-                    <div className="studio-panel-row">
-                      <div
-                        className="studio-thumbs studio-thumbs--inline"
-                        onDragOver={handleDragOver}
-                        onDrop={handleDropOnPanel("product")}
-                      >
-                        {uploads.product.map((it, idx) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className="studio-thumb"
-                            data-panel="product"
-                            data-index={idx}
-                            style={{ touchAction: "none" }}
-                            onPointerDown={onThumbPointerDown("product", idx)}
-                            onPointerMove={onThumbPointerMove}
-                            onPointerUp={onThumbPointerUp}
-                            onPointerCancel={onThumbPointerUp}
-                            onClick={() => handleThumbClick("product", it.id)}
-                            title="Drag to reorder • Click to delete"
-                          >
-                            {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
-                            ) : it.uploading ? (
-                              <span className="studio-thumb-spinner" aria-hidden="true" />
-                            ) : null}
-                          </button>
-                        ))}
-
-                        {uploads.product.length === 0 && (
-                          <button
-                            type="button"
-                            className="studio-plusbox studio-plusbox--inline"
-                            onClick={() => triggerPick("product")}
-                            title="Add image"
-                          >
-                            <span aria-hidden="true">+</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Collapse>
-
-                <Collapse open={showPanels && activePanel === "logo"} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Add your logo</div>
-
-                    <div className="studio-panel-row">
-                      <div
-                        className="studio-thumbs studio-thumbs--inline"
-                        onDragOver={handleDragOver}
-                        onDrop={handleDropOnPanel("logo")}
-                      >
-                        {uploads.logo.map((it) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className="studio-thumb"
-                            onClick={() => removeUploadItem("logo", it.id)}
-                            title="Click to delete"
-                          >
-                            {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" />
-                            ) : it.uploading ? (
-                              <span className="studio-thumb-spinner" aria-hidden="true" />
-                            ) : null}
-                          </button>
-                        ))}
-
-                        {uploads.logo.length === 0 && (
-                          <button
-                            type="button"
-                            className="studio-plusbox studio-plusbox--inline"
-                            onClick={() => triggerPick("logo")}
-                            title="Add image"
-                          >
-                            <span aria-hidden="true">+</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Collapse>
-
-                <Collapse open={showPanels && activePanel === "inspiration"} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Add inspiration</div>
-
-                    <div className="studio-panel-row">
-                      <div
-                        className="studio-thumbs studio-thumbs--inline"
-                        onDragOver={handleDragOver}
-                        onDrop={handleDropOnPanel("inspiration")}
-                      >
-                        {uploads.inspiration.map((it, idx) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className="studio-thumb"
-                            data-panel="inspiration"
-                            data-index={idx}
-                            style={{ touchAction: "none" }}
-                            onPointerDown={onThumbPointerDown("inspiration", idx)}
-                            onPointerMove={onThumbPointerMove}
-                            onPointerUp={onThumbPointerUp}
-                            onPointerCancel={onThumbPointerUp}
-                            onClick={() => handleThumbClick("inspiration", it.id)}
-                            onDragStart={(e) => e.preventDefault()} // ✅ stops native drag overlay
-                            title="Drag to reorder • Click to delete"
-                          >
-                            {getDisplayUrl(it) ? (
-                              <img
-                                src={getDisplayUrl(it)}
-                                alt=""
-                                draggable={false} // ✅ IMPORTANT
-                                style={{ WebkitUserDrag: "none", userSelect: "none" }} // ✅ extra safety
-                              />
-                            ) : it.uploading ? (
-                              <span className="studio-thumb-spinner" aria-hidden="true" />
-                            ) : null}
-                          </button>
-
-                        ))}
-
-                        {uploads.inspiration.length < 4 && (
-                          <button
-                            type="button"
-                            className="studio-plusbox studio-plusbox--inline"
-                            onClick={() => triggerPick("inspiration")}
-                            title="Add image"
-                          >
-                            <span aria-hidden="true">+</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Collapse>
-
-                <Collapse open={showPanels && activePanel === "style"} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Pick a style</div>
-
-                    <div className="studio-style-row">
-                      {allStyleCards.map((s) => (
+                  <div className="studio-panel-row">
+                    <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("product")}>
+                      {uploads.product.map((it, idx) => (
                         <button
-                          key={s.key}
+                          key={it.id}
                           type="button"
-                          draggable
-                          onDragStart={(e) => {
-                            // ✅ marker (use BOTH types for cross-browser reliability)
-                            e.dataTransfer.setData("text/x-mina-style-thumb", "1");
-                            e.dataTransfer.setData("application/x-mina-style-thumb", "1");
-                          
-                            e.dataTransfer.setData("text/uri-list", s.thumb);
-                            e.dataTransfer.setData("text/plain", s.thumb);
-                            e.dataTransfer.effectAllowed = "copy";
-                          }}
-
-                          className={classNames(
-                            "studio-style-card",
-                            stylePresetKeys.includes(s.key) && "active"
-                          )}
-                          onClick={() => toggleStylePreset(s.key)}
+                          className="studio-thumb"
+                          data-panel="product"
+                          data-index={idx}
+                          style={{ touchAction: "none" }}
+                          onPointerDown={onThumbPointerDown("product", idx)}
+                          onPointerMove={onThumbPointerMove}
+                          onPointerUp={onThumbPointerUp}
+                          onPointerCancel={onThumbPointerUp}
+                          onClick={() => handleThumbClick("product", it.id)}
+                          title="Drag to reorder • Click to delete"
                         >
-                          <div className="studio-style-thumb">
-                            {s.thumb ? <img src={s.thumb} alt="" draggable={false} /> : <span aria-hidden="true">+</span>}
-                          </div>
-
-                      <div
-                        className="studio-style-label"
-                            onDoubleClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (s.isCustom) deleteCustomStyle(s.key);
-                            }}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              beginRenameStyle(s.key, s.label);
-                            }}
-                          >
-                            {editingStyleKey === s.key ? (
-                              <input
-                                autoFocus
-                                value={editingStyleValue}
-                                onChange={(e) => setEditingStyleValue(e.target.value)}
-                                onBlur={commitRenameStyle}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") commitRenameStyle();
-                                  if (e.key === "Escape") cancelRenameStyle();
-                                }}
-                              />
-                            ) : (
-                              s.label
-                            )}
-                          </div>
+                          {getDisplayUrl(it) ? (
+                            <img src={getDisplayUrl(it)} alt="" draggable={false} />
+                          ) : it.uploading ? (
+                            <span className="studio-thumb-spinner" aria-hidden="true" />
+                          ) : null}
                         </button>
                       ))}
 
-                      {/* Create style */}
-                      <button type="button" className={classNames("studio-style-card", "add")} onClick={onOpenCustomStylePanel}>
-                        <div className="studio-style-thumb">
+                      {uploads.product.length === 0 && (
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("product")} title="Add image">
                           <span aria-hidden="true">+</span>
-                        </div>
-                        <div className="studio-style-label">Your style</div>
-                      </button>
+                        </button>
+                      )}
                     </div>
                   </div>
-                </Collapse>
-              </>
-            ) : (
-              <>
-                <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Add frames</div>
+                </div>
+              </Collapse>
 
-                    <div className="studio-panel-row">
-                      <div
-                        className="studio-thumbs studio-thumbs--inline"
-                        onDragOver={handleDragOver}
-                        onDrop={handleDropOnPanel("product")}
-                      >
-                        {uploads.product.map((it, idx) => (
-                          <button
-                            key={it.id}
-                            type="button"
-                            className="studio-thumb"
-                            data-panel="product"
-                            data-index={idx}
-                            style={{ touchAction: "none" }}
-                            onPointerDown={onThumbPointerDown("product", idx)}
-                            onPointerMove={onThumbPointerMove}
-                            onPointerUp={onThumbPointerUp}
-                            onPointerCancel={onThumbPointerUp}
-                            onClick={() => handleThumbClick("product", it.id)}
-                            title="Drag to reorder • Click to delete"
-                          >
-                            {getDisplayUrl(it) ? (
-                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
-                            ) : it.uploading ? (
-                              <span className="studio-thumb-spinner" aria-hidden="true" />
-                            ) : null}
-                          </button>
-                        ))}
+              <Collapse open={showPanels && activePanel === "logo"} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Add your logo</div>
 
-                        {uploads.product.length < 2 && (
-                          <button
-                            type="button"
-                            className="studio-plusbox studio-plusbox--inline"
-                            onClick={() => triggerPick("product")}
-                            title={uploads.product.length === 0 ? "Add start frame" : "Add end frame (optional)"}
-                          >
-                            <span aria-hidden="true">+</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </Collapse>
-
-                <Collapse open={showPanels && (effectivePanel === "style" || activePanel === null)} delayMs={panelRevealDelayMs}>
-                  <div className="studio-panel">
-                    <div className="studio-panel-title">Pick movement styles</div>
-
-                    <div className="studio-style-row">
-                      {MOTION_STYLES.map((m) => (
-                        <button
-                          key={m.key}
-                          type="button"
-                          draggable
-                          onDragStart={(e) => {
-                              // ✅ marker (use BOTH types for cross-browser reliability)
-                              e.dataTransfer.setData("text/x-mina-style-thumb", "1");
-                              e.dataTransfer.setData("application/x-mina-style-thumb", "1");
-                            
-                              e.dataTransfer.setData("text/uri-list", m.thumb);
-                              e.dataTransfer.setData("text/plain", m.thumb);
-                              e.dataTransfer.effectAllowed = "copy";
-                            }}
-
-                          className={classNames(
-                            "studio-style-card",
-                            "studio-motion-style-card",
-                            motionStyleKeys.includes(m.key) && "active"
-                          )}
-                          onClick={() => pickMotionStyle(m.key)}
-                        >
-                          <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
-                            {m.thumb ? <img src={m.thumb} alt="" draggable={false} /> : <span aria-hidden="true">{m.label.slice(0, 1)}</span>}
-                          </div>
-                          <div className="studio-motion-style-label">{m.label}</div>
+                  <div className="studio-panel-row">
+                    <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("logo")}>
+                      {uploads.logo.map((it) => (
+                        <button key={it.id} type="button" className="studio-thumb" onClick={() => removeUploadItem("logo", it.id)} title="Click to delete">
+                          {getDisplayUrl(it) ? <img src={getDisplayUrl(it)} alt="" /> : it.uploading ? <span className="studio-thumb-spinner" aria-hidden="true" /> : null}
                         </button>
                       ))}
 
+                      {uploads.logo.length === 0 && (
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("logo")} title="Add image">
+                          <span aria-hidden="true">+</span>
+                        </button>
+                      )}
                     </div>
                   </div>
-                </Collapse>
-              </>
-            )}
+                </div>
+              </Collapse>
 
-            {/* Controls */}
-            {showControls && (
-              <div className="studio-controls">
-                <div className="studio-controls-divider" />
+              <Collapse open={showPanels && activePanel === "inspiration"} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Add inspiration</div>
 
-                <button type="button" className="studio-vision-toggle" onClick={onToggleVision}>
-                  Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
+                  <div className="studio-panel-row">
+                    <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("inspiration")}>
+                      {uploads.inspiration.map((it, idx) => (
+                        <button
+                          key={it.id}
+                          type="button"
+                          className="studio-thumb"
+                          data-panel="inspiration"
+                          data-index={idx}
+                          style={{ touchAction: "none" }}
+                          onPointerDown={onThumbPointerDown("inspiration", idx)}
+                          onPointerMove={onThumbPointerMove}
+                          onPointerUp={onThumbPointerUp}
+                          onPointerCancel={onThumbPointerUp}
+                          onClick={() => handleThumbClick("inspiration", it.id)}
+                          onDragStart={(e) => e.preventDefault()}
+                          title="Drag to reorder • Click to delete"
+                        >
+                          {getDisplayUrl(it) ? (
+                            <img src={getDisplayUrl(it)} alt="" draggable={false} style={{ WebkitUserDrag: "none", userSelect: "none" }} />
+                          ) : it.uploading ? (
+                            <span className="studio-thumb-spinner" aria-hidden="true" />
+                          ) : null}
+                        </button>
+                      ))}
+
+                      {uploads.inspiration.length < 4 && (
+                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("inspiration")} title="Add image">
+                          <span aria-hidden="true">+</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Collapse>
+
+              <Collapse open={showPanels && activePanel === "style"} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Pick a style</div>
+
+                  <div className="studio-style-row">
+                    {allStyleCards.map((s) => (
+                      <button
+                        key={s.key}
+                        type="button"
+                        draggable
+                        onDragStart={(e) => {
+                          // marker (use BOTH types for cross-browser reliability)
+                          e.dataTransfer.setData("text/x-mina-style-thumb", "1");
+                          e.dataTransfer.setData("application/x-mina-style-thumb", "1");
+
+                          e.dataTransfer.setData("text/uri-list", s.thumb);
+                          e.dataTransfer.setData("text/plain", s.thumb);
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
+                        className={classNames("studio-style-card", stylePresetKeys.includes(s.key) && "active")}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onStyleSingleClick(s.key); // single click = select
+                        }}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onStyleDoubleClick(s); // double click = confirm delete (custom only)
+                        }}
+                        title={s.isCustom ? "Double click to delete" : undefined}
+                      >
+                        <div className="studio-style-thumb">
+                          {s.thumb ? <img src={s.thumb} alt="" draggable={false} /> : <span aria-hidden="true">+</span>}
+                        </div>
+                        <div className="studio-style-label">{s.label}</div>
+                      </button>
+                    ))}
+
+                    {/* Create style */}
+                    <button type="button" className={classNames("studio-style-card", "add")} onClick={onOpenCustomStylePanel}>
+                      <div className="studio-style-thumb">
+                        <span aria-hidden="true">+</span>
+                      </div>
+                      <div className="studio-style-label">Your style</div>
+                    </button>
+                  </div>
+                </div>
+              </Collapse>
+            </>
+          ) : (
+            <>
+              <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Add frames</div>
+
+                  <div className="studio-panel-row">
+                    <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("product")}>
+                      {uploads.product.map((it, idx) => (
+                        <button
+                          key={it.id}
+                          type="button"
+                          className="studio-thumb"
+                          data-panel="product"
+                          data-index={idx}
+                          style={{ touchAction: "none" }}
+                          onPointerDown={onThumbPointerDown("product", idx)}
+                          onPointerMove={onThumbPointerMove}
+                          onPointerUp={onThumbPointerUp}
+                          onPointerCancel={onThumbPointerUp}
+                          onClick={() => handleThumbClick("product", it.id)}
+                          title="Drag to reorder • Click to delete"
+                        >
+                          {getDisplayUrl(it) ? <img src={getDisplayUrl(it)} alt="" draggable={false} /> : it.uploading ? <span className="studio-thumb-spinner" aria-hidden="true" /> : null}
+                        </button>
+                      ))}
+
+                      {uploads.product.length < 2 && (
+                        <button
+                          type="button"
+                          className="studio-plusbox studio-plusbox--inline"
+                          onClick={() => triggerPick("product")}
+                          title={uploads.product.length === 0 ? "Add start frame" : "Add end frame (optional)"}
+                        >
+                          <span aria-hidden="true">+</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </Collapse>
+
+              <Collapse open={showPanels && (effectivePanel === "style" || activePanel === null)} delayMs={panelRevealDelayMs}>
+                <div className="studio-panel">
+                  <div className="studio-panel-title">Pick movement styles</div>
+
+                  <div className="studio-style-row">
+                    {MOTION_STYLES.map((m) => (
+                      <button
+                        key={m.key}
+                        type="button"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/x-mina-style-thumb", "1");
+                          e.dataTransfer.setData("application/x-mina-style-thumb", "1");
+                          e.dataTransfer.setData("text/uri-list", m.thumb);
+                          e.dataTransfer.setData("text/plain", m.thumb);
+                          e.dataTransfer.effectAllowed = "copy";
+                        }}
+                        className={classNames("studio-style-card", "studio-motion-style-card", motionStyleKeys.includes(m.key) && "active")}
+                        onClick={() => pickMotionStyle(m.key)}
+                      >
+                        <div className={classNames("studio-style-thumb", "studio-motion-style-thumb")}>
+                          {m.thumb ? (
+                            <img src={m.thumb} alt="" draggable={false} />
+                          ) : (
+                            <span aria-hidden="true">{m.label.slice(0, 1)}</span>
+                          )}
+                        </div>
+                        <div className="studio-motion-style-label">{m.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </Collapse>
+            </>
+          )}
+
+          {/* Controls */}
+          {showControls && (
+            <div className="studio-controls">
+              <div className="studio-controls-divider" />
+
+              <button type="button" className="studio-vision-toggle" onClick={onToggleVision}>
+                Mina Vision Intelligence: <span className="studio-vision-state">{minaVisionEnabled ? "ON" : "OFF"}</span>
+              </button>
+
+              {isMotion && motionBlockReason ? <div className="error-text">{motionBlockReason}</div> : null}
+
+              <div className="studio-create-block">
+                <button
+                  type="button"
+                  aria-busy={createDisabled}
+                  className={classNames("studio-create-link", createDisabled && "disabled", createState === "describe_more" && "state-describe")}
+                  disabled={createDisabled}
+                  onClick={handleCreateClick}
+                  title={isMotion && !hasMotionHandler ? "Wire onCreateMotion in MinaApp" : undefined}
+                >
+                  {createLabel}
+                </button>
+              </div>
+
+              {!isMotion && stillError && <div className="error-text">{stillError}</div>}
+              {isMotion && motionError && <div className="error-text">{motionError}</div>}
+            </div>
+          )}
+        </div>
+
+        {/* Delete confirm modal */}
+        {deleteConfirm && (
+          <div
+            onClick={confirmDeleteNo}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.45)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+              padding: 16,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(420px, 92vw)",
+                background: "#fff",
+                borderRadius: 18,
+                padding: 18,
+                boxShadow: "0 16px 50px rgba(0,0,0,0.25)",
+              }}
+            >
+              <div style={{ fontSize: 16, marginBottom: 12 }}>
+                Do you want delete style <b>{deleteConfirm.label}</b>?
+              </div>
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={confirmDeleteNo}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #ddd",
+                    background: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <b>NO</b>
                 </button>
 
-                <div className="studio-create-block">
-                  <button
-                    type="button"
-                    aria-busy={createDisabled}
-                    className={classNames(
-                      "studio-create-link",
-                      createDisabled && "disabled",
-                      createState === "describe_more" && "state-describe"
-                    )}
-                    disabled={createDisabled}
-                    onClick={handleCreateClick}
-                    title={isMotion && !hasMotionHandler ? "Wire onCreateMotion in MinaApp" : undefined}
-                  >
-                    {createLabel}
-                  </button>
-                </div>
-
-                {!isMotion && stillError && <div className="error-text">{stillError}</div>}
-                {isMotion && motionError && <div className="error-text">{motionError}</div>}
+                <button
+                  type="button"
+                  onClick={confirmDeleteYes}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: "1px solid #111",
+                    background: "#111",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <b>YES</b>
+                </button>
               </div>
-            )}
-        </div>
+            </div>
+          </div>
+        )}
 
         {/* Hidden file inputs */}
         <input
