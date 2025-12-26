@@ -290,89 +290,216 @@
 .studio-header-cta:disabled { opacity: 0.35 !important; cursor: default !important; transform: none !important; }
 
 /* ============================================================
-   Matcha quantity modal (text-only buttons, minimal)
+   Matcha purchase modal (structured scale like your design)
    ============================================================ */
-.mina-qty-modal {
-  width: min(420px, calc(100vw - 28px));
+
+.mina-matcha-modal {
+  width: min(980px, calc(100vw - 28px));
 }
 
-.mina-qty-body {
-  padding: 16px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* Header tweaks for matcha modal */
+.mina-matcha-header {
+  border-bottom: 0 !important;
+  padding: 18px 22px !important;
 }
 
-.mina-qty-sub {
-  font-weight: 700;
-}
-
-.mina-qty-stepper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-}
-
-.mina-qty-btn {
-  background: transparent;
-  border: 1px solid rgba(8, 10, 0, 0.14);
-  border-radius: 999px;
-  width: 42px;
-  height: 42px;
+.mina-matcha-header-left {
+  font-size: 14px;
   font-weight: 800;
-  color: inherit;
-  cursor: pointer;
+  letter-spacing: -0.01em;
 }
 
-.mina-qty-value {
-  min-width: 54px;
-  text-align: center;
+/* Body */
+.mina-matcha-body {
+  padding: 10px 22px 22px;
+}
+
+.mina-matcha-title {
+  font-size: 44px;
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  font-weight: 900;
+  margin-top: 6px;
+}
+
+.mina-matcha-subtitle {
+  margin-top: 18px;
   font-size: 22px;
   font-weight: 800;
+  letter-spacing: -0.015em;
 }
 
-.mina-qty-quick {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
+.mina-matcha-rules {
+  margin-top: 10px;
+  font-size: 14px;
+  opacity: 0.65;
+  font-weight: 650;
 }
 
-.mina-qty-chip {
+/* Scale layout */
+.mina-matcha-scale {
+  margin-top: 26px;
+  padding: 26px 0 10px;
+  position: relative;
+}
+
+.mina-matcha-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 58px;
+  height: 2px;
+  background: rgba(8, 10, 0, 0.18);
+}
+
+.mina-matcha-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: start;
+  gap: 10px;
+}
+
+/* Each point is a clean button */
+.mina-matcha-point {
+  border: 0;
   background: transparent;
-  border: 1px solid rgba(8, 10, 0, 0.14);
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-weight: 800;
-  color: inherit;
-  cursor: pointer;
-}
-
-.mina-qty-chip.active {
-  border-color: rgba(8, 10, 0, 0.55);
-}
-
-.mina-qty-help {
-  text-align: center;
-  font-size: 13px;
-  opacity: 0.78;
-  line-height: 1.35;
-}
-
-.mina-qty-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.mina-qty-cta {
-  background: transparent;
-  border: none;
   padding: 0;
-  font-weight: 900;
-  text-decoration: underline;
   cursor: pointer;
-  color: inherit;
+  text-align: left;
+  color: var(--mina-ink);
+}
+
+/* Labels above/below */
+.mina-matcha-credits {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  margin-bottom: 18px;
+}
+
+.mina-matcha-price {
+  font-size: 18px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+  margin-top: 18px;
+}
+
+/* Dot on the line */
+.mina-matcha-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(8, 10, 0, 0.30);
+}
+
+/* Active point */
+.mina-matcha-point.is-active .mina-matcha-dot {
+  background: rgba(8, 10, 0, 0.95);
+}
+
+.mina-matcha-point.is-active .mina-matcha-credits,
+.mina-matcha-point.is-active .mina-matcha-price {
+  color: rgba(8, 10, 0, 0.98);
+}
+
+/* Inactive points look lighter like your screenshot */
+.mina-matcha-point:not(.is-active) .mina-matcha-credits,
+.mina-matcha-point:not(.is-active) .mina-matcha-price,
+.mina-matcha-point:not(.is-active) .mina-matcha-dot {
+  opacity: 0.35;
+}
+
+/* Disabled */
+.mina-matcha-point.is-disabled {
+  opacity: 0.18 !important;
+  cursor: default !important;
+}
+
+/* Footer like your design: transparency left, big Purchase right */
+.mina-matcha-footer {
+  justify-content: space-between !important;
+  align-items: flex-end !important;
+  padding: 18px 22px !important;
+}
+
+.mina-matcha-transparency {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 60%;
+}
+
+.mina-matcha-transparency-toggle {
+  border: 0;
+  background: transparent;
+  padding: 0;
+
+  font: inherit;
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: -0.01em;
+
+  cursor: pointer;
+  opacity: 0.9;
+  text-decoration: none;
+}
+
+.mina-matcha-transparency-toggle:hover { opacity: 1; }
+.mina-matcha-transparency-toggle:active { opacity: 0.65; }
+
+.mina-matcha-transparency-details {
+  font-size: 16px;
+  opacity: 0.35;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+}
+
+/* Big underlined Purchase */
+.mina-matcha-purchase {
+  border: 0;
+  background: transparent;
+  padding: 0;
+
+  font: inherit;
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: -0.03em;
+
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+  opacity: 0.95;
+}
+
+.mina-matcha-purchase:hover { opacity: 1; }
+.mina-matcha-purchase:active { opacity: 0.65; }
+
+/* Mobile */
+@media (max-width: 720px) {
+  .mina-matcha-modal {
+    width: min(760px, calc(100vw - 18px));
+  }
+
+  .mina-matcha-title {
+    font-size: 34px;
+  }
+
+  .mina-matcha-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    row-gap: 18px;
+  }
+
+  .mina-matcha-line {
+    top: 54px;
+  }
+
+  .mina-matcha-purchase {
+    font-size: 40px;
+  }
+
+  .mina-matcha-transparency {
+    max-width: 52%;
+  }
 }
 
