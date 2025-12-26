@@ -419,7 +419,7 @@
   height: 32px;
   margin: 10px 0;
 
-  padding: 0 0px;                /* ✅ inset bar + nodes */
+  padding: 0px 16px;                /* ✅ inset bar + nodes */
   box-sizing: border-box;
 
   cursor: pointer;
