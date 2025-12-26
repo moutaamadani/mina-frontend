@@ -721,7 +721,13 @@ export default function Profile({
         try {
           v.muted = true;
           if (shouldPlay) {
-            if (v.paused) v.play().catch(() => {});
+          v.muted = true;
+          const p = v.play();
+          if (p && typeof p.catch === "function") {
+            p.catch(() => {
+              // browser blocked autoplay, will retry later
+            });
+          }
           } else {
             if (!v.paused) v.pause();
           }
