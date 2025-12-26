@@ -556,7 +556,7 @@
   line-height: 1;
   font-weight: 800;
   letter-spacing: -0.03em;
-  padding: 12px 12px 12px 4px;
+  padding: 12px 4px 12px 12px;
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 6px;
