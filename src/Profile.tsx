@@ -912,7 +912,16 @@ export default function Profile({
                 >
                   {it.url ? (
                     it.isMotion ? (
-                      <video ref={(el) => registerVideoEl(it.id, el)} src={it.url} muted loop playsInline preload="metadata" />
+                      <video
+                      ref={(el) => registerVideoEl(it.id, el)}
+                      src={it.url}
+                      muted
+                      loop
+                      playsInline
+                      preload="auto"
+                      autoPlay
+                    />
+
                     ) : (
                       <img src={it.url} alt="" loading="lazy" />
                     )
