@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
 
-  padding: 6px;
+  padding: 12px;
   background: rgba(8, 10, 0, 0.35);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -46,7 +46,7 @@
   color: var(--mina-ink);
 
   border-radius: 0px;
-  border: 1px solid var(--mina-line);
+  border: 0px solid var(--mina-line);
   box-shadow: 0px 16px 50px var(--mina-shadow);
 
   transform: translateY(6px) scale(0.985);
