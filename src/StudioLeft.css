@@ -713,7 +713,7 @@ margin-bottom: 6px;
 ------------------------------------------------------------------ */
 @media (max-width: 960px) {
   .studio-left {
-    padding: calc(84px + env(safe-area-inset-top)) 20px 20px !important;
+    padding: calc(40px + env(safe-area-inset-top)) 20px 20px !important;
   }
 
   .studio-footer-links {
@@ -724,7 +724,7 @@ margin-bottom: 6px;
 
 @media (max-width: 480px) {
   .studio-left {
-    padding: calc(84px + env(safe-area-inset-top)) 20px 20px !important;
+    padding: calc(40px + env(safe-area-inset-top)) 20px 20px !important;
   }
 
   .studio-plusbox,
