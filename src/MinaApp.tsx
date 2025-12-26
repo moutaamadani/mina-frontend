@@ -912,6 +912,11 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const imageCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= imageCost;
   const motionCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= motionCost;
   const motionBlockReason = motionCreditsOk ? null : "Get more matchas to animate.";
+  // ✅ Tweak uses the same pricing rules as the media type you're tweaking
+  const tweakCreditsOk =
+  activeMediaKind === "motion" ? motionCreditsOk : activeMediaKind === "still" ? imageCreditsOk : true;
+
+  const tweakBlockReason = tweakCreditsOk ? null : "Get more matchas to tweak.";
 
   const briefHintVisible = showDescribeMore;
 
@@ -3385,6 +3390,8 @@ const styleHeroUrls = (stylePresetKeys || [])
         onSendTweak={(text) => void onTweak(text)}
         sending={feedbackSending}
         error={feedbackError}
+        tweakCreditsOk={tweakCreditsOk}
+        tweakBlockReason={tweakBlockReason}
       />
     );
   };
