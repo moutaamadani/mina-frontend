@@ -3695,9 +3695,11 @@ const headerOverlayClass =
               className="studio-logo-link"
               onClick={(event) => {
                 event.preventDefault();
-                goTab("studio", "replace");
+                // ✅ If we're on profile, keep history so back-swipe returns to profile.
+                goTab("studio", activeTab === "profile" ? "push" : "replace");
               }}
             >
+
               <img
                 src="https://assets.faltastudio.com/Website%20Assets/Black_Logo_mina.svg"
                 alt="Mina logo"
