@@ -96,10 +96,12 @@ async function downloadMedia(url: string, prompt: string, isMotion: boolean) {
       kind: isMotion ? "motion" : "still",
       prompt: prompt || "",
     });
-  } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
+  } catch (err) {
+    console.warn("Download failed:", err);
+    // Optional: alert("Download failed. Please try again.");
   }
 }
+
 
 
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
