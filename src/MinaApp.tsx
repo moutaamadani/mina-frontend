@@ -1204,6 +1204,72 @@ useEffect(() => {
     }
   };
 
+    // ============================================================================
+  // MMA double-fire protection + idempotency_key injection
+  // - Prevents accidental double-click / double-submit
+  // - Sends idempotency_key to backend (top-level + inputs)
+  // ============================================================================
+  const mmaInFlightRef = useRef<Map<string, Promise<{ generationId: string }>>>(new Map());
+  const mmaIdemRef = useRef<Record<string, { key: string; ts: number }>>({});
+
+  const makeIdempotencyKey = (prefix = "mma") => {
+    try {
+      // @ts-ignore
+      const u = crypto?.randomUUID?.();
+      if (u) return `${prefix}_${u}`;
+    } catch {}
+    return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}_${Math.random()
+      .toString(16)
+      .slice(2)}`;
+  };
+
+  const getIdemFor = (actionKey: string) => {
+    const now = Date.now();
+    const prev = mmaIdemRef.current[actionKey];
+    // reuse same key for 15s (covers double-click + quick resubmits)
+    if (prev && now - prev.ts < 15000) return prev.key;
+    const key = makeIdempotencyKey(actionKey.replace(/[^a-z0-9:_-]/gi, "").slice(0, 40) || "mma");
+    mmaIdemRef.current[actionKey] = { key, ts: now };
+    return key;
+  };
+
+  const attachIdempotencyKey = (payload: any, idem: string) => {
+    const body =
+      payload && typeof payload === "object" && !Array.isArray(payload) ? { ...payload } : { payload };
+
+    // top-level
+    body.idempotency_key = idem;
+
+    // also inside inputs (your router supports both)
+    if (body.inputs && typeof body.inputs === "object" && !Array.isArray(body.inputs)) {
+      body.inputs = { ...body.inputs, idempotency_key: idem };
+    } else {
+      body.inputs = { idempotency_key: idem };
+    }
+
+    return body;
+  };
+
+  const buildMmaActionKey = (createPath: string, body: any) => {
+    const b = body || {};
+    const inputs = b.inputs || {};
+    const intent = String(b.intent || inputs.intent || inputs.action || "").toLowerCase();
+
+    const isSuggest =
+      !!b.suggest_only ||
+      !!b.suggestOnly ||
+      !!inputs.suggest_only ||
+      !!inputs.suggestOnly ||
+      !!inputs.prompt_only ||
+      !!inputs.promptOnly ||
+      !!inputs.text_only ||
+      !!inputs.textOnly ||
+      intent.includes("suggest") ||
+      intent.includes("type_for_me");
+
+    return `${createPath}:${isSuggest ? "suggest" : "run"}:${intent}`.toLowerCase();
+  };
+
   // MMA SSE stream
   type MmaStreamState = { status: string; scanLines: string[] };
   const mmaStreamRef = useRef<EventSource | null>(null);
@@ -1218,145 +1284,147 @@ useEffect(() => {
       mmaStreamRef.current = null;
     };
   }, []);
-  const mmaCreateAndWait = async (
-        createPath: string,
-        body: any,
-        onProgress?: (s: MmaStreamState) => void
-      ): Promise<{ generationId: string }> => {
-        const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(body) });
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => null);
-          throw new Error(errJson?.message || `MMA create failed (${res.status})`);
-        }
-      
-        const created = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse> & any;
-      
-        const generationId = created.generation_id || created.generationId || created.id || null;
-        if (!generationId) throw new Error("MMA create returned no generation id.");
-      
-        const relSse =
-          created.sse_url || created.sseUrl || `/mma/stream/${encodeURIComponent(String(generationId))}`;
-      
-        // ✅ FIX: backend may return absolute URL
-        const sseUrl = /^https?:\/\//i.test(String(relSse))
-          ? String(relSse)
-          : `${API_BASE_URL}${String(relSse)}`;
-      
-        const scanLines: string[] = [];
-        let status = created.status || "queued";
-      
-        try {
-          onProgress?.({ status, scanLines: [...scanLines] });
-        } catch {
-          // ignore
-        }
-      
-        try {
-          mmaStreamRef.current?.close();
-        } catch {
-          // ignore
-        }
-      
-        const es = new EventSource(sseUrl);
-        mmaStreamRef.current = es;
-      
-        await new Promise<void>((resolve) => {
-          const cleanup = () => {
-            try {
-              es.close();
-            } catch {
-              // ignore
-            }
-            if (mmaStreamRef.current === es) mmaStreamRef.current = null;
-          };
-      
-          es.onmessage = (ev: MessageEvent) => {
-            try {
-              const raw = (ev as any)?.data;
-      
-              if (
-                typeof raw === "string" &&
-                raw.trim() &&
-                raw.trim()[0] !== "{" &&
-                raw.trim()[0] !== "["
-              ) {
-                status = raw.trim();
-                onProgress?.({ status, scanLines: [...scanLines] });
-                return;
-              }
-      
-              const data = JSON.parse(raw || "{}");
-      
-              const nextStatus =
-                data.status || data.status_text || data.statusText || data.text || data.message || null;
-      
-              if (typeof nextStatus === "string" && nextStatus.trim()) status = nextStatus.trim();
-      
-              const incoming =
-                (Array.isArray(data.scanLines) && data.scanLines) ||
-                (Array.isArray(data.scan_lines) && data.scan_lines) ||
-                [];
-      
-              if (incoming.length) {
-                scanLines.length = 0;
-                incoming.forEach((x: any) => {
-                  const t = typeof x === "string" ? x : x?.text;
-                  if (t) scanLines.push(String(t));
-                });
-              }
-      
+    const mmaCreateAndWait = (
+    createPath: string,
+    body: any,
+    onProgress?: (s: MmaStreamState) => void
+  ): Promise<{ generationId: string }> => {
+    const actionKey = buildMmaActionKey(createPath, body);
+
+    // ✅ If double-fired, return the same in-flight promise (no second backend call)
+    const existing = mmaInFlightRef.current.get(actionKey);
+    if (existing) return existing;
+
+    const run = (async () => {
+      const idem = getIdemFor(actionKey);
+      const bodyWithIdem = attachIdempotencyKey(body || {}, idem);
+
+      const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(bodyWithIdem) });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.message || `MMA create failed (${res.status})`);
+      }
+
+      const created = (await res.json().catch(() => ({}))) as Partial<MmaCreateResponse> & any;
+
+      const generationId = created.generation_id || created.generationId || created.id || null;
+      if (!generationId) throw new Error("MMA create returned no generation id.");
+
+      const relSse =
+        created.sse_url || created.sseUrl || `/mma/stream/${encodeURIComponent(String(generationId))}`;
+
+      // ✅ FIX: backend may return absolute URL
+      const sseUrl = /^https?:\/\//i.test(String(relSse))
+        ? String(relSse)
+        : `${API_BASE_URL}${String(relSse)}`;
+
+      const scanLines: string[] = [];
+      let status = created.status || "queued";
+
+      try {
+        onProgress?.({ status, scanLines: [...scanLines] });
+      } catch {}
+
+      try {
+        mmaStreamRef.current?.close();
+      } catch {}
+      mmaStreamRef.current = null;
+
+      const es = new EventSource(sseUrl);
+      mmaStreamRef.current = es;
+
+      await new Promise<void>((resolve) => {
+        const cleanup = () => {
+          try {
+            es.close();
+          } catch {}
+          if (mmaStreamRef.current === es) mmaStreamRef.current = null;
+        };
+
+        es.onmessage = (ev: MessageEvent) => {
+          try {
+            const raw = (ev as any)?.data;
+
+            if (
+              typeof raw === "string" &&
+              raw.trim() &&
+              raw.trim()[0] !== "{" &&
+              raw.trim()[0] !== "["
+            ) {
+              status = raw.trim();
               onProgress?.({ status, scanLines: [...scanLines] });
-            } catch {
-              // ignore
+              return;
             }
-          };
-      
-          es.addEventListener("status", (ev: any) => {
-            try {
-              const data = JSON.parse(ev.data || "{}");
-              const next = data.status || data.status_text || data.statusText || data.text || null;
-              if (typeof next === "string" && next.trim()) status = next.trim();
-              onProgress?.({ status, scanLines: [...scanLines] });
-            } catch {
-              // ignore
+
+            const data = JSON.parse(raw || "{}");
+
+            const nextStatus =
+              data.status || data.status_text || data.statusText || data.text || data.message || null;
+
+            if (typeof nextStatus === "string" && nextStatus.trim()) status = nextStatus.trim();
+
+            const incoming =
+              (Array.isArray(data.scanLines) && data.scanLines) ||
+              (Array.isArray(data.scan_lines) && data.scan_lines) ||
+              [];
+
+            if (incoming.length) {
+              scanLines.length = 0;
+              incoming.forEach((x: any) => {
+                const t = typeof x === "string" ? x : x?.text;
+                if (t) scanLines.push(String(t));
+              });
             }
-          });
-      
-          es.addEventListener("scan_line", (ev: any) => {
-            try {
-              const data = JSON.parse(ev.data || "{}");
-              const text = String(data.text || data.message || data.line || "");
-              if (text) scanLines.push(text);
-              onProgress?.({ status, scanLines: [...scanLines] });
-            } catch {
-              // ignore
-            }
-          });
-      
-          es.addEventListener("done", (ev: any) => {
-            try {
-              const data = JSON.parse(ev.data || "{}");
-              const finalStatus = data.status || "done";
-              cleanup();
-              // resolve even on error; we’ll read real status in polling/fetch
-              resolve();
-            } catch {
-              cleanup();
-              resolve();
-            }
-          });
-      
-          es.onerror = () => {
-            // ✅ don’t block forever if SSE drops
-            window.setTimeout(() => {
-              cleanup();
-              resolve();
-            }, 900);
-          };
+
+            onProgress?.({ status, scanLines: [...scanLines] });
+          } catch {}
+        };
+
+        es.addEventListener("status", (ev: any) => {
+          try {
+            const data = JSON.parse(ev.data || "{}");
+            const next = data.status || data.status_text || data.statusText || data.text || null;
+            if (typeof next === "string" && next.trim()) status = next.trim();
+            onProgress?.({ status, scanLines: [...scanLines] });
+          } catch {}
         });
-      
-        return { generationId: String(generationId) };
-      };
+
+        es.addEventListener("scan_line", (ev: any) => {
+          try {
+            const data = JSON.parse(ev.data || "{}");
+            const text = String(data.text || data.message || data.line || "");
+            if (text) scanLines.push(text);
+            onProgress?.({ status, scanLines: [...scanLines] });
+          } catch {}
+        });
+
+        es.addEventListener("done", () => {
+          cleanup();
+          resolve();
+        });
+
+        es.onerror = () => {
+          // ✅ don’t block forever if SSE drops
+          window.setTimeout(() => {
+            cleanup();
+            resolve();
+          }, 900);
+        };
+      });
+
+      return { generationId: String(generationId) };
+    })();
+
+    mmaInFlightRef.current.set(actionKey, run);
+
+    // ensure we always clean up
+    run.finally(() => {
+      const cur = mmaInFlightRef.current.get(actionKey);
+      if (cur === run) mmaInFlightRef.current.delete(actionKey);
+    });
+
+    return run;
+  };
 
 
   // ============================================================================
