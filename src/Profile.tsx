@@ -208,11 +208,23 @@ function looksLikeSystemPrompt(s: string) {
 function extractInputsForDisplay(row: Row) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
   const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
-  const varsRaw = (row as any)?.mg_mma_vars ?? (row as any)?.mg_vars ?? (row as any)?.vars ?? (row as any)?.mma_vars ?? null;
+  const varsRaw =
+    (row as any)?.mg_mma_vars ??
+    (row as any)?.mg_vars ??
+    (row as any)?.vars ??
+    (row as any)?.mma_vars ??
+    null;
 
   const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? null;
   const meta = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
   const vars = tryParseJson<any>(varsRaw) ?? varsRaw ?? null;
+
+  // ✅ mg_mma_vars is structured like: { meta, assets, inputs, history, prompts, ... }
+  const varsAssets = vars && typeof vars === "object" ? (vars as any).assets : null;
+  const varsInputs = vars && typeof vars === "object" ? (vars as any).inputs : null;
+  const varsHistory = vars && typeof vars === "object" ? (vars as any).history : null;
+  const varsMeta = vars && typeof vars === "object" ? (vars as any).meta : null;
+  const varsPrompts = vars && typeof vars === "object" ? (vars as any).prompts : null;
 
   const briefCandidates: string[] = [
     pick(row, ["mg_user_prompt", "mg_user_message", "userPrompt", "user_prompt", "promptUser", "brief", "mg_brief"], ""),
@@ -220,6 +232,12 @@ function extractInputsForDisplay(row: Row) {
     pick(payload?.inputs, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
     pick(payload?.settings, ["brief"], ""),
     pick(meta, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
+
+    // ✅ from mg_mma_vars.inputs / prompts (your real data)
+    pick(varsInputs, ["brief", "userBrief", "user_brief", "motion_user_brief"], ""),
+    pick(varsPrompts, ["motion_prompt", "clean_prompt"], ""),
+
+    // legacy/flat fallbacks
     pick(vars, ["brief", "user_prompt", "userPrompt", "prompt", "userMessage"], ""),
   ]
     .map((s) => String(s || "").trim())
@@ -236,7 +254,8 @@ function extractInputsForDisplay(row: Row) {
         pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
         pick(payload, ["aspect_ratio", "aspectRatio"], "") ||
         pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "") ||
-        pick(vars, ["aspect_ratio", "aspectRatio"], "")
+        pick(varsInputs, ["aspect_ratio", "aspectRatio"], "") ||
+        pick(varsMeta, ["aspectRatio", "aspect_ratio"], "")
     ) || "";
 
   const stylePresetKeysRaw =
@@ -246,8 +265,10 @@ function extractInputsForDisplay(row: Row) {
     payload?.settings?.style_preset_keys ??
     payload?.inputs?.stylePresetKeys ??
     payload?.inputs?.style_preset_keys ??
-    vars?.stylePresetKeys ??
-    vars?.style_preset_keys ??
+    varsMeta?.stylePresetKeys ??
+    varsMeta?.style_preset_keys ??
+    varsInputs?.stylePresetKeys ??
+    varsInputs?.style_preset_keys ??
     null;
 
   const stylePresetKeyRaw =
@@ -257,8 +278,10 @@ function extractInputsForDisplay(row: Row) {
     payload?.settings?.style_preset_key ??
     payload?.inputs?.stylePresetKey ??
     payload?.inputs?.style_preset_key ??
-    vars?.stylePresetKey ??
-    vars?.style_preset_key ??
+    varsMeta?.stylePresetKey ??
+    varsMeta?.style_preset_key ??
+    varsInputs?.stylePresetKey ??
+    varsInputs?.style_preset_key ??
     null;
 
   const stylePresetKeys: string[] = Array.isArray(stylePresetKeysRaw)
@@ -274,11 +297,18 @@ function extractInputsForDisplay(row: Row) {
       ? payload.settings.minaVisionEnabled
       : typeof payload?.inputs?.minaVisionEnabled === "boolean"
       ? payload.inputs.minaVisionEnabled
-      : typeof vars?.minaVisionEnabled === "boolean"
-      ? vars.minaVisionEnabled
+      : typeof varsHistory?.vision_intelligence === "boolean"
+      ? varsHistory.vision_intelligence
+      : typeof varsHistory?.visionIntelligence === "boolean"
+      ? varsHistory.visionIntelligence
       : undefined;
 
+  // ✅ assets (product/logo/style) – use vars.assets FIRST (your real storage)
   const productImageUrl =
+    varsAssets?.product_image_url ||
+    varsAssets?.productImageUrl ||
+    varsInputs?.product_image_url ||
+    varsInputs?.productImageUrl ||
     meta?.productImageUrl ||
     payload?.assets?.productImageUrl ||
     payload?.assets?.product_image_url ||
@@ -288,6 +318,10 @@ function extractInputsForDisplay(row: Row) {
     "";
 
   const logoImageUrl =
+    varsAssets?.logo_image_url ||
+    varsAssets?.logoImageUrl ||
+    varsInputs?.logo_image_url ||
+    varsInputs?.logoImageUrl ||
     meta?.logoImageUrl ||
     payload?.assets?.logoImageUrl ||
     payload?.assets?.logo_image_url ||
@@ -297,6 +331,12 @@ function extractInputsForDisplay(row: Row) {
     "";
 
   const styleImageUrls =
+    varsAssets?.style_image_urls ||
+    varsAssets?.styleImageUrls ||
+    varsAssets?.inspiration_image_urls ||
+    varsAssets?.inspirationImageUrls ||
+    varsInputs?.style_image_urls ||
+    varsInputs?.styleImageUrls ||
     meta?.styleImageUrls ||
     payload?.assets?.styleImageUrls ||
     payload?.assets?.style_image_urls ||
@@ -305,10 +345,41 @@ function extractInputsForDisplay(row: Row) {
     vars?.style_image_urls ||
     [];
 
-  const styleImages: string[] = Array.isArray(styleImageUrls) ? styleImageUrls.map(String).filter((u) => u.startsWith("http")) : [];
+  const styleImages: string[] = Array.isArray(styleImageUrls)
+    ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
+    : [];
 
-  const tone = String(meta?.tone || payload?.inputs?.tone || payload?.tone || vars?.tone || "").trim();
-  const platform = String(meta?.platform || payload?.inputs?.platform || payload?.platform || vars?.platform || "").trim();
+  // ✅ motion start/end images (useful when re-creating a VIDEO generation)
+  const startImageUrl =
+    String(
+      varsAssets?.start_image_url ||
+        varsAssets?.startImageUrl ||
+        varsInputs?.start_image_url ||
+        varsInputs?.startImageUrl ||
+        ""
+    ).trim() || "";
+
+  const endImageUrl =
+    String(
+      varsAssets?.end_image_url ||
+        varsAssets?.endImageUrl ||
+        varsInputs?.end_image_url ||
+        varsInputs?.endImageUrl ||
+        ""
+    ).trim() || "";
+
+  const tone = String(
+    meta?.tone || payload?.inputs?.tone || payload?.tone || varsInputs?.tone || varsMeta?.tone || vars?.tone || ""
+  ).trim();
+  const platform = String(
+    meta?.platform ||
+      payload?.inputs?.platform ||
+      payload?.platform ||
+      varsInputs?.platform ||
+      varsMeta?.platform ||
+      vars?.platform ||
+      ""
+  ).trim();
 
   return {
     brief,
@@ -318,6 +389,8 @@ function extractInputsForDisplay(row: Row) {
     productImageUrl: String(productImageUrl || "").trim(),
     logoImageUrl: String(logoImageUrl || "").trim(),
     styleImageUrls: styleImages,
+    startImageUrl,
+    endImageUrl,
     tone,
     platform,
   };
@@ -601,6 +674,10 @@ export default function Profile({
                 productImageUrl: inputs.productImageUrl || undefined,
                 logoImageUrl: inputs.logoImageUrl || undefined,
                 styleImageUrls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
+
+                // ✅ if this item is already a motion/video generation, preserve its original start/end
+                ...(isMotion && inputs.startImageUrl ? { kling_start_image_url: inputs.startImageUrl } : {}),
+                ...(isMotion && inputs.endImageUrl ? { kling_end_image_url: inputs.endImageUrl } : {}),
               },
             }
           : null;
