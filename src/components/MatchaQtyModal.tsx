@@ -16,9 +16,8 @@ type Props = {
   open: boolean;
 
   /**
-   * IMPORTANT: qty here is Shopify "quantity" (SKU units).
-   * Example:
-   * - If your product is "50 Matchas" and user selects 100 credits → qty=2
+   * qty here is Shopify "quantity" (SKU units).
+   * MINA-50 pack: qty=2 means 2x SKU → 100 Matchas credited.
    */
   qty: number;
   setQty: (n: number) => void;
@@ -26,37 +25,27 @@ type Props = {
   onClose: () => void;
   onConfirm: (qty: number) => void;
 
-  /**
-   * Text
-   */
-  title?: string;          // big title (default: Airpots of Matcha Lattes)
-  subtitle?: string;       // line under title
-  rulesLine?: string;      // small rules text
+  // Text
+  title?: string;
+  subtitle?: string;
+  rulesLine?: string;
 
-  /**
-   * Pricing model (for labels only)
-   * If your Shopify product is "50 Matchas for £15", keep defaults.
-   */
-  baseCredits?: number;    // credits per SKU unit
-  basePrice?: number;      // price per SKU unit
-  currencySymbol?: string; // "£" by default
+  // Labels only
+  baseCredits?: number;    // credits per SKU unit (MINA-50 => 50)
+  basePrice?: number;      // price per SKU unit (MINA-50 => 15)
+  currencySymbol?: string;
 
-  /**
-   * Selection model
-   * min/max are for SKU units (Shopify quantity).
-   */
+  // Selection bounds for SKU units
   min?: number;
   max?: number;
 
-  /**
-   * Packs shown on the scale (SKU units).
-   * Defaults to: 1,2,4,10,20,40,100 (50..5000 credits if baseCredits=50)
-   */
+  // Scale packs (SKU units)
   packs?: Pack[];
 
-  /**
-   * Price transparency breakdown (hidden until clicked)
-   */
+  // Default selection when opening (YOU want 2x MINA-50)
+  defaultUnitsOnOpen?: number;
+
+  // Price transparency (hidden until clicked)
   transparencyTitle?: string;
   transparencyLine?: string;
 };
@@ -88,12 +77,12 @@ const MatchaQtyModal: React.FC<Props> = ({
   onClose,
   onConfirm,
 
-  // Design defaults to your 2nd screenshot look
+  // Design defaults (your structured screenshot)
   title = "Airpots of Matcha Lattes",
   subtitle = "Mina uses matchas to create and animate your stills.",
   rulesLine = `One still = 1 Matcha ,  One animation = 5 Matchas ,  10 “Type for me” = 1 Matcha.`,
 
-  // Label defaults: 50 credits per SKU unit, £15 per SKU unit
+  // MINA-50 defaults
   baseCredits = 50,
   basePrice = 15,
   currencySymbol = "£",
@@ -102,6 +91,9 @@ const MatchaQtyModal: React.FC<Props> = ({
   max = 100,
 
   packs,
+
+  // ✅ DEFAULT 2x MINA-50
+  defaultUnitsOnOpen = 2,
 
   transparencyTitle = "Price Transparency",
   transparencyLine = "Cost £8 • New features £3 • Marketing & Branding £3 • Profit £1",
@@ -124,7 +116,6 @@ const MatchaQtyModal: React.FC<Props> = ({
       .map((p) => ({ ...p, units: clampInt(p.units, min, max) }))
       .filter((p) => p.units >= min && p.units <= max);
 
-    // de-dupe by units
     const seen = new Set<number>();
     const out: Pack[] = [];
     for (const p of src) {
@@ -132,20 +123,27 @@ const MatchaQtyModal: React.FC<Props> = ({
       seen.add(p.units);
       out.push(p);
     }
-
-    // sort ascending
     out.sort((a, b) => a.units - b.units);
     return out;
   }, [packs, min, max]);
 
   const allowedUnits = useMemo(() => packList.map((p) => p.units), [packList]);
 
-  // Make sure selection always lands on one of the visible packs
+  // ✅ On open: if qty is 1 (or invalid / not on scale), jump to defaultUnitsOnOpen (2x MINA-50)
   useEffect(() => {
     if (!open) return;
-    const current = clampInt(qty, min, max);
-    const target = nearest(current, allowedUnits.length ? allowedUnits : [min]);
-    if (target !== current) setQty(target);
+
+    const safeNow = clampInt(qty, min, max);
+    const isAllowed = allowedUnits.length ? allowedUnits.includes(safeNow) : true;
+
+    const desired = clampInt(defaultUnitsOnOpen, min, max);
+    const snappedDesired = allowedUnits.length ? nearest(desired, allowedUnits) : desired;
+
+    // "default" rule:
+    // - if the current selection is min (usually 1), OR not allowed, force default (2)
+    if (safeNow === min || !isAllowed) {
+      if (snappedDesired !== safeNow) setQty(snappedDesired);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -166,7 +164,6 @@ const MatchaQtyModal: React.FC<Props> = ({
     };
   }, [open, onClose, onConfirm, qty, min, max]);
 
-  // reset transparency each time you open (clean UX)
   useEffect(() => {
     if (open) setShowTransparency(false);
   }, [open]);
@@ -177,8 +174,8 @@ const MatchaQtyModal: React.FC<Props> = ({
 
   const isPackDisabled = (p: Pack) => !!p.disabled || p.units < min || p.units > max;
 
-  const creditsFor = (p: Pack) => (p.creditsLabel ?? p.units * baseCredits);
-  const priceFor = (p: Pack) => (p.priceLabel ?? p.units * basePrice);
+  const creditsFor = (p: Pack) => p.creditsLabel ?? p.units * baseCredits;
+  const priceFor = (p: Pack) => p.priceLabel ?? p.units * basePrice;
 
   return (
     <div className="mina-modal-backdrop" onClick={onClose}>
@@ -190,7 +187,6 @@ const MatchaQtyModal: React.FC<Props> = ({
         ref={panelRef}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header (keep your modal system, but styled by .mina-matcha-*) */}
         <div className="mina-modal-header mina-matcha-header">
           <div className="mina-matcha-header-left">Get more Matcha</div>
           <button type="button" className="mina-modal-close" onClick={onClose}>
@@ -203,7 +199,6 @@ const MatchaQtyModal: React.FC<Props> = ({
           <div className="mina-matcha-subtitle">{subtitle}</div>
           <div className="mina-matcha-rules">{rulesLine}</div>
 
-          {/* Scale */}
           <div className="mina-matcha-scale" role="group" aria-label="Choose pack">
             <div className="mina-matcha-line" aria-hidden="true" />
             <div className="mina-matcha-grid">
@@ -237,7 +232,6 @@ const MatchaQtyModal: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* Footer */}
         <div className="mina-modal-footer mina-matcha-footer">
           <div className="mina-matcha-transparency">
             <button
