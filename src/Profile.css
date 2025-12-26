@@ -623,3 +623,35 @@
   min-width: 120px;
   justify-content: flex-end;
 }
+
+/* =============================================================
+   HARD KILL: any fade/gradient in the expanded prompt area
+   (append-only)
+   ============================================================= */
+
+.profile-card-promptline,
+.profile-card-prompt,
+.profile-card-prompt.expanded,
+.profile-card-details,
+.profile-card-actions {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+
+/* kill any overlay pseudo-elements on ANY of these containers */
+.profile-card-promptline::before,
+.profile-card-promptline::after,
+.profile-card-prompt::before,
+.profile-card-prompt::after,
+.profile-card-details::before,
+.profile-card-details::after,
+.profile-card-actions::before,
+.profile-card-actions::after {
+  content: none !important;
+  display: none !important;
+}
+
