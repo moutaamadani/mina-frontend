@@ -39,12 +39,11 @@ const API_BASE_URL = (() => {
       (import.meta as any).env?.VITE_API_BASE_URL ||
       (import.meta as any).env?.VITE_BACKEND_URL
   );
-  if (envBase) return envBase;
 
-  if (typeof window !== "undefined") {
-    if (window.location.origin.includes("localhost")) return "http://localhost:3000";
-    return `${window.location.origin}/api`;
-  }
+  // ✅ Render-only: prefer env var, otherwise hard-fallback to Render API
+  return envBase || "https://mina-editorial-ai-api.onrender.com";
+})();
+
 
   // SSR/dev final fallback
   return "https://mina-editorial-ai-api.onrender.com";
