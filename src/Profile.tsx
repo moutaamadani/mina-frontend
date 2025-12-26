@@ -8,6 +8,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./Profile.css";
 import TopLoadingBar from "./components/TopLoadingBar";
+import MatchaQtyModal from "./components/MatchaQtyModal";
+
 
 type Row = Record<string, any>;
 
@@ -353,6 +355,7 @@ type ProfileProps = {
 
   onBackToStudio?: () => void;
   onLogout?: () => void;
+  matchaUrl?: string;
 
   // keep prop for compatibility, but UI no longer shows Refresh
   onRefresh?: () => void;
@@ -373,7 +376,9 @@ export default function Profile({
   onLogout,
   onDelete,
   onRecreate,
+  matchaUrl = "https://www.faltastudio.com/cart/43328351928403:1",
 }: ProfileProps) {
+
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
   const [removedIds, setRemovedIds] = useState<Record<string, boolean>>({});
@@ -411,6 +416,52 @@ export default function Profile({
     setLightbox({ url, isMotion });
   };
   const closeLightbox = () => setLightbox(null);
+  // ============================================================
+  // Matcha quantity popup (same as StudioLeft)
+  // ============================================================
+  const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
+  const [matchaQty, setMatchaQty] = useState(1);
+
+  const clampQty = (n: number) => Math.max(1, Math.min(10, Math.floor(Number(n || 1))));
+
+  const buildMatchaCheckoutUrl = (base: string, qty: number) => {
+    const q = clampQty(qty);
+
+    try {
+      const u = new URL(String(base || ""));
+
+      // 1) cart permalink: /cart/123:1  -> /cart/123:q
+      const m = u.pathname.match(/\/cart\/(\d+)(?::(\d+))?/);
+      if (m?.[1]) {
+        const id = m[1];
+        u.pathname = `/cart/${id}:${q}`;
+        return u.toString();
+      }
+
+      // 2) cart/add form
+      if (u.pathname.includes("/cart/add")) {
+        u.searchParams.set("quantity", String(q));
+        return u.toString();
+      }
+
+      // 3) fallback: add quantity param (may or may not be used)
+      u.searchParams.set("quantity", String(q));
+      return u.toString();
+    } catch {
+      return String(base || "");
+    }
+  };
+
+  const openMatchaQty = () => {
+    setMatchaQty(1);
+    setMatchaQtyOpen(true);
+  };
+
+  const confirmMatchaQty = (qty: number) => {
+    const url = buildMatchaCheckoutUrl(matchaUrl, qty);
+    setMatchaQtyOpen(false);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   useEffect(() => {
     if (!lightbox) return;
@@ -754,6 +805,16 @@ export default function Profile({
   return (
     <>
       <TopLoadingBar active={loading} />
+      <MatchaQtyModal
+        open={matchaQtyOpen}
+        qty={matchaQty}
+        setQty={(n) => setMatchaQty(clampQty(n))}
+        onClose={() => setMatchaQtyOpen(false)}
+        onConfirm={(q) => confirmMatchaQty(q)}
+        title="Get more Matcha"
+        min={1}
+        max={10}
+      />
 
       {lightbox ? (
         <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
@@ -783,14 +844,9 @@ export default function Profile({
               )}
 
               <span className="profile-topsep">|</span>
-              <a
-                className="profile-toplink"
-                href="https://www.faltastudio.com/checkouts/cn/hWN6ZMJyJf9Xoe5NY4oPf4OQ/en-ae?_r=AQABkH10Ox_45MzEaFr8pfWPV5uVKtznFCRMT06qdZv_KKw"
-                target="_blank"
-                rel="noreferrer"
-              >
+              <button className="profile-toplink" type="button" onClick={openMatchaQty}>
                 Get more Matchas
-              </a>
+              </button>
             </div>
           </div>
 
