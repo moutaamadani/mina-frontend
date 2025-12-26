@@ -344,6 +344,7 @@
 
 .mina-matcha-subtitle {
   margin-top: 6px;
+  padding:6px 6px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -351,6 +352,8 @@
 
 .mina-matcha-rules {
   margin-top: 10px;
+  padding:6px 6px;
+
   font-size: 10px;
   font-weight: 600;
   opacity: 0.65;
