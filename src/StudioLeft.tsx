@@ -737,20 +737,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     </span>
   );
 
-  // -------------------------
+   // -------------------------
   // Create CTA state machine
   // -------------------------
-  const hasMotionHandler = typeof props.onCreateMotion === "function";
+  type CreateState = "creating" | "uploading" | "need_frame" | "describe_more" | "ready";
 
-  const imageCreateState: "creating" | "uploading" | "describe_more" | "ready" = stillGenerating
-    ? "creating"
-    : uploadsPending
-    ? "uploading"
-    : !imageCreditsOk
-    ? "describe_more"
-    : briefLen < 20
-    ? "describe_more"
-    : "ready";
+  const hasMotionHandler = typeof props.onCreateMotion === "function";
 
   const motionSuggesting = !!props.motionSuggesting;
   const motionHasImage = !!props.motionHasImage;
@@ -760,16 +752,36 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const typeForMeLabel = motionSuggesting ? "Typing…" : "Type for me";
 
-  const motionCreateState: "creating" | "describe_more" | "ready" = motionGenerating
+  // STILL CTA
+  const imageCreateState: CreateState = stillGenerating
+    ? "creating"
+    : uploadsPending
+    ? "uploading"
+    : !imageCreditsOk
+    ? "describe_more"
+    : briefLen < 20
+    ? "describe_more"
+    : "ready";
+
+  // MOTION CTA (✅ prioritize frames first)
+  const motionCreateState: CreateState = motionGenerating
     ? "creating"
     : motionSuggesting
     ? "creating"
-    : canCreateMotion && motionCreditsOk
+    : uploadsPending
+    ? "uploading"
+    : !motionHasImage
+    ? "need_frame"
+    : !motionCreditsOk
+    ? "describe_more"
+    : canCreateMotion
     ? "ready"
     : "describe_more";
 
-  const createState = isMotion ? motionCreateState : imageCreateState;
+  const createState: CreateState = isMotion ? motionCreateState : imageCreateState;
   const canCreateStill = imageCreateState === "ready";
+
+  const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
 
   const createLabel =
     createState === "creating"
@@ -780,32 +792,43 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         : "Creating…"
       : createState === "uploading"
       ? "Uploading…"
+      : createState === "need_frame"
+      ? "Add frame"
       : createState === "describe_more"
-      ? (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk)
+      ? wantsMatcha
         ? "I need Matcha"
         : "Describe more"
       : isMotion
       ? "Animate"
       : "Create";
 
-  const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
+  const createDisabled = (() => {
+    if (createState === "creating" || createState === "uploading") return true;
 
-  const createDisabled =
-    createState === "creating" ||
-    createState === "uploading" ||
-    (createState === "describe_more"
-      ? wantsMatcha
-        ? false
-        : isMotion
-        ? !hasMotionHandler || motionSuggesting || !motionCreditsOk || !motionHasImage || !canCreateMotion
-        : !canCreateStill
-      : (isMotion && (!hasMotionHandler || motionSuggesting || !motionCreditsOk)) ||
-        (!isMotion && (!canCreateStill || !imageCreditsOk)));
+    // ✅ if no frames, keep enabled so click opens picker
+    if (createState === "need_frame") return false;
 
-   const handleCreateClick = () => {
+    // "Describe more" should be clickable (focus input / open matcha)
+    if (createState === "describe_more") return false;
+
+    // READY
+    if (isMotion) {
+      return !hasMotionHandler || motionSuggesting || !motionCreditsOk || !motionHasImage || !canCreateMotion;
+    }
+    return !canCreateStill || !imageCreditsOk;
+  })();
+
+  const handleCreateClick = () => {
     if (createState === "ready") {
       if (isMotion) onCreateMotion?.();
       else onCreateStill();
+      return;
+    }
+
+    if (createState === "need_frame") {
+      // ✅ Open frames + trigger file picker
+      openPanel("product");
+      triggerPick("product");
       return;
     }
 
