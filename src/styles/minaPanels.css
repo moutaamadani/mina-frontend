@@ -336,7 +336,7 @@
 
 /* body */
 .mina-matcha-body {
-  padding: 4px 8px 6px;
+  padding: 4px 0px;
 }
 
 /* If any old markup still renders a body title, hide it */
