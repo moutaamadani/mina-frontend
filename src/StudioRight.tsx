@@ -20,6 +20,10 @@ type StudioRightProps = {
 
   sending?: boolean;
   error?: string | null;
+
+  // ✅ NEW: credit gate for tweak
+  tweakCreditsOk?: boolean;
+  tweakBlockReason?: string | null;
 };
 
 export default function StudioRight(props: StudioRightProps) {
@@ -34,6 +38,8 @@ export default function StudioRight(props: StudioRightProps) {
     onSendTweak,
     sending,
     error,
+    tweakCreditsOk,
+    tweakBlockReason,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -81,7 +87,13 @@ export default function StudioRight(props: StudioRightProps) {
   };
 
   const trimmed = (tweakText || "").trim();
-  const canSend = !isEmpty && !!trimmed && !sending;
+
+  // ✅ credit gate (default = allowed)
+  const creditsOk = tweakCreditsOk !== false;
+  const blockMsg = (tweakBlockReason || "Get more matchas to tweak.").trim();
+
+  // ✅ canSend now includes creditsOk
+  const canSend = !isEmpty && !!trimmed && !sending && creditsOk;
 
   const sendNow = () => {
     if (!canSend) return;
@@ -158,17 +170,26 @@ export default function StudioRight(props: StudioRightProps) {
             placeholder="Remove background, mute colors, change, replace or add anything"
             value={tweakText}
             onChange={(e) => setTweakText(e.target.value)}
-            disabled={!!sending}
+            disabled={!!sending || !creditsOk}  // ✅ disable if no matcha
             onKeyDown={(e) => {
               if (e.key === "Enter" && canSend) sendNow();
             }}
           />
 
           <div className="studio-feedback-actions">
-            <button type="button" className="studio-action-btn" onClick={sendNow} disabled={!canSend}>
+            <button
+              type="button"
+              className="studio-action-btn"
+              onClick={sendNow}
+              disabled={!canSend} // ✅ includes no-matcha case
+              title={!creditsOk ? blockMsg : undefined}
+            >
               {sending ? "Tweaking…" : "Tweak"}
             </button>
           </div>
+
+          {/* ✅ show credit block reason using your existing error line */}
+          {!creditsOk && <div className="studio-feedback-error">{blockMsg}</div>}
 
           {!!error && <div className="studio-feedback-error">{error}</div>}
         </div>
