@@ -23,7 +23,7 @@
   align-items: center;
   justify-content: center;
 
-  padding: 18px;
+  padding: 6px;
   background: rgba(8, 10, 0, 0.35);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -45,7 +45,7 @@
   background: var(--mina-paper);
   color: var(--mina-ink);
 
-  border-radius: 18px;
+  border-radius: 0px;
   border: 1px solid var(--mina-line);
   box-shadow: 0px 16px 50px var(--mina-shadow);
 
@@ -67,8 +67,8 @@
   align-items: center;
   justify-content: space-between;
 
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--mina-line);
+  padding: 4px 8px;
+  border-bottom: 0px solid var(--mina-line);
 
   font-size: 13px;
   font-weight: 700;
@@ -315,11 +315,11 @@
   display: flex;
   align-items: center;            /* better vertical alignment */
   justify-content: space-between;
-  padding: 18px 22px 6px;
+  padding: 4px 10px 2px;
 }
 
 .mina-matcha-topbar-left {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.01em;
   opacity: 1;
@@ -328,7 +328,7 @@
 .mina-matcha-close {
   border-radius: 0 !important;
   opacity: 0.85;
-  padding: 6px 8px !important;
+  padding: 0px 8px !important;
 }
 
 .mina-matcha-close:hover { opacity: 0.85; background: transparent !important; }
@@ -336,7 +336,7 @@
 
 /* body */
 .mina-matcha-body {
-  padding: 10px 22px 18px;
+  padding: 4px 8px 6px;
 }
 
 /* If any old markup still renders a body title, hide it */
