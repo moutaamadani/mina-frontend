@@ -1524,3 +1524,9 @@ padding-left: 56px;
     padding-left: 0;
   }
 }
+/* Mobile */
+@media (max-width: 768px) {
+  .studio-footer-link {
+    font-size: 11px;
+  }
+}
