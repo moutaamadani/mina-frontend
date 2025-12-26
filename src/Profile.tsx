@@ -921,10 +921,48 @@ export default function Profile({
 
                     {expanded && inputs ? (
                       <div className="profile-card-details">
+                      {it.canRecreate && it.draft ? (
                         <div className="profile-card-detailrow">
-                          <span className="k">Created</span>
-                          <span className="v">{it.createdAt ? fmtDate(it.createdAt) : "—"}</span>
+                          <span className="k">
+                            <button
+                              type="button"
+                              className="profile-card-recreate"
+                              onClick={() => {
+                                onRecreate?.(it.draft!);
+                                onBackToStudio?.();
+                              }}
+                            >
+                              Re-create
+                            </button>
+                          </span>
+                      
+                          <span className="v">
+                            {canAnimate ? (
+                              <button
+                                type="button"
+                                className="profile-card-animate"
+                                onClick={() => {
+                                  const motionDraft: RecreateDraft = {
+                                    ...it.draft!,
+                                    mode: "motion",
+                                    assets: {
+                                      ...it.draft!.assets,
+                                      kling_start_image_url: it.url,
+                                    },
+                                  };
+                                  onRecreate?.(motionDraft);
+                                  onBackToStudio?.();
+                                }}
+                              >
+                                Animate
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </span>
                         </div>
+                      ) : null}
+
 
                         {inputs.aspectRatio ? (
                           <div className="profile-card-detailrow">
