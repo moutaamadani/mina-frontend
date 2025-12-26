@@ -1,11 +1,15 @@
 // =============================================================
 // FILE: src/Profile.tsx
 // Mina — Profile (Render-only, data comes from MinaApp)
-// - show real user prompt
-// - confirm delete + fade out
-// - better download
-// - Re-create (left) + Animate (right)
-// - Get more Matchas opens qty popup (same as StudioLeft)
+//
+// What this version does (per your requirements):
+// 1) Card text shows ONLY what the USER typed (create/tweak/animate).
+// 2) "Re-create" appears for ALL generations (still/motion, create/tweak).
+//    - It copies all inputs: images + styles + settings + the user text.
+// 3) "Animate" appears ONLY for still IMAGE results (create OR tweak).
+//    - It uses the OUTPUT image url as first frame (kling_start_image_url)
+//    - Motion text area is EMPTY (brief: "")
+// 4) "More" shows details; includes Mina prompt used (clean_prompt/motion_prompt)
 // =============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -180,7 +184,7 @@ function findLikeUrl(row: Row) {
 
 type RecreateDraft = {
   mode: "still" | "motion";
-  brief: string;
+  brief: string; // IMPORTANT: for still => user typed; for motion => user typed (or empty if Animate button)
   settings: {
     aspect_ratio?: string;
     minaVisionEnabled?: boolean;
@@ -190,9 +194,15 @@ type RecreateDraft = {
     productImageUrl?: string;
     logoImageUrl?: string;
     styleImageUrls?: string[];
+
+    // motion frames
     kling_start_image_url?: string;
     kling_end_image_url?: string;
   };
+
+  // optional metadata (harmless extra fields if MinaApp wants them)
+  source_generation_id?: string;
+  result_url?: string;
 };
 
 function looksLikeSystemPrompt(s: string) {
@@ -205,7 +215,82 @@ function looksLikeSystemPrompt(s: string) {
   return false;
 }
 
-function extractInputsForDisplay(row: Row) {
+/**
+ * Extract what the USER typed (the thing you want to show on the card).
+ * - still create/tweak: feedback.still_feedback first, then inputs.brief
+ * - motion animate/tweak: feedback.motion_feedback first, then inputs.motion_user_brief
+ */
+function extractUserTypedText(args: {
+  row: Row;
+  payload: any;
+  meta: any;
+  vars: any;
+  isMotionResult: boolean;
+}): string {
+  const { row, payload, meta, vars, isMotionResult } = args;
+
+  const varsInputs = vars && typeof vars === "object" ? (vars as any).inputs : null;
+  const varsFeedback = vars && typeof vars === "object" ? (vars as any).feedback : null;
+
+  const stillFeedback = String(
+    pick(varsFeedback, ["still_feedback", "stillFeedback", "feedback", "still"], "") ||
+      pick(payload?.feedback, ["still_feedback", "stillFeedback"], "") ||
+      ""
+  ).trim();
+
+  const motionFeedback = String(
+    pick(varsFeedback, ["motion_feedback", "motionFeedback", "motion"], "") ||
+      pick(payload?.feedback, ["motion_feedback", "motionFeedback"], "") ||
+      ""
+  ).trim();
+
+  const stillBrief = String(
+    pick(varsInputs, ["brief", "userBrief", "user_brief"], "") ||
+      pick(payload?.inputs, ["brief", "userBrief", "user_brief", "userPrompt", "user_prompt"], "") ||
+      pick(payload, ["user_brief", "userBrief", "brief", "userPrompt", "user_prompt"], "") ||
+      pick(meta, ["userBrief", "user_brief", "brief", "userPrompt", "user_prompt"], "") ||
+      pick(row, ["mg_user_prompt", "mg_user_message", "userPrompt", "user_prompt", "brief", "mg_brief"], "") ||
+      ""
+  ).trim();
+
+  const motionBrief = String(
+    pick(varsInputs, ["motion_user_brief", "motionUserBrief"], "") ||
+      pick(payload?.inputs, ["motion_user_brief", "motionUserBrief"], "") ||
+      pick(payload, ["motion_user_brief", "motionUserBrief"], "") ||
+      pick(row, ["mg_motion_user_brief"], "") ||
+      ""
+  ).trim();
+
+  // If it's a motion RESULT => user typed text is motion_feedback or motion_user_brief
+  if (isMotionResult) {
+    const out = (motionFeedback || motionBrief || "").trim();
+    return out;
+  }
+
+  // If it's a still RESULT => user typed text is still_feedback or inputs.brief
+  const out = (stillFeedback || stillBrief || "").trim();
+  return out;
+}
+
+/**
+ * Extract the "Mina prompt used" (clean_prompt / motion_prompt / mg_prompt).
+ * This is NOT what we display on the card, but nice to show inside "more".
+ */
+function extractUsedPrompt(args: { row: Row; vars: any; isMotionResult: boolean }): string {
+  const { row, vars, isMotionResult } = args;
+  const varsPrompts = vars && typeof vars === "object" ? (vars as any).prompts : null;
+
+  const fromVars = String(
+    isMotionResult ? pick(varsPrompts, ["motion_prompt", "motionPrompt"], "") : pick(varsPrompts, ["clean_prompt", "cleanPrompt"], "")
+  ).trim();
+
+  const rawFallback = safeString(pick(row, ["mg_prompt", "prompt"], ""), "").trim();
+  const fallbackPrompt = rawFallback && !looksLikeSystemPrompt(rawFallback) ? rawFallback : "";
+
+  return (fromVars || fallbackPrompt || "").trim();
+}
+
+function extractInputsForDisplay(row: Row, isMotionResult: boolean) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
   const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
   const varsRaw =
@@ -219,34 +304,13 @@ function extractInputsForDisplay(row: Row) {
   const meta = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
   const vars = tryParseJson<any>(varsRaw) ?? varsRaw ?? null;
 
-  // ✅ mg_mma_vars is structured like: { meta, assets, inputs, history, prompts, ... }
   const varsAssets = vars && typeof vars === "object" ? (vars as any).assets : null;
   const varsInputs = vars && typeof vars === "object" ? (vars as any).inputs : null;
   const varsHistory = vars && typeof vars === "object" ? (vars as any).history : null;
   const varsMeta = vars && typeof vars === "object" ? (vars as any).meta : null;
-  const varsPrompts = vars && typeof vars === "object" ? (vars as any).prompts : null;
 
-  const briefCandidates: string[] = [
-    pick(row, ["mg_user_prompt", "mg_user_message", "userPrompt", "user_prompt", "promptUser", "brief", "mg_brief"], ""),
-    pick(payload, ["userPrompt", "user_prompt", "userMessage", "user_message", "brief"], ""),
-    pick(payload?.inputs, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
-    pick(payload?.settings, ["brief"], ""),
-    pick(meta, ["userPrompt", "user_prompt", "userMessage", "brief"], ""),
-
-    // ✅ from mg_mma_vars.inputs / prompts (your real data)
-    pick(varsInputs, ["brief", "userBrief", "user_brief", "motion_user_brief"], ""),
-    pick(varsPrompts, ["motion_prompt", "clean_prompt"], ""),
-
-    // legacy/flat fallbacks
-    pick(vars, ["brief", "user_prompt", "userPrompt", "prompt", "userMessage"], ""),
-  ]
-    .map((s) => String(s || "").trim())
-    .filter(Boolean);
-
-  const rawFallback = safeString(pick(row, ["mg_prompt", "prompt"], ""), "").trim();
-  const fallbackPrompt = rawFallback && !looksLikeSystemPrompt(rawFallback) ? rawFallback : "";
-
-  const brief = (briefCandidates[0] || fallbackPrompt || "").trim();
+  const userText = extractUserTypedText({ row, payload, meta, vars, isMotionResult });
+  const usedPrompt = extractUsedPrompt({ row, vars, isMotionResult });
 
   const aspect =
     normalizeAspectRatio(
@@ -303,7 +367,7 @@ function extractInputsForDisplay(row: Row) {
       ? varsHistory.visionIntelligence
       : undefined;
 
-  // ✅ assets (product/logo/style) – use vars.assets FIRST (your real storage)
+  // assets (product/logo/style) – vars.assets FIRST
   const productImageUrl =
     varsAssets?.product_image_url ||
     varsAssets?.productImageUrl ||
@@ -349,7 +413,7 @@ function extractInputsForDisplay(row: Row) {
     ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
     : [];
 
-  // ✅ motion start/end images (useful when re-creating a VIDEO generation)
+  // motion start/end images
   const startImageUrl =
     String(
       varsAssets?.start_image_url ||
@@ -382,15 +446,20 @@ function extractInputsForDisplay(row: Row) {
   ).trim();
 
   return {
-    brief,
+    userText,
+    usedPrompt,
+
     aspectRatio: aspect,
     stylePresetKeys,
     minaVisionEnabled,
+
     productImageUrl: String(productImageUrl || "").trim(),
     logoImageUrl: String(logoImageUrl || "").trim(),
     styleImageUrls: styleImages,
+
     startImageUrl,
     endImageUrl,
+
     tone,
     platform,
   };
@@ -410,10 +479,7 @@ type ProfileProps = {
   onBackToStudio?: () => void;
   onLogout?: () => void;
 
-  // ✅ for Matcha popup (same URL you pass to StudioLeft)
   matchaUrl?: string;
-
-  // keep prop for compatibility, but UI no longer shows Refresh
   onRefresh?: () => void;
 
   onDelete?: (id: string) => Promise<void> | void;
@@ -651,20 +717,29 @@ export default function Profile({
         const aspectRatio =
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
-            typeof payload?.aspect_ratio === "string" ? payload.aspect_ratio : typeof payload?.aspectRatio === "string" ? payload.aspectRatio : ""
+            typeof payload?.aspect_ratio === "string"
+              ? payload.aspect_ratio
+              : typeof payload?.aspectRatio === "string"
+              ? payload.aspectRatio
+              : ""
           );
 
-        const liked = (generationId && likedGenIdSet.has(generationId)) || (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
+        const liked =
+          (generationId && likedGenIdSet.has(generationId)) || (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
 
-        const inputs = extractInputsForDisplay(g);
-        const prompt = (inputs.brief || "").trim();
+        // Extract inputs (now includes: userText + usedPrompt)
+        const inputs = extractInputsForDisplay(g, isMotion);
 
-        const canRecreate = source === "generation" && !!onRecreate && !!prompt;
+        // What we show on the card = USER typed text only
+        const userText = (inputs.userText || "").trim();
+
+        // Re-create should be available for ALL generations if handler exists
+        const canRecreate = source === "generation" && !!onRecreate;
 
         const draft: RecreateDraft | null = canRecreate
           ? {
               mode: isMotion ? "motion" : "still",
-              brief: prompt,
+              brief: userText, // user typed text for this generation type
               settings: {
                 aspect_ratio: inputs.aspectRatio || undefined,
                 minaVisionEnabled: inputs.minaVisionEnabled,
@@ -675,17 +750,19 @@ export default function Profile({
                 logoImageUrl: inputs.logoImageUrl || undefined,
                 styleImageUrls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
 
-                // ✅ if this item is already a motion/video generation, preserve its original start/end
                 ...(isMotion && inputs.startImageUrl ? { kling_start_image_url: inputs.startImageUrl } : {}),
                 ...(isMotion && inputs.endImageUrl ? { kling_end_image_url: inputs.endImageUrl } : {}),
               },
+              source_generation_id: generationId || id,
+              result_url: url || undefined,
             }
           : null;
 
         return {
           id,
           createdAt,
-          prompt,
+          userText,
+          usedPrompt: (inputs.usedPrompt || "").trim(),
           url,
           liked,
           isMotion,
@@ -717,6 +794,11 @@ export default function Profile({
       const next = { ...preferred };
       if (other.liked && !next.liked) next.liked = true;
       if (!next.aspectRatio && other.aspectRatio) next.aspectRatio = other.aspectRatio;
+
+      // Prefer non-empty userText if one is empty
+      if (!next.userText && other.userText) next.userText = other.userText;
+      // Prefer non-empty usedPrompt if one is empty
+      if (!next.usedPrompt && other.usedPrompt) next.usedPrompt = other.usedPrompt;
 
       merged.set(key, next);
     }
@@ -782,22 +864,33 @@ export default function Profile({
       });
     };
 
-      const playMostVisible = () => {
-          els.forEach((v) => {
-            const ratio = visible.get(v) ?? 0;
-            const shouldPlay = ratio >= 0.35;
-        
-            try {
-              v.muted = true;
-              if (shouldPlay) {
-                if (v.paused) v.play().catch(() => {});
-              } else {
-                if (!v.paused) v.pause();
-              }
-            } catch {}
-          });
-        };
+    const playMostVisible = () => {
+      let best: HTMLVideoElement | null = null;
+      let bestRatio = 0;
 
+      visible.forEach((ratio, v) => {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          best = v;
+        }
+      });
+
+      els.forEach((v) => {
+        const shouldPlay = best === v;
+        try {
+          v.muted = true;
+          if (shouldPlay) {
+            v.muted = true;
+            const p = v.play();
+            if (p && typeof p.catch === "function") {
+              p.catch(() => {});
+            }
+          } else {
+            if (!v.paused) v.pause();
+          }
+        } catch {}
+      });
+    };
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -851,7 +944,11 @@ export default function Profile({
       {lightbox ? (
         <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
           <div className="profile-lightbox-media">
-            {lightbox.isMotion ? <video src={lightbox.url} autoPlay loop muted playsInline /> : <img src={lightbox.url} alt="" loading="lazy" />}
+            {lightbox.isMotion ? (
+              <video src={lightbox.url} autoPlay loop muted playsInline />
+            ) : (
+              <img src={lightbox.url} alt="" loading="lazy" />
+            )}
           </div>
         </div>
       ) : null}
@@ -906,20 +1003,40 @@ export default function Profile({
             <div>
               <div className="profile-archive-title">Archive</div>
               <div className="profile-archive-sub">
-                {error ? <span className="profile-error">{error}</span> : loading ? "Loading…" : items.length ? `${activeCount} creation${activeCount === 1 ? "" : "s"}` : "No creations yet."}
+                {error ? (
+                  <span className="profile-error">{error}</span>
+                ) : loading ? (
+                  "Loading…"
+                ) : items.length ? (
+                  `${activeCount} creation${activeCount === 1 ? "" : "s"}`
+                ) : (
+                  "No creations yet."
+                )}
               </div>
             </div>
 
             <div className="profile-filters">
-              <button type="button" className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`} onClick={cycleMotion}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
+                onClick={cycleMotion}
+              >
                 {motionLabel}
               </button>
 
-              <button type="button" className={`profile-filter-pill ${likedOnly ? "active" : ""}`} onClick={() => setLikedOnly((v) => !v)}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
+                onClick={() => setLikedOnly((v) => !v)}
+              >
                 Liked
               </button>
 
-              <button type="button" className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`} onClick={cycleAspectFilter}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`}
+                onClick={cycleAspectFilter}
+              >
                 {aspectFilterLabel}
               </button>
             </div>
@@ -929,7 +1046,15 @@ export default function Profile({
         <div className="profile-grid">
           {visibleItems.map((it) => {
             const expanded = Boolean(expandedPromptIds[it.id]);
-            const showViewMore = (it.prompt || "").length > 90 || it.canRecreate;
+
+            // text on card = user typed; show "more" if long OR we have actions/details
+            const showViewMore =
+              (it.userText || "").length > 90 ||
+              !!it.usedPrompt ||
+              !!it.inputs?.productImageUrl ||
+              !!it.inputs?.logoImageUrl ||
+              !!(it.inputs?.styleImageUrls || []).length ||
+              !!it.draft;
 
             const deleting = Boolean(deletingIds[it.id]);
             const removing = Boolean(removingIds[it.id]);
@@ -937,32 +1062,62 @@ export default function Profile({
             const confirming = Boolean(confirmDeleteIds[it.id]);
 
             const inputs = it.inputs || null;
+
+            // Animate only for still image results (create OR tweak) => not motion + url is image
             const canAnimate = !!it.draft && !it.isMotion && isImageUrl(it.url);
 
             return (
               <div
                 key={it.id}
-                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""} ${ghostIds[it.id] ? "is-ghost" : ""}`}
+                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${
+                  removing ? "is-removing" : ""
+                } ${ghostIds[it.id] ? "is-ghost" : ""}`}
               >
                 <div className="profile-card-top">
-                  <button className="profile-card-show" type="button" onClick={() => downloadMedia(it.url, it.id)} disabled={!it.url}>
+                  <button
+                    className="profile-card-show"
+                    type="button"
+                    onClick={() => downloadMedia(it.url, it.id)}
+                    disabled={!it.url}
+                  >
                     Download
                   </button>
 
                   <div className="profile-card-top-right">
-                    {it.liked ? <span className="profile-card-liked">Liked</span> : <span className="profile-card-liked ghost">Liked</span>}
+                    {it.liked ? (
+                      <span className="profile-card-liked">Liked</span>
+                    ) : (
+                      <span className="profile-card-liked ghost">Liked</span>
+                    )}
 
                     {confirming ? (
                       <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
-                        <button className="profile-card-confirm-yes" type="button" onClick={() => deleteItem(it.id)} disabled={deleting || !onDelete}>
+                        <button
+                          className="profile-card-confirm-yes"
+                          type="button"
+                          onClick={() => deleteItem(it.id)}
+                          disabled={deleting || !onDelete}
+                        >
                           delete
                         </button>
-                        <button className="profile-card-confirm-no" type="button" onClick={() => cancelDelete(it.id)} disabled={deleting}>
+                        <button
+                          className="profile-card-confirm-no"
+                          type="button"
+                          onClick={() => cancelDelete(it.id)}
+                          disabled={deleting}
+                        >
                           cancel
                         </button>
                       </div>
                     ) : (
-                      <button className="profile-card-delete" type="button" onClick={() => askDelete(it.id)} disabled={deleting || !onDelete} title="Delete" aria-label="Delete">
+                      <button
+                        className="profile-card-delete"
+                        type="button"
+                        onClick={() => askDelete(it.id)}
+                        disabled={deleting || !onDelete}
+                        title="Delete"
+                        aria-label="Delete"
+                      >
                         −
                       </button>
                     )}
@@ -983,15 +1138,14 @@ export default function Profile({
                   {it.url ? (
                     it.isMotion ? (
                       <video
-                      ref={(el) => registerVideoEl(it.id, el)}
-                      src={it.url}
-                      muted
-                      loop
-                      playsInline
-                      preload="auto"
-                      autoPlay
-                    />
-
+                        ref={(el) => registerVideoEl(it.id, el)}
+                        src={it.url}
+                        muted
+                        loop
+                        playsInline
+                        preload="auto"
+                        autoPlay
+                      />
                     ) : (
                       <img src={it.url} alt="" loading="lazy" />
                     )
@@ -1000,130 +1154,177 @@ export default function Profile({
                   )}
                 </div>
 
+                {/* USER TYPED TEXT + actions */}
                 <div className="profile-card-promptline">
-                <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
-                  {it.prompt || "—"}
-              
-                  {expanded && inputs ? (
-                    <div className="profile-card-details">
-                      {it.canRecreate && it.draft ? (
-                        <div className="profile-card-detailrow">
+                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
+                    {/* This is the KEY change: show user typed only */}
+                    {it.userText?.trim() ? it.userText.trim() : "—"}
+
+                    {/* Actions row: Re-create always; Animate only for still images */}
+                    {!!it.draft && !!onRecreate ? (
+                      <div className="profile-card-detailrow" style={{ marginTop: 8 }}>
+                        <button
+                          type="button"
+                          className="profile-card-show profile-card-recreate"
+                          onClick={() => {
+                            onRecreate?.(it.draft!);
+                            onBackToStudio?.();
+                          }}
+                        >
+                          Re-create
+                        </button>
+
+                        {canAnimate ? (
                           <button
                             type="button"
-                            className="profile-card-show profile-card-recreate"
+                            className="profile-card-show profile-card-animate"
                             onClick={() => {
-                              onRecreate?.(it.draft!);
+                              const motionDraft: RecreateDraft = {
+                                ...it.draft!,
+                                mode: "motion",
+                                // IMPORTANT: motion textarea should be empty
+                                brief: "",
+                                assets: {
+                                  ...it.draft!.assets,
+                                  // IMPORTANT: use OUTPUT image as first frame
+                                  kling_start_image_url: it.url,
+                                  kling_end_image_url: undefined,
+                                },
+                              };
+                              onRecreate?.(motionDraft);
                               onBackToStudio?.();
                             }}
                           >
-                            Re-create
+                            Animate
                           </button>
-                      
-                          {canAnimate ? (
-                            <button
-                              type="button"
-                              className="profile-card-show profile-card-animate"
-                              onClick={() => {
-                                const motionDraft: RecreateDraft = {
-                                  ...it.draft!,
-                                  mode: "motion",
-                                  assets: {
-                                    ...it.draft!.assets,
-                                    kling_start_image_url: it.url,
-                                  },
-                                };
-                                onRecreate?.(motionDraft);
-                                onBackToStudio?.();
-                              }}
-                            >
-                              Animate
-                            </button>
-                          ) : (
-                            <span />
-                          )}
-                        </div>
-                      ) : null}
+                        ) : (
+                          <span />
+                        )}
+                      </div>
+                    ) : null}
 
-              
-                      {inputs.aspectRatio ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Aspect</span>
-                          <span className="v">{inputs.aspectRatio}</span>
-                        </div>
-                      ) : null}
-              
-                      {typeof inputs.minaVisionEnabled === "boolean" ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Vision</span>
-                          <span className="v">{inputs.minaVisionEnabled ? "On" : "Off"}</span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.stylePresetKeys?.length ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Styles</span>
-                          <span className="v">{inputs.stylePresetKeys.join(", ")}</span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.productImageUrl ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Product</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.productImageUrl, false)}
-                            >
-                              view
-                            </button>
-                          </span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.logoImageUrl ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Logo</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.logoImageUrl, false)}
-                            >
-                              view
-                            </button>
-                          </span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.styleImageUrls?.length ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Inspo</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
-                            >
-                              view
-                            </button>
-                            {inputs.styleImageUrls.length > 1 ? (
-                              <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
-                            ) : null}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
+                    {/* Details in expanded mode */}
+                    {expanded && inputs ? (
+                      <div className="profile-card-details">
+                        {/* Show Mina prompt used (clean_prompt/motion_prompt/mg_prompt) */}
+                        {it.usedPrompt && it.usedPrompt.trim() ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Mina prompt</span>
+                            <span className="v" style={{ opacity: 0.9 }}>
+                              {it.usedPrompt}
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {inputs.aspectRatio ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Aspect</span>
+                            <span className="v">{inputs.aspectRatio}</span>
+                          </div>
+                        ) : null}
+
+                        {typeof inputs.minaVisionEnabled === "boolean" ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Vision</span>
+                            <span className="v">{inputs.minaVisionEnabled ? "On" : "Off"}</span>
+                          </div>
+                        ) : null}
+
+                        {inputs.stylePresetKeys?.length ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Styles</span>
+                            <span className="v">{inputs.stylePresetKeys.join(", ")}</span>
+                          </div>
+                        ) : null}
+
+                        {inputs.productImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Product</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.productImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {inputs.logoImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Logo</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.logoImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {inputs.styleImageUrls?.length ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Inspo</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
+                              >
+                                view
+                              </button>
+                              {inputs.styleImageUrls.length > 1 ? (
+                                <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
+                              ) : null}
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {/* If this is a motion generation, allow viewing start/end frames */}
+                        {it.isMotion && inputs.startImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Start frame</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.startImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {it.isMotion && inputs.endImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">End frame</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.endImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {showViewMore ? (
+                    <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
+                      {expanded ? "less" : "more"}
+                    </button>
                   ) : null}
                 </div>
-              
-                {showViewMore ? (
-                  <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
-                    {expanded ? "less" : "more"}
-                  </button>
-                ) : null}
-              </div>
-
               </div>
             );
           })}
