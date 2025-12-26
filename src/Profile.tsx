@@ -1019,50 +1019,11 @@ export default function Profile({
                           </div>
                         ) : null}
 
-                        {it.canRecreate && it.draft ? (
-                          <div className="profile-card-actions">
-                            <button
-                              type="button"
-                              className="profile-card-recreate"
-                              onClick={() => {
-                                onRecreate?.(it.draft!);
-                                onBackToStudio?.();
-                              }}
-                            >
-                              Re-create
-                            </button>
-
-                            {canAnimate ? (
-                              <button
-                                type="button"
-                                className="profile-card-animate"
-                                onClick={() => {
-                                  const motionDraft: RecreateDraft = {
-                                    ...it.draft!,
-                                    mode: "motion",
-                                    assets: {
-                                      ...it.draft!.assets,
-                                      kling_start_image_url: it.url,
-                                    },
-                                  };
-                                  onRecreate?.(motionDraft);
-                                  onBackToStudio?.();
-                                }}
-                              >
-                                Animate
-                              </button>
-                            ) : (
-                              <span />
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </div>
 
                   {showViewMore ? (
                     <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
-                      {expanded ? "less" : "more"}
+                      {expanded ? "less" : " more"}
                     </button>
                   ) : null}
                 </div>
