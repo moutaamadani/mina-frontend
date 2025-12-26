@@ -216,24 +216,16 @@ export default function StudioRight(props: StudioRightProps) {
                     loop
                     muted
                     controls
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/uri-list", media.url);
-                      e.dataTransfer.setData("text/plain", media.url);
-                      e.dataTransfer.effectAllowed = "copy";
-                    }}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
                   />
                 ) : (
                   <img
                     className="studio-output-media"
                     src={media?.url || ""}
                     alt=""
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData("text/uri-list", media?.url || "");
-                      e.dataTransfer.setData("text/plain", media?.url || "");
-                      e.dataTransfer.effectAllowed = "copy";
-                    }}
+                    draggable={false}
+                    onDragStart={(e) => e.preventDefault()}
                   />
                 )}
               </div>
