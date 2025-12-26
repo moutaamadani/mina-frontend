@@ -707,9 +707,13 @@ margin-bottom: 6px;
 /* ------------------------------------------
    Responsive
 ------------------------------------------ */
+/* ------------------------------------------------------------------
+   Mobile: keep enough TOP padding to clear the fixed header overlay
+   (plus iOS safe-area inset). This prevents pills being "cut".
+------------------------------------------------------------------ */
 @media (max-width: 960px) {
   .studio-left {
-    padding: 20px 20px 20px !important;
+    padding: calc(84px + env(safe-area-inset-top)) 20px 20px !important;
   }
 
   .studio-footer-links {
@@ -720,7 +724,7 @@ margin-bottom: 6px;
 
 @media (max-width: 480px) {
   .studio-left {
-    padding: 20px;
+    padding: calc(84px + env(safe-area-inset-top)) 20px 20px !important;
   }
 
   .studio-plusbox,
@@ -736,6 +740,7 @@ margin-bottom: 6px;
     line-height: 1.08;
   }
 }
+
 /* force motion style labels to a single line with ellipsis */
 .studio-motion-style-label {
   padding-top: 6px;
