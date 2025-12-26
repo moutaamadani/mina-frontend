@@ -782,35 +782,22 @@ export default function Profile({
       });
     };
 
-    const playMostVisible = () => {
-      let best: HTMLVideoElement | null = null;
-      let bestRatio = 0;
+      const playMostVisible = () => {
+          els.forEach((v) => {
+            const ratio = visible.get(v) ?? 0;
+            const shouldPlay = ratio >= 0.35;
+        
+            try {
+              v.muted = true;
+              if (shouldPlay) {
+                if (v.paused) v.play().catch(() => {});
+              } else {
+                if (!v.paused) v.pause();
+              }
+            } catch {}
+          });
+        };
 
-      visible.forEach((ratio, v) => {
-        if (ratio > bestRatio) {
-          bestRatio = ratio;
-          best = v;
-        }
-      });
-
-      els.forEach((v) => {
-        const shouldPlay = best === v;
-        try {
-          v.muted = true;
-          if (shouldPlay) {
-          v.muted = true;
-          const p = v.play();
-          if (p && typeof p.catch === "function") {
-            p.catch(() => {
-              // browser blocked autoplay, will retry later
-            });
-          }
-          } else {
-            if (!v.paused) v.pause();
-          }
-        } catch {}
-      });
-    };
 
     const observer = new IntersectionObserver(
       (entries) => {
