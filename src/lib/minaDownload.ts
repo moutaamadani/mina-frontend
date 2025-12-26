@@ -11,6 +11,35 @@ function isHttpUrl(url: string) {
   return /^https?:\/\//i.test(url || "");
 }
 
+function isSameOrigin(url: string) {
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+function getCorsDownloadHosts(): Set<string> {
+  const raw = String(import.meta.env.VITE_CORS_DOWNLOAD_HOSTS || "");
+  const hosts = raw
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(hosts);
+}
+
+function shouldAttemptCorsFetch(url: string) {
+  if (isSameOrigin(url)) return true;
+
+  try {
+    const u = new URL(url, window.location.href);
+    const allowed = getCorsDownloadHosts();
+    return allowed.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 function sanitizeForFilename(text: string, maxLen = 80) {
   const base = String(text || "")
     .trim()
@@ -55,6 +84,9 @@ export async function forceSaveUrl(url: string, filename: string) {
 
   // Attempt 1: fetch -> blob (best UX)
   try {
+    if (!shouldAttemptCorsFetch(url)) {
+      throw new Error("SKIP_CORS_FETCH");
+    }
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) throw new Error(`Download failed with ${res.status}`);
 

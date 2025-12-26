@@ -3481,75 +3481,124 @@ const styleHeroUrls = (stylePresetKeys || [])
   feedbackSending;
 
   // --------------------------------------------------------------------------
-// Header CTA contrast (Animate / Love it / Download)
-// - Makes text dark on light images, light on dark images
-// - No backgrounds (text-only)
-// --------------------------------------------------------------------------
-const [headerIsDark, setHeaderIsDark] = useState<boolean | null>(null);
+  // Header CTA contrast (Animate / Love it / Download)
+  // - Makes text dark on light images, light on dark images
+  // - No backgrounds (text-only)
+  // - Avoid CORS spam: only sample pixel data for allowlisted hosts
+  // --------------------------------------------------------------------------
+  const [headerIsDark, setHeaderIsDark] = useState<boolean | null>(null);
 
-// sample the area behind the header buttons (top-right of the current media)
-const headerSampleUrl =
-  (mediaKindForDisplay === "motion" ? motionReferenceImageUrl : displayedStill?.url) || "";
+  // sample the area behind the header buttons (top-right of the current media)
+  const headerSampleUrl =
+    (mediaKindForDisplay === "motion" ? motionReferenceImageUrl : displayedStill?.url) || "";
 
-// tiny luminance sampler (safe + fast)
-const computeHeaderLuma = useCallback(async (url: string): Promise<number | null> => {
-  try {
-    if (!url || !isHttpUrl(url)) return null;
+  // ---- Madani: CORS-safe allowlist for canvas sampling ----
+  const headerCorsHosts = useMemo(() => {
+    const raw = String(import.meta.env.VITE_CORS_IMAGE_HOSTS || "");
+    const hosts = raw
+      .split(",")
+      .map((h) => h.trim().toLowerCase())
+      .filter(Boolean);
+    return new Set(hosts);
+  }, []);
 
-    return await new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      (img as any).decoding = "async";
+  const canSampleHeaderPixels = useCallback(
+    (url: string) => {
+      try {
+        const u = new URL(url, window.location.href);
 
-      img.onload = () => {
-        try {
-          const W = 64;
-          const H = 64;
+        // same origin always ok
+        if (u.origin === window.location.origin) return true;
 
-          const canvas = document.createElement("canvas");
-          canvas.width = W;
-          canvas.height = H;
+        // cross-origin: only if host is explicitly allowlisted
+        return headerCorsHosts.has(u.hostname.toLowerCase());
+      } catch {
+        return false;
+      }
+    },
+    [headerCorsHosts]
+  );
 
-          const ctx = canvas.getContext("2d", { willReadFrequently: true } as any);
-          if (!ctx) return resolve(null);
+  // tiny luminance sampler (safe + fast)
+  const computeHeaderLuma = useCallback(
+    async (url: string): Promise<number | null> => {
+      try {
+        if (!url || !isHttpUrl(url)) return null;
+        if (!canSampleHeaderPixels(url)) return null;
 
-          ctx.drawImage(img, 0, 0, W, H);
+        return await new Promise((resolve) => {
+          const img = new Image();
 
-          const data = ctx.getImageData(0, 0, W, H).data;
-
-          // sample top-right region (where the buttons sit)
-          const x0 = Math.floor(W * 0.55);
-          const y0 = 0;
-          const x1 = W;
-          const y1 = Math.floor(H * 0.35);
-
-          let sum = 0;
-          let count = 0;
-
-          for (let y = y0; y < y1; y++) {
-            for (let x = x0; x < x1; x++) {
-              const i = (y * W + x) * 4;
-              const r = data[i];
-              const g = data[i + 1];
-              const b = data[i + 2];
-              sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-              count++;
+          // ✅ IMPORTANT: keep crossOrigin for allowed cross-origin hosts
+          try {
+            const u = new URL(url, window.location.href);
+            if (u.origin !== window.location.origin) {
+              img.crossOrigin = "anonymous";
             }
-          }
+          } catch {}
 
-          resolve(count ? sum / count : null);
-        } catch {
-          resolve(null);
-        }
-      };
+          (img as any).decoding = "async";
 
-      img.onerror = () => resolve(null);
-      img.src = url;
-    });
-  } catch {
-    return null;
-  }
-}, []);
+          img.onload = () => {
+            try {
+              const W = 64;
+              const H = 64;
+
+              const canvas = document.createElement("canvas");
+              canvas.width = W;
+              canvas.height = H;
+
+              const ctx = canvas.getContext("2d", { willReadFrequently: true } as any);
+              if (!ctx) return resolve(null);
+
+              ctx.drawImage(img, 0, 0, W, H);
+
+              let data: Uint8ClampedArray;
+              try {
+                // ✅ If canvas is tainted, this throws — we just bail silently
+                data = ctx.getImageData(0, 0, W, H).data;
+              } catch {
+                resolve(null);
+                return;
+              }
+
+              // sample top-right region (where the buttons sit)
+              const x0 = Math.floor(W * 0.55);
+              const y0 = 0;
+              const x1 = W;
+              const y1 = Math.floor(H * 0.35);
+
+              let sum = 0;
+              let count = 0;
+
+              for (let y = y0; y < y1; y++) {
+                for (let x = x0; x < x1; x++) {
+                  const i = (y * W + x) * 4;
+                  const r = data[i];
+                  const g = data[i + 1];
+                  const b = data[i + 2];
+                  sum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                  count++;
+                }
+              }
+
+              resolve(count ? sum / count : null);
+            } catch {
+              resolve(null);
+            }
+          };
+
+          img.onerror = () => resolve(null);
+
+          // crossOrigin must be set BEFORE src
+          img.src = url;
+        });
+      } catch {
+        return null;
+      }
+    },
+    [canSampleHeaderPixels]
+  );
 
 useEffect(() => {
   let cancelled = false;
