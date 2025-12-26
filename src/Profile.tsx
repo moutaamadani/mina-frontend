@@ -1,9 +1,11 @@
 // =============================================================
 // FILE: src/Profile.tsx
 // Mina — Profile (Render-only, data comes from MinaApp)
-// Patch: show real user prompt, confirm delete + fade out, better download,
-// remove refresh, still: Re-create (left) + Animate (right), text-only buttons
-// + MatchaQtyModal popup for "Get more Matchas"
+// - show real user prompt
+// - confirm delete + fade out
+// - better download
+// - Re-create (left) + Animate (right)
+// - Get more Matchas opens qty popup (same as StudioLeft)
 // =============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,13 +50,7 @@ function isVideoUrl(url: string) {
 
 function isImageUrl(url: string) {
   const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
-  return (
-    u.endsWith(".jpg") ||
-    u.endsWith(".jpeg") ||
-    u.endsWith(".png") ||
-    u.endsWith(".gif") ||
-    u.endsWith(".webp")
-  );
+  return u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".gif") || u.endsWith(".webp");
 }
 
 function normalizeMediaUrl(url: string) {
@@ -93,7 +89,6 @@ function buildDownloadName(url: string, id?: string | null) {
 async function downloadMedia(url: string, id?: string | null) {
   if (!url) return;
 
-  // Best effort: try blob download (works when CORS allows)
   try {
     const res = await fetch(url, { mode: "cors" });
     if (!res.ok) throw new Error("fetch failed");
@@ -110,7 +105,6 @@ async function downloadMedia(url: string, id?: string | null) {
     setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
     return;
   } catch {
-    // Fallback: open the asset (user can save)
     window.open(url, "_blank", "noopener,noreferrer");
   }
 }
@@ -146,10 +140,7 @@ function normalizeAspectRatio(raw: string | null | undefined) {
     const h = parseFloat(m[2]);
     if (Number.isFinite(w) && Number.isFinite(h) && h > 0) {
       const val = w / h;
-      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = {
-        opt: null,
-        diff: Infinity,
-      };
+      let best: { opt: (typeof ASPECT_OPTIONS)[number] | null; diff: number } = { opt: null, diff: Infinity };
       for (const opt of ASPECT_OPTIONS) {
         const [aw, ah] = opt.ratio.split(":").map((p) => parseFloat(p));
         if (!Number.isFinite(aw) || !Number.isFinite(ah) || ah === 0) continue;
@@ -172,8 +163,7 @@ function findLikeUrl(row: Row) {
   const payloadComment = typeof payloadObj?.comment === "string" ? payloadObj.comment.trim() : null;
 
   const commentFieldPresent =
-    Object.prototype.hasOwnProperty.call(row, "mg_comment") ||
-    Object.prototype.hasOwnProperty.call(row, "comment");
+    Object.prototype.hasOwnProperty.call(row, "mg_comment") || Object.prototype.hasOwnProperty.call(row, "comment");
 
   const commentValue = commentFieldPresent ? pick(row, ["mg_comment", "comment"], "") : null;
   const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
@@ -218,18 +208,12 @@ function looksLikeSystemPrompt(s: string) {
 function extractInputsForDisplay(row: Row) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
   const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
-  const varsRaw =
-    (row as any)?.mg_mma_vars ??
-    (row as any)?.mg_vars ??
-    (row as any)?.vars ??
-    (row as any)?.mma_vars ??
-    null;
+  const varsRaw = (row as any)?.mg_mma_vars ?? (row as any)?.mg_vars ?? (row as any)?.vars ?? (row as any)?.mma_vars ?? null;
 
   const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? null;
   const meta = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
   const vars = tryParseJson<any>(varsRaw) ?? varsRaw ?? null;
 
-  // ✅ USER PROMPT extraction (stronger)
   const briefCandidates: string[] = [
     pick(row, ["mg_user_prompt", "mg_user_message", "userPrompt", "user_prompt", "promptUser", "brief", "mg_brief"], ""),
     pick(payload, ["userPrompt", "user_prompt", "userMessage", "user_message", "brief"], ""),
@@ -241,7 +225,6 @@ function extractInputsForDisplay(row: Row) {
     .map((s) => String(s || "").trim())
     .filter(Boolean);
 
-  // Fallback prompt (only if it doesn't look like a system prompt)
   const rawFallback = safeString(pick(row, ["mg_prompt", "prompt"], ""), "").trim();
   const fallbackPrompt = rawFallback && !looksLikeSystemPrompt(rawFallback) ? rawFallback : "";
 
@@ -322,14 +305,10 @@ function extractInputsForDisplay(row: Row) {
     vars?.style_image_urls ||
     [];
 
-  const styleImages: string[] = Array.isArray(styleImageUrls)
-    ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
-    : [];
+  const styleImages: string[] = Array.isArray(styleImageUrls) ? styleImageUrls.map(String).filter((u) => u.startsWith("http")) : [];
 
   const tone = String(meta?.tone || payload?.inputs?.tone || payload?.tone || vars?.tone || "").trim();
-  const platform = String(
-    meta?.platform || payload?.inputs?.platform || payload?.platform || vars?.platform || ""
-  ).trim();
+  const platform = String(meta?.platform || payload?.inputs?.platform || payload?.platform || vars?.platform || "").trim();
 
   return {
     brief,
@@ -358,7 +337,7 @@ type ProfileProps = {
   onBackToStudio?: () => void;
   onLogout?: () => void;
 
-  // ✅ used for popup checkout url
+  // ✅ for Matcha popup (same URL you pass to StudioLeft)
   matchaUrl?: string;
 
   // keep prop for compatibility, but UI no longer shows Refresh
@@ -391,8 +370,7 @@ export default function Profile({
 
   // Filters
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
-  const cycleMotion = () =>
-    setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
+  const cycleMotion = () => setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
   const motionLabel = motion === "all" ? "Show all" : motion === "motion" ? "Motion" : "Still";
 
   const [likedOnly, setLikedOnly] = useState(false);
@@ -422,7 +400,7 @@ export default function Profile({
   const closeLightbox = () => setLightbox(null);
 
   // ============================================================
-  // ✅ Matcha quantity popup (same behavior as StudioLeft)
+  // Matcha quantity popup (same behavior as StudioLeft)
   // ============================================================
   const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
   const [matchaQty, setMatchaQty] = useState(1);
@@ -431,11 +409,9 @@ export default function Profile({
 
   const buildMatchaCheckoutUrl = (base: string, qty: number) => {
     const q = clampQty(qty);
-
     try {
       const u = new URL(String(base || ""));
 
-      // 1) cart permalink: /cart/123:1  -> /cart/123:q
       const m = u.pathname.match(/\/cart\/(\d+)(?::(\d+))?/);
       if (m?.[1]) {
         const id = m[1];
@@ -443,13 +419,11 @@ export default function Profile({
         return u.toString();
       }
 
-      // 2) cart/add form
       if (u.pathname.includes("/cart/add")) {
         u.searchParams.set("quantity", String(q));
         return u.toString();
       }
 
-      // 3) fallback: add quantity param
       u.searchParams.set("quantity", String(q));
       return u.toString();
     } catch {
@@ -493,7 +467,7 @@ export default function Profile({
   const deleteItem = async (id: string) => {
     setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
 
-    // instant fade out
+    // fade out (but keep layout stable via CSS)
     setRemovingIds((prev) => ({ ...prev, [id]: true }));
     setDeletingIds((prev) => ({ ...prev, [id]: true }));
     cancelDelete(id);
@@ -502,7 +476,6 @@ export default function Profile({
       if (!onDelete) throw new Error("Delete not available.");
       await onDelete(id);
 
-      // keep it gone even before parent refresh
       setRemovedIds((prev) => ({ ...prev, [id]: true }));
       setExpandedPromptIds((prev) => {
         const next = { ...prev };
@@ -510,7 +483,6 @@ export default function Profile({
         return next;
       });
     } catch (e: any) {
-      // bring it back if delete failed
       setRemovingIds((prev) => {
         const next = { ...prev };
         delete next[id];
@@ -572,13 +544,9 @@ export default function Profile({
         const payload: any = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? null;
         const meta: any = tryParseJson<any>(metaRaw) ?? metaRaw ?? null;
 
-        const generationId = safeString(
-          pick(g, ["mg_generation_id", "generation_id", "generationId", "id"]),
-          ""
-        ).trim();
+        const generationId = safeString(pick(g, ["mg_generation_id", "generation_id", "generationId", "id"]), "").trim();
         const id = generationId || safeString(pick(g, ["mg_id", "id"]), `row_${idx}`).trim();
 
-        // local optimistic deletes
         if (removedIds[id]) return null;
 
         const createdAt = safeString(pick(g, ["created_at", "mg_created_at", "ts", "timestamp"]), "").trim();
@@ -596,8 +564,7 @@ export default function Profile({
         const contentType = pick(g, ["mg_content_type", "contentType"], "").toLowerCase();
         const kindHint = String(pick(g, ["mg_result_type", "resultType", "mg_type", "type"], "")).toLowerCase();
 
-        const looksVideoMeta =
-          contentType.includes("video") || kindHint.includes("motion") || kindHint.includes("video");
+        const looksVideoMeta = contentType.includes("video") || kindHint.includes("motion") || kindHint.includes("video");
         const looksImage = isImageUrl(outUrl) || isImageUrl(imgUrl);
 
         const videoUrl = vidUrl || (isVideoUrl(outUrl) ? outUrl : looksVideoMeta && !looksImage ? outUrl : "");
@@ -608,20 +575,12 @@ export default function Profile({
         const aspectRatio =
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
-            typeof payload?.aspect_ratio === "string"
-              ? payload.aspect_ratio
-              : typeof payload?.aspectRatio === "string"
-              ? payload.aspectRatio
-              : ""
+            typeof payload?.aspect_ratio === "string" ? payload.aspect_ratio : typeof payload?.aspectRatio === "string" ? payload.aspectRatio : ""
           );
 
-        const liked =
-          (generationId && likedGenIdSet.has(generationId)) ||
-          (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
+        const liked = (generationId && likedGenIdSet.has(generationId)) || (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
 
         const inputs = extractInputsForDisplay(g);
-
-        // ✅ ensure we show something if user prompt was missing
         const prompt = (inputs.brief || "").trim();
 
         const canRecreate = source === "generation" && !!onRecreate && !!prompt;
@@ -805,7 +764,6 @@ export default function Profile({
     <>
       <TopLoadingBar active={loading} />
 
-      {/* ✅ Popup for buying Matchas */}
       <MatchaQtyModal
         open={matchaQtyOpen}
         qty={matchaQty}
@@ -820,11 +778,7 @@ export default function Profile({
       {lightbox ? (
         <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
           <div className="profile-lightbox-media">
-            {lightbox.isMotion ? (
-              <video src={lightbox.url} autoPlay loop muted playsInline />
-            ) : (
-              <img src={lightbox.url} alt="" loading="lazy" />
-            )}
+            {lightbox.isMotion ? <video src={lightbox.url} autoPlay loop muted playsInline /> : <img src={lightbox.url} alt="" loading="lazy" />}
           </div>
         </div>
       ) : null}
@@ -846,7 +800,6 @@ export default function Profile({
 
               <span className="profile-topsep">|</span>
 
-              {/* ✅ opens popup (not direct link) */}
               <button className="profile-toplink" type="button" onClick={openMatchaQty}>
                 Get more Matchas
               </button>
@@ -880,40 +833,20 @@ export default function Profile({
             <div>
               <div className="profile-archive-title">Archive</div>
               <div className="profile-archive-sub">
-                {error ? (
-                  <span className="profile-error">{error}</span>
-                ) : loading ? (
-                  "Loading…"
-                ) : items.length ? (
-                  `${activeCount} creation${activeCount === 1 ? "" : "s"}`
-                ) : (
-                  "No creations yet."
-                )}
+                {error ? <span className="profile-error">{error}</span> : loading ? "Loading…" : items.length ? `${activeCount} creation${activeCount === 1 ? "" : "s"}` : "No creations yet."}
               </div>
             </div>
 
             <div className="profile-filters">
-              <button
-                type="button"
-                className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
-                onClick={cycleMotion}
-              >
+              <button type="button" className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`} onClick={cycleMotion}>
                 {motionLabel}
               </button>
 
-              <button
-                type="button"
-                className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
-                onClick={() => setLikedOnly((v) => !v)}
-              >
+              <button type="button" className={`profile-filter-pill ${likedOnly ? "active" : ""}`} onClick={() => setLikedOnly((v) => !v)}>
                 Liked
               </button>
 
-              <button
-                type="button"
-                className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`}
-                onClick={cycleAspectFilter}
-              >
+              <button type="button" className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`} onClick={cycleAspectFilter}>
                 {aspectFilterLabel}
               </button>
             </div>
@@ -931,57 +864,29 @@ export default function Profile({
             const confirming = Boolean(confirmDeleteIds[it.id]);
 
             const inputs = it.inputs || null;
-
             const canAnimate = !!it.draft && !it.isMotion && isImageUrl(it.url);
 
             return (
-              <div
-                key={it.id}
-                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${
-                  removing ? "is-removing" : ""
-                }`}
-              >
+              <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""}`}>
                 <div className="profile-card-top">
-                  <button
-                    className="profile-card-show"
-                    type="button"
-                    onClick={() => downloadMedia(it.url, it.id)}
-                    disabled={!it.url}
-                  >
+                  <button className="profile-card-show" type="button" onClick={() => downloadMedia(it.url, it.id)} disabled={!it.url}>
                     Download
                   </button>
 
                   <div className="profile-card-top-right">
-                    {it.liked ? <span className="profile-card-liked">Liked</span> : null}
+                    {it.liked ? <span className="profile-card-liked">Liked</span> : <span className="profile-card-liked ghost">Liked</span>}
 
                     {confirming ? (
                       <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
-                        <button
-                          className="profile-card-confirm-yes"
-                          type="button"
-                          onClick={() => deleteItem(it.id)}
-                          disabled={deleting || !onDelete}
-                        >
+                        <button className="profile-card-confirm-yes" type="button" onClick={() => deleteItem(it.id)} disabled={deleting || !onDelete}>
                           delete
                         </button>
-                        <button
-                          className="profile-card-confirm-no"
-                          type="button"
-                          onClick={() => cancelDelete(it.id)}
-                          disabled={deleting}
-                        >
+                        <button className="profile-card-confirm-no" type="button" onClick={() => cancelDelete(it.id)} disabled={deleting}>
                           cancel
                         </button>
                       </div>
                     ) : (
-                      <button
-                        className="profile-card-delete"
-                        type="button"
-                        onClick={() => askDelete(it.id)}
-                        disabled={deleting || !onDelete}
-                        title="Delete"
-                        aria-label="Delete"
-                      >
+                      <button className="profile-card-delete" type="button" onClick={() => askDelete(it.id)} disabled={deleting || !onDelete} title="Delete" aria-label="Delete">
                         −
                       </button>
                     )}
@@ -1001,14 +906,7 @@ export default function Profile({
                 >
                   {it.url ? (
                     it.isMotion ? (
-                      <video
-                        ref={(el) => registerVideoEl(it.id, el)}
-                        src={it.url}
-                        muted
-                        loop
-                        playsInline
-                        preload="metadata"
-                      />
+                      <video ref={(el) => registerVideoEl(it.id, el)} src={it.url} muted loop playsInline preload="metadata" />
                     ) : (
                       <img src={it.url} alt="" loading="lazy" />
                     )
@@ -1053,11 +951,7 @@ export default function Profile({
                           <div className="profile-card-detailrow">
                             <span className="k">Product</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => openLightbox(inputs.productImageUrl, false)}
-                              >
+                              <button className="profile-card-mini" type="button" onClick={() => openLightbox(inputs.productImageUrl, false)}>
                                 view
                               </button>
                             </span>
@@ -1068,11 +962,7 @@ export default function Profile({
                           <div className="profile-card-detailrow">
                             <span className="k">Logo</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => openLightbox(inputs.logoImageUrl, false)}
-                              >
+                              <button className="profile-card-mini" type="button" onClick={() => openLightbox(inputs.logoImageUrl, false)}>
                                 view
                               </button>
                             </span>
@@ -1083,23 +973,16 @@ export default function Profile({
                           <div className="profile-card-detailrow">
                             <span className="k">Inspo</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
-                              >
+                              <button className="profile-card-mini" type="button" onClick={() => openLightbox(inputs.styleImageUrls[0], false)}>
                                 view
                               </button>
-                              {inputs.styleImageUrls.length > 1 ? (
-                                <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
-                              ) : null}
+                              {inputs.styleImageUrls.length > 1 ? <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span> : null}
                             </span>
                           </div>
                         ) : null}
 
                         {it.canRecreate && it.draft ? (
                           <div className="profile-card-actions">
-                            {/* LEFT: Re-create (always) */}
                             <button
                               type="button"
                               className="profile-card-recreate"
@@ -1111,7 +994,6 @@ export default function Profile({
                               Re-create
                             </button>
 
-                            {/* RIGHT: Animate (only for still images) */}
                             {canAnimate ? (
                               <button
                                 type="button"
