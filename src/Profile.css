@@ -213,10 +213,12 @@
 
 .profile-card-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;            /* was baseline */
   justify-content: space-between;
   gap: 10px;
+  min-height: 28px;               /* keep header height stable */
 }
+
 
 .profile-card-show {
   border: 0;
@@ -323,9 +325,11 @@
 
 .profile-card-confirm {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+  line-height: 1;                 /* reduces baseline weirdness */
 }
+
 
 .profile-card-confirm-yes {
   border: 0;
@@ -474,7 +478,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 140px;               /* reserve space so swap doesn't reflow */
+  justify-content: flex-end;
 }
+
 
 .profile-card-delete {
   font-weight: 800;
