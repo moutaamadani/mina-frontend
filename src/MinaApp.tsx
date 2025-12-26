@@ -489,6 +489,51 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   // Tabs / session
   // =====================
   const [activeTab, setActiveTab] = useState<"studio" | "profile">("studio");
+  // --------------------------------------------------------------------------
+  // Tab navigation + mobile back gesture support
+  // - Keeps navigation inside Mina: Profile -> back -> Studio
+  // - Uses #studio / #profile in the URL
+  // --------------------------------------------------------------------------
+  const goTab = useCallback(
+    (tab: "studio" | "profile", mode: "push" | "replace" = "push") => {
+      setActiveTab(tab);
+      if (typeof window === "undefined") return;
+
+      const base = window.location.pathname + window.location.search;
+      const hash = tab === "profile" ? "#profile" : "#studio";
+      const url = base + hash;
+
+      try {
+        if (mode === "replace") window.history.replaceState({ minaTab: tab }, "", url);
+        else window.history.pushState({ minaTab: tab }, "", url);
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Ensure the current history entry has a Mina tab state
+    const h = (window.location.hash || "").toLowerCase();
+    const initialTab: "studio" | "profile" = h.includes("profile") ? "profile" : "studio";
+    goTab(initialTab, "replace");
+
+    const onPop = (ev: PopStateEvent) => {
+      const st = (ev.state as any)?.minaTab;
+      if (st === "studio" || st === "profile") {
+        setActiveTab(st);
+        return;
+      }
+      const hh = (window.location.hash || "").toLowerCase();
+      setActiveTab(hh.includes("profile") ? "profile" : "studio");
+    };
+
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [goTab]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
 
@@ -3645,7 +3690,14 @@ const headerOverlayClass =
       <div className="studio-frame">
         <div className={classNames("studio-header-overlay", headerOverlayClass)}>
           <div className="studio-header-left">
-            <a href="https://mina.faltastudio.com" className="studio-logo-link">
+            <a
+              href="#studio"
+              className="studio-logo-link"
+              onClick={(event) => {
+                event.preventDefault();
+                goTab("studio", "replace");
+              }}
+            >
               <img
                 src="https://assets.faltastudio.com/Website%20Assets/Black_Logo_mina.svg"
                 alt="Mina logo"
@@ -3782,12 +3834,12 @@ const headerOverlayClass =
               matchaUrl={MATCHA_URL}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
-              onGoProfile={() => setActiveTab("profile")}
+              onGoProfile={() => goTab("profile")}
             />
             {renderStudioRight()}
 
             <div className="studio-mobile-footer">
-              <button type="button" className="studio-footer-link" onClick={() => setActiveTab("profile")}>
+              <button type="button" className="studio-footer-link" onClick={() => goTab("profile")}>
                 Profile
               </button>
               <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
@@ -3835,9 +3887,9 @@ const headerOverlayClass =
               } catch {
                 // ignore
               }
-              setActiveTab("studio");
+              goTab("studio");
             }}
-            onBackToStudio={() => setActiveTab("studio")}
+            onBackToStudio={() => goTab("studio")}
             onLogout={handleSignOut}
           />
         )}
