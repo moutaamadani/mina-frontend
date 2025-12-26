@@ -1210,28 +1210,33 @@ useEffect(() => {
   // - Sends idempotency_key to backend (top-level + inputs)
   // ============================================================================
   const mmaInFlightRef = useRef<Map<string, Promise<{ generationId: string }>>>(new Map());
-  const mmaIdemRef = useRef<Record<string, { key: string; ts: number }>>({});
 
-  const makeIdempotencyKey = (prefix = "mma") => {
-    try {
-      // @ts-ignore
-      const u = crypto?.randomUUID?.();
-      if (u) return `${prefix}_${u}`;
-    } catch {}
-    return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}_${Math.random()
-      .toString(16)
-      .slice(2)}`;
-  };
+    // ✅ store idempotency key ONLY while a request is running
+    const mmaIdemKeyRef = useRef<Map<string, string>>(new Map());
+    
+    const makeIdempotencyKey = (prefix = "mma") => {
+      try {
+        // @ts-ignore
+        const u = crypto?.randomUUID?.();
+        if (u) return `${prefix}_${u}`;
+      } catch {}
+      return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}_${Math.random()
+        .toString(16)
+        .slice(2)}`;
+    };
+    
+    // ✅ New behavior:
+    // - same key reused only for the SAME in-flight request
+    // - once it finishes, next click gets a NEW key (so user can generate again)
+    const getIdemForRun = (actionKey: string) => {
+      const existing = mmaIdemKeyRef.current.get(actionKey);
+      if (existing) return existing;
+    
+      const key = makeIdempotencyKey(actionKey.replace(/[^a-z0-9:_-]/gi, "").slice(0, 40) || "mma");
+      mmaIdemKeyRef.current.set(actionKey, key);
+      return key;
+    };
 
-  const getIdemFor = (actionKey: string) => {
-    const now = Date.now();
-    const prev = mmaIdemRef.current[actionKey];
-    // reuse same key for 15s (covers double-click + quick resubmits)
-    if (prev && now - prev.ts < 15000) return prev.key;
-    const key = makeIdempotencyKey(actionKey.replace(/[^a-z0-9:_-]/gi, "").slice(0, 40) || "mma");
-    mmaIdemRef.current[actionKey] = { key, ts: now };
-    return key;
-  };
 
   const attachIdempotencyKey = (payload: any, idem: string) => {
     const body =
@@ -1296,7 +1301,7 @@ useEffect(() => {
     if (existing) return existing;
 
     const run = (async () => {
-      const idem = getIdemFor(actionKey);
+      const idem = getIdemForRun(actionKey);
       const bodyWithIdem = attachIdempotencyKey(body || {}, idem);
 
       const res = await apiFetch(createPath, { method: "POST", body: JSON.stringify(bodyWithIdem) });
@@ -1421,8 +1426,10 @@ useEffect(() => {
     run.finally(() => {
       const cur = mmaInFlightRef.current.get(actionKey);
       if (cur === run) mmaInFlightRef.current.delete(actionKey);
+    
+      // ✅ allow new generations after this finishes
+      mmaIdemKeyRef.current.delete(actionKey);
     });
-
     return run;
   };
 
