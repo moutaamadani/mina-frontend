@@ -12,6 +12,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import "./Profile.css";
 import TopLoadingBar from "./components/TopLoadingBar";
 import MatchaQtyModal from "./components/MatchaQtyModal";
+import { downloadMinaAsset } from "./lib/minaDownload";
+
 
 type Row = Record<string, any>;
 
@@ -86,28 +88,19 @@ function buildDownloadName(url: string, id?: string | null) {
   return base.endsWith(ext) ? base : `${base}${ext}`;
 }
 
-async function downloadMedia(url: string, id?: string | null) {
+async function downloadMedia(url: string, prompt: string, isMotion: boolean) {
   if (!url) return;
-
   try {
-    const res = await fetch(url, { mode: "cors" });
-    if (!res.ok) throw new Error("fetch failed");
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = objectUrl;
-    a.download = buildDownloadName(url, id);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    return;
+    await downloadMinaAsset({
+      url,
+      kind: isMotion ? "motion" : "still",
+      prompt: prompt || "",
+    });
   } catch {
     window.open(url, "_blank", "noopener,noreferrer");
   }
 }
+
 
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
@@ -945,9 +938,15 @@ export default function Profile({
                 className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""} ${ghostIds[it.id] ? "is-ghost" : ""}`}
               >
                 <div className="profile-card-top">
-                  <button className="profile-card-show" type="button" onClick={() => downloadMedia(it.url, it.id)} disabled={!it.url}>
-                    Download
-                  </button>
+                  <button
+                          className="profile-card-show"
+                          type="button"
+                          onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
+                          disabled={!it.url}
+                        >
+                          Download
+                        </button>
+
 
                   <div className="profile-card-top-right">
                     {it.liked ? <span className="profile-card-liked">Liked</span> : <span className="profile-card-liked ghost">Liked</span>}
