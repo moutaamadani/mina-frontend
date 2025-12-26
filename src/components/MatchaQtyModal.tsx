@@ -2,50 +2,42 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
 type Pack = {
-  /** How many SKU units (Shopify quantity) */
-  units: number;
-  /** Optional label override (defaults to baseCredits * units) */
-  creditsLabel?: number;
-  /** Optional price override (defaults to basePrice * units) */
-  priceLabel?: number;
-  /** Optional disable flag */
+  units: number; // Shopify qty units
   disabled?: boolean;
 };
 
 type Props = {
   open: boolean;
 
-  /**
-   * qty here is Shopify "quantity" (SKU units).
-   * MINA-50 pack: qty=2 means 2x SKU → 100 Matchas credited.
-   */
+  // Shopify quantity (MINA-50 units)
   qty: number;
   setQty: (n: number) => void;
 
   onClose: () => void;
   onConfirm: (qty: number) => void;
 
-  // Text
-  title?: string;
+  // Text (optional)
+  topLabel?: string; // small label in top-left
+  title?: string; // big title
   subtitle?: string;
   rulesLine?: string;
 
-  // Labels only
-  baseCredits?: number;    // credits per SKU unit (MINA-50 => 50)
-  basePrice?: number;      // price per SKU unit (MINA-50 => 15)
+  // MINA-50 defaults (labels only)
+  baseCredits?: number; // credits per unit (MINA-50 => 50)
+  basePrice?: number; // price per unit (MINA-50 => 15)
   currencySymbol?: string;
 
-  // Selection bounds for SKU units
+  // if parent passes max smaller, we IGNORE it because you want always up to 5000 credits
   min?: number;
   max?: number;
 
-  // Scale packs (SKU units)
+  // scale packs (units). default creates 50..5000 credits with baseCredits=50
   packs?: Pack[];
 
-  // Default selection when opening (YOU want 2x MINA-50)
+  // default selection on open (2x MINA-50)
   defaultUnitsOnOpen?: number;
 
-  // Price transparency (hidden until clicked)
+  // transparency
   transparencyTitle?: string;
   transparencyLine?: string;
 };
@@ -77,12 +69,11 @@ const MatchaQtyModal: React.FC<Props> = ({
   onClose,
   onConfirm,
 
-  // Design defaults (your structured screenshot)
+  topLabel = "Get more Matcha",
   title = "Airpots of Matcha Lattes",
   subtitle = "Mina uses matchas to create and animate your stills.",
   rulesLine = `One still = 1 Matcha ,  One animation = 5 Matchas ,  10 “Type for me” = 1 Matcha.`,
 
-  // MINA-50 defaults
   baseCredits = 50,
   basePrice = 15,
   currencySymbol = "£",
@@ -92,7 +83,6 @@ const MatchaQtyModal: React.FC<Props> = ({
 
   packs,
 
-  // ✅ DEFAULT 2x MINA-50
   defaultUnitsOnOpen = 2,
 
   transparencyTitle = "Price Transparency",
@@ -101,21 +91,26 @@ const MatchaQtyModal: React.FC<Props> = ({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [showTransparency, setShowTransparency] = useState(false);
 
+  // ✅ You want maximum 5000 credits always => 100 units always
+  const effectiveMin = Math.max(1, min);
+  const effectiveMax = Math.max(100, max); // force >= 100
+
   const packList: Pack[] = useMemo(() => {
     const defaultPacks: Pack[] = [
-      { units: 1 },
-      { units: 2 },
-      { units: 4 },
-      { units: 10 },
-      { units: 20 },
-      { units: 40 },
-      { units: 100 },
+      { units: 1 },   // 50
+      { units: 2 },   // 100
+      { units: 4 },   // 200
+      { units: 10 },  // 500
+      { units: 20 },  // 1000
+      { units: 40 },  // 2000
+      { units: 100 }, // 5000
     ];
 
     const src = (packs && packs.length ? packs : defaultPacks)
-      .map((p) => ({ ...p, units: clampInt(p.units, min, max) }))
-      .filter((p) => p.units >= min && p.units <= max);
+      .map((p) => ({ ...p, units: clampInt(p.units, effectiveMin, effectiveMax) }))
+      .filter((p) => p.units >= effectiveMin && p.units <= effectiveMax);
 
+    // de-dupe and sort
     const seen = new Set<number>();
     const out: Pack[] = [];
     for (const p of src) {
@@ -125,28 +120,28 @@ const MatchaQtyModal: React.FC<Props> = ({
     }
     out.sort((a, b) => a.units - b.units);
     return out;
-  }, [packs, min, max]);
+  }, [packs, effectiveMin, effectiveMax]);
 
   const allowedUnits = useMemo(() => packList.map((p) => p.units), [packList]);
 
-  // ✅ On open: if qty is 1 (or invalid / not on scale), jump to defaultUnitsOnOpen (2x MINA-50)
+  // ✅ Default to 2x MINA-50 when opening (unless user already has another valid selection)
   useEffect(() => {
     if (!open) return;
 
-    const safeNow = clampInt(qty, min, max);
+    const safeNow = clampInt(qty, effectiveMin, effectiveMax);
     const isAllowed = allowedUnits.length ? allowedUnits.includes(safeNow) : true;
 
-    const desired = clampInt(defaultUnitsOnOpen, min, max);
+    const desired = clampInt(defaultUnitsOnOpen, effectiveMin, effectiveMax);
     const snappedDesired = allowedUnits.length ? nearest(desired, allowedUnits) : desired;
 
-    // "default" rule:
-    // - if the current selection is min (usually 1), OR not allowed, force default (2)
-    if (safeNow === min || !isAllowed) {
+    // If current is min (usually 1) OR not on the scale → jump to 2
+    if (safeNow === effectiveMin || !isAllowed) {
       if (snappedDesired !== safeNow) setQty(snappedDesired);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // keyboard + focus
   useEffect(() => {
     if (!open) return;
 
@@ -154,7 +149,7 @@ const MatchaQtyModal: React.FC<Props> = ({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if (e.key === "Enter") onConfirm(clampInt(qty, min, max));
+      if (e.key === "Enter") onConfirm(clampInt(qty, effectiveMin, effectiveMax));
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -162,34 +157,34 @@ const MatchaQtyModal: React.FC<Props> = ({
       window.clearTimeout(t);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onClose, onConfirm, qty, min, max]);
+  }, [open, onClose, onConfirm, qty, effectiveMin, effectiveMax]);
 
+  // reset transparency each open
   useEffect(() => {
     if (open) setShowTransparency(false);
   }, [open]);
 
   if (!open) return null;
 
-  const safeQty = clampInt(qty, min, max);
+  const safeQty = clampInt(qty, effectiveMin, effectiveMax);
 
-  const isPackDisabled = (p: Pack) => !!p.disabled || p.units < min || p.units > max;
-
-  const creditsFor = (p: Pack) => p.creditsLabel ?? p.units * baseCredits;
-  const priceFor = (p: Pack) => p.priceLabel ?? p.units * basePrice;
+  const creditsFor = (units: number) => units * baseCredits;
+  const priceFor = (units: number) => units * basePrice;
 
   return (
     <div className="mina-modal-backdrop" onClick={onClose}>
       <div
-        className="mina-modal mina-matcha-modal mina-qty-modal"
+        className="mina-modal mina-matcha-modal"
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
         ref={panelRef}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mina-modal-header mina-matcha-header">
-          <div className="mina-matcha-header-left">Get more Matcha</div>
-          <button type="button" className="mina-modal-close" onClick={onClose}>
+        {/* Top bar exactly like inspiration: small left label + Close right */}
+        <div className="mina-matcha-topbar">
+          <div className="mina-matcha-topbar-left">{topLabel}</div>
+          <button type="button" className="mina-modal-close mina-matcha-close" onClick={onClose}>
             Close
           </button>
         </div>
@@ -199,12 +194,13 @@ const MatchaQtyModal: React.FC<Props> = ({
           <div className="mina-matcha-subtitle">{subtitle}</div>
           <div className="mina-matcha-rules">{rulesLine}</div>
 
-          <div className="mina-matcha-scale" role="group" aria-label="Choose pack">
-            <div className="mina-matcha-line" aria-hidden="true" />
-            <div className="mina-matcha-grid">
+          {/* Scale */}
+          <div className="mina-matcha-scale" role="group" aria-label="Choose quantity">
+            <div className="mina-matcha-points">
               {packList.map((p) => {
                 const active = safeQty === p.units;
-                const disabled = isPackDisabled(p);
+                const disabled = !!p.disabled;
+
                 return (
                   <button
                     key={p.units}
@@ -212,27 +208,30 @@ const MatchaQtyModal: React.FC<Props> = ({
                     className={[
                       "mina-matcha-point",
                       active ? "is-active" : "",
+                      !active ? "is-dim" : "",
                       disabled ? "is-disabled" : "",
                     ].join(" ")}
                     onClick={() => !disabled && setQty(p.units)}
                     aria-pressed={active}
                     disabled={disabled}
-                    title={`${creditsFor(p)} Matchas`}
+                    title={`${creditsFor(p.units)} Matchas`}
                   >
-                    <div className="mina-matcha-credits">{creditsFor(p)}</div>
+                    <div className="mina-matcha-credits">{creditsFor(p.units)}</div>
                     <div className="mina-matcha-dot" aria-hidden="true" />
                     <div className="mina-matcha-price">
                       {currencySymbol}
-                      {priceFor(p).toLocaleString()}
+                      {priceFor(p.units).toLocaleString()}
                     </div>
                   </button>
                 );
               })}
+              <div className="mina-matcha-line" aria-hidden="true" />
             </div>
           </div>
         </div>
 
-        <div className="mina-modal-footer mina-matcha-footer">
+        {/* Footer like inspiration */}
+        <div className="mina-matcha-footer">
           <div className="mina-matcha-transparency">
             <button
               type="button"
@@ -251,7 +250,7 @@ const MatchaQtyModal: React.FC<Props> = ({
           <button
             type="button"
             className="mina-matcha-purchase"
-            onClick={() => onConfirm(clampInt(safeQty, min, max))}
+            onClick={() => onConfirm(clampInt(safeQty, effectiveMin, effectiveMax))}
           >
             Purchase
           </button>
