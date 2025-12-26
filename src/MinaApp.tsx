@@ -3024,12 +3024,24 @@ const styleHeroUrls = (stylePresetKeys || [])
     if (!draft || typeof draft !== "object") return;
 
     const mode = String(draft.mode || "").toLowerCase();
+    const briefText = String(draft.brief || "").trim();
+    if (!briefText) return;
 
-    // Allow empty brief (needed for "Animate" from Profile)
-    const briefText = String(draft.brief ?? "").toString();
+    const ratioRaw =
+      String(draft?.settings?.aspect_ratio || draft?.settings?.aspectRatio || draft?.aspect_ratio || "").trim() || "";
+    const ratioNormalized = ratioRaw.includes("/") ? ratioRaw.replace("/", ":") : ratioRaw;
+    const idx = ASPECT_OPTIONS.findIndex((o) => o.ratio === ratioNormalized);
+    if (idx >= 0) setAspectIndex(idx);
+
+    const nextStyleKeys = (draft?.settings?.stylePresetKeys || draft?.inputs?.stylePresetKeys || []) as any;
+    if (Array.isArray(nextStyleKeys) && nextStyleKeys.length) {
+      setStylePresetKeys(nextStyleKeys.map(String));
+    }
+
+    const vision = draft?.settings?.minaVisionEnabled ?? draft?.inputs?.minaVisionEnabled;
+    if (typeof vision === "boolean") setMinaVisionEnabled(vision);
 
     const assets = (draft.assets || {}) as any;
-
     const pickStr = (...keys: string[]) => {
       for (const k of keys) {
         const v = assets?.[k];
@@ -3045,45 +3057,12 @@ const styleHeroUrls = (stylePresetKeys || [])
       return [];
     };
 
-    // If there's no brief AND no usable assets, ignore
     const productUrl = pickStr("productImageUrl", "product_image_url");
     const logoUrl = pickStr("logoImageUrl", "logo_image_url");
     const inspUrls = pickArr("styleImageUrls", "style_image_urls", "inspiration_image_urls");
 
     const startUrl = pickStr("kling_start_image_url", "start_image_url", "startImageUrl");
     const endUrl = pickStr("kling_end_image_url", "end_image_url", "endImageUrl");
-
-    const hasAnyAsset = !!(productUrl || logoUrl || startUrl || endUrl || (inspUrls && inspUrls.length));
-    if (!briefText.trim() && !hasAnyAsset) return;
-
-    // Aspect
-    const ratioRaw =
-      String(
-        draft?.settings?.aspect_ratio ||
-          draft?.settings?.aspectRatio ||
-          draft?.aspect_ratio ||
-          ""
-      ).trim() || "";
-
-    const ratioNormalized = ratioRaw.includes("/") ? ratioRaw.replace("/", ":") : ratioRaw;
-    const idx = ASPECT_OPTIONS.findIndex((o) => o.ratio === ratioNormalized);
-    if (idx >= 0) setAspectIndex(idx);
-
-    // Style keys (IMPORTANT: must also be able to RESET to empty)
-    const nextStyleKeys =
-      (draft?.settings?.stylePresetKeys ?? draft?.inputs?.stylePresetKeys ?? []) as any;
-
-    if (Array.isArray(nextStyleKeys)) {
-      setStylePresetKeys(nextStyleKeys.map((x) => String(x)));
-    } else if (typeof nextStyleKeys === "string" && nextStyleKeys.trim()) {
-      setStylePresetKeys([nextStyleKeys.trim()]);
-    } else {
-      setStylePresetKeys([]); // ✅ reset
-    }
-
-    const vision =
-      draft?.settings?.minaVisionEnabled ?? draft?.inputs?.minaVisionEnabled;
-    if (typeof vision === "boolean") setMinaVisionEnabled(vision);
 
     const mkUrlItem = (panel: UploadPanelKey, url: string) => ({
       id: `${panel}_recreate_${Date.now()}_${Math.random().toString(16).slice(2)}`,
@@ -3098,13 +3077,9 @@ const styleHeroUrls = (stylePresetKeys || [])
     const wantMotion = mode === "motion" || mode === "video";
     setAnimateMode(wantMotion);
 
-    // ✅ Allow empty brief (Animate button wants blank motion text)
-    setBrief(briefText);
     if (wantMotion) setMotionDescription(briefText);
     else setStillBrief(briefText);
-
-    // ✅ Ensure UI never goes back to Stage 0 even with empty brief
-    setHasEverTyped(true);
+    setBrief(briefText);
 
     setUploads((prev) => ({
       ...prev,
@@ -3116,12 +3091,11 @@ const styleHeroUrls = (stylePresetKeys || [])
             .concat(endUrl ? [mkUrlItem("product", endUrl)] : [])
         : (productUrl ? [mkUrlItem("product", productUrl)] : []),
       logo: logoUrl ? [mkUrlItem("logo", logoUrl)] : [],
-      inspiration: (inspUrls || []).slice(0, 4).map((u) => mkUrlItem("inspiration", u)),
+      inspiration: inspUrls.slice(0, 4).map((u) => mkUrlItem("inspiration", u)),
     }));
 
     setActivePanel("product");
     setUiStage((s) => (s < 3 ? 3 : s));
-    setTypingUiHidden(false);
 
     window.setTimeout(() => {
       applyingRecreateDraftRef.current = false;
