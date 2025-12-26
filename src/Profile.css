@@ -748,3 +748,9 @@
   visibility: hidden !important;
   pointer-events: none !important;
 }
+/* Fix text cursor on video hover (no zoom, no scale) */
+.profile-card-media,
+.profile-card-media video,
+.profile-card-media img {
+  cursor: pointer;
+}
