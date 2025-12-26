@@ -13,9 +13,6 @@ type Props = {
   onClose: () => void;
   onConfirm: (qty: number) => void;
 
-  // Title shown in top bar ONLY
-  title?: string;
-
   // Body text
   subtitle?: string;
   rulesLine?: string;
@@ -39,15 +36,14 @@ const clampInt = (v: number, min: number, max: number) => {
   return Math.max(min, Math.min(max, n));
 };
 
+const TOP_TITLE = "Airpot of Matcha Lattes";
+
 const MatchaQtyModal: React.FC<Props> = ({
   open,
   qty,
   setQty,
   onClose,
   onConfirm,
-
-  // ✅ top title only
-  title = "Matcha Lattes ",
 
   subtitle = "Mina uses matchas to create and animate your stills.",
   rulesLine = `1 Still = 1 Matcha – 1 Animation = 5 Matchas`,
@@ -56,7 +52,6 @@ const MatchaQtyModal: React.FC<Props> = ({
   basePrice = 15,
   currencySymbol = "£",
 
-  // ✅ default to 2× MINA-50
   defaultUnitsOnOpen = 2,
 
   transparencyTitle = "Price Transparency",
@@ -69,9 +64,9 @@ const MatchaQtyModal: React.FC<Props> = ({
   // ✅ ONLY 50 / 100 / 200 / 500 (max 500)
   const packList: Pack[] = useMemo(
     () => [
-      { units: 1 },  // 50
-      { units: 2 },  // 100
-      { units: 4 },  // 200
+      { units: 1 }, // 50
+      { units: 2 }, // 100
+      { units: 4 }, // 200
       { units: 10 }, // 500
     ],
     []
@@ -149,14 +144,19 @@ const MatchaQtyModal: React.FC<Props> = ({
       >
         {/* ✅ Title ONLY here */}
         <div className="mina-matcha-topbar">
-          <div className="mina-matcha-topbar-left">Airpot of Matcha Lattes</div>
-          <button type="button" className="mina-modal-close mina-matcha-close" onClick={onClose}>
+          <div className="mina-matcha-topbar-left">{TOP_TITLE}</div>
+          <button
+            type="button"
+            className="mina-modal-close mina-matcha-close"
+            onClick={onClose}
+            aria-label="Close"
+            title="Close"
+          >
             —
           </button>
         </div>
 
         <div className="mina-matcha-body">
-          {/* ✅ NO title in body anymore */}
           <div className="mina-matcha-subtitle">{subtitle}</div>
           <div className="mina-matcha-rules">{rulesLine}</div>
 
@@ -192,14 +192,13 @@ const MatchaQtyModal: React.FC<Props> = ({
 
               {packList.map((p, i) => {
                 const on = i <= activeIndex;
-                const active = i === activeIndex;
                 const leftPct = (i / (packList.length - 1)) * 100;
 
                 return (
                   <button
                     key={p.units}
                     type="button"
-                    className={`mina-matcha-node ${on ? "is-on" : ""} ${active ? "is-active" : ""}`}
+                    className={`mina-matcha-node ${on ? "is-on" : ""}`}
                     style={{ left: `${leftPct}%` }}
                     onClick={() => setQty(p.units)}
                     aria-label={`${creditsFor(p.units)} Matchas`}
