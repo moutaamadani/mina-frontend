@@ -20,7 +20,7 @@ export default function TopLoadingBar({ active }: TopLoadingBarProps) {
       rampTimer.current = window.setInterval(() => {
         setProgress((prev) => {
           const safeStart = prev === 0 ? 12 : prev;
-          const target = 40;
+          const target = 90;
           const delta = Math.max(1, (target - safeStart) * 0.12);
           const next = safeStart + delta;
           return next >= target ? target : next;
