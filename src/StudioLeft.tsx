@@ -283,6 +283,7 @@ const TYPE_FOR_ME_ICON = "https://assets.faltastudio.com/Website%20Assets/icon-t
 // Component
 // ============================================================================
 const StudioLeft: React.FC<StudioLeftProps> = (props) => {
+  
   const {
     globalDragging,
     typingHidden,
@@ -356,6 +357,26 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     onGoProfile,
   } = props;
+  // ✅ Mobile default ratio = 9:16 (keeps cycling one step per render until it hits 9:16)
+const mobileAspectTriesRef = useRef(0);
+
+useEffect(() => {
+  const isMobile = window.matchMedia("(max-width: 900px)").matches;
+  if (!isMobile) return;
+
+  const ratio = (currentAspect?.ratio || "").trim();
+
+  // IMPORTANT: if your app stores it as "916" instead of "9:16", change the check below.
+  const TARGET = "9:16";
+
+  if (ratio === TARGET) return;
+
+  // safety: don't loop forever if TARGET isn't in the cycle
+  if (mobileAspectTriesRef.current >= 12) return;
+  mobileAspectTriesRef.current += 1;
+
+  onCycleAspect?.();
+}, [currentAspect?.ratio, onCycleAspect]);
 
   const imageCreditsOk = imageCreditsOkProp ?? true;
   const hasMotionImage = !!motionHasImageProp;
