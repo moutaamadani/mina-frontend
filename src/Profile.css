@@ -741,3 +741,10 @@
 .profile-card-actions {
   display: none !important;
 }
+
+/* 👻 Ghost placeholder: keeps grid space but hides card */
+.profile-card.is-ghost {
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

@@ -364,6 +364,7 @@ export default function Profile({
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
   const [removedIds, setRemovedIds] = useState<Record<string, boolean>>({});
+  const [ghostIds, setGhostIds] = useState<Record<string, boolean>>({});
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
@@ -465,9 +466,6 @@ export default function Profile({
   };
 
   const deleteItem = async (id: string) => {
-    setDeleteErrors((prev) => ({ ...prev, [id]: "" }));
-
-    // fade out (but keep layout stable via CSS)
     setRemovingIds((prev) => ({ ...prev, [id]: true }));
     setDeletingIds((prev) => ({ ...prev, [id]: true }));
     cancelDelete(id);
@@ -476,19 +474,24 @@ export default function Profile({
       if (!onDelete) throw new Error("Delete not available.");
       await onDelete(id);
 
-      setRemovedIds((prev) => ({ ...prev, [id]: true }));
-      setExpandedPromptIds((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
+      // 👻 turn into ghost (keeps grid space)
+      setGhostIds((prev) => ({ ...prev, [id]: true }));
+
+      // remove after fade finishes
+      setTimeout(() => {
+        setRemovedIds((prev) => ({ ...prev, [id]: true }));
+        setGhostIds((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }, 260);
     } catch (e: any) {
       setRemovingIds((prev) => {
         const next = { ...prev };
         delete next[id];
         return next;
       });
-      setDeleteErrors((prev) => ({ ...prev, [id]: e?.message || "Delete failed" }));
     } finally {
       setDeletingIds((prev) => {
         const next = { ...prev };
@@ -867,7 +870,10 @@ export default function Profile({
             const canAnimate = !!it.draft && !it.isMotion && isImageUrl(it.url);
 
             return (
-              <div key={it.id} className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""}`}>
+              <div
+                key={it.id}
+                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""} ${ghostIds[it.id] ? "is-ghost" : ""}`}
+              >
                 <div className="profile-card-top">
                   <button className="profile-card-show" type="button" onClick={() => downloadMedia(it.url, it.id)} disabled={!it.url}>
                     Download
