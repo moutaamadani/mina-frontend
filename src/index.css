@@ -617,7 +617,7 @@ video {
   font-size: 18px;
   font-weight: 600;
   text-decoration: none;
-  color: var(--mina-text);
+  color: #cccccc;
 }
 
 .studio-header-center {
