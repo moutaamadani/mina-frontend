@@ -275,7 +275,7 @@ const STYLE_PRESETS = [
   {
     key: "back-light",
     label: "Minimal",
-    thumb: "https://assets.faltastudio.com/mma/still/d70ea648-bf74-4e1f-8a39-83f6d3f962af.jpg",
+    thumb: "https://assets.faltastudio.com/mma/still/4f5cd0c9-5aac-4728-b26a-7733419040f6.jpg",
     hero: [
       "https://assets.faltastudio.com/mma/still/c8b0c214-bd61-4b39-ae27-7af2f4de5460.jpg", //Poire
       "https://assets.faltastudio.com/mma/still/d70ea648-bf74-4e1f-8a39-83f6d3f962af.jpg", //Vanilla Sticks
