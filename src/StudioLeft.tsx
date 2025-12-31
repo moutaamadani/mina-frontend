@@ -382,17 +382,6 @@ useEffect(() => {
   const hasMotionImage = !!motionHasImageProp;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
-  // ✅ Create mode default: start in NICHE (only once)
-  const didInitStyleModeRef = useRef(false);
-  useEffect(() => {
-    if (didInitStyleModeRef.current) return;
-    didInitStyleModeRef.current = true;
-
-    // Only enforce default for Create mode (still)
-    if (!isMotion && styleMode !== "niche") {
-      setStyleMode("niche");
-    }
-  }, [isMotion, styleMode, setStyleMode]);
 
   // ✅ Style UX:
   // - single click = select
@@ -1016,11 +1005,27 @@ useEffect(() => {
                     <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
+                  {/* Mode (Main / Niche) */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", "studio-pill--mode")}
+                    style={pillBaseStyle(4)}
+                    onClick={() => setStyleMode(styleMode === "main" ? "niche" : "main")}
+                  >
+                    {/* spacer to keep pill alignment without showing an icon */}
+                    <span className="studio-pill-icon studio-pill-icon--spacer" aria-hidden="true" />
+                    <span className="studio-pill-main">{styleMode === "main" ? "Main" : "Niche"}</span>
+                    {/* spacer to keep 2-line pill height without showing refs text */}
+                    <span className="studio-pill-sub studio-pill-sub--spacer" aria-hidden="true">
+                      &nbsp;
+                    </span>
+                  </button>
+
                   {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(4)}
+                    style={pillBaseStyle(5)}
                     onClick={onCycleAspect}
                   >
                     <span className="studio-pill-icon">
@@ -1028,24 +1033,6 @@ useEffect(() => {
                     </span>
                     <span className="studio-pill-main">{currentAspect.label}</span>
                     <span className="studio-pill-sub">{currentAspect.subtitle}</span>
-                  </button>
-
-                  {/* Mode (Main / Niche) — LAST pill, NO ICON/NO PLACEHOLDER */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "studio-pill--mode",
-                      styleMode === "niche" && "active"
-                    )}
-                    style={pillBaseStyle(5)}
-                    onClick={() => setStyleMode(styleMode === "main" ? "niche" : "main")}
-                    aria-pressed={styleMode === "niche"}
-                  >
-                    <span className="studio-pill-main">{styleMode === "main" ? "Main" : "Niche"}</span>
-                    <span className="studio-pill-sub studio-pill-sub--spacer" aria-hidden="true">
-                      &nbsp;
-                    </span>
                   </button>
                 </>
               ) : (
