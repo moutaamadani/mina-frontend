@@ -147,6 +147,10 @@ type StudioLeftProps = {
   minaMessage?: string;
   minaTalking?: boolean;
 
+  stillLane: "main" | "niche";
+  onToggleStillLane: () => void;
+  stillLaneDisabled?: boolean;
+
   timingVars?: React.CSSProperties;
 
   onGoProfile: () => void;
@@ -352,6 +356,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     minaMessage,
     minaTalking,
+
+    stillLane,
+    onToggleStillLane,
+    stillLaneDisabled,
 
     timingVars,
 
@@ -1003,6 +1011,20 @@ useEffect(() => {
                   >
                     {renderPillIcon(styleThumb, "+", true)}
                     <span className="studio-pill-main">{styleLabel}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      "pill-infinite-toggle",
+                      stillLane === "niche" ? "is-niche" : "is-main"
+                    )}
+                    onClick={onToggleStillLane}
+                    disabled={!!stillLaneDisabled}
+                    aria-label="Toggle still engine lane"
+                  >
+                    {stillLane === "niche" ? "Niche" : "Main"}
                   </button>
 
                   {/* Ratio */}

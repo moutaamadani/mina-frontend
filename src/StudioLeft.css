@@ -140,6 +140,21 @@ background-color 0s ease 0s,
 
 }
 
+/* Text-only lane toggle pill */
+.pill-infinite-toggle {
+  padding-left: 14px;
+  padding-right: 14px; /* equal padding */
+  justify-content: center;
+  gap: 0;
+}
+
+/* Optional: tiny visual cue (remove if you want identical look) */
+.pill-infinite-toggle.is-niche {
+}
+
+.pill-infinite-toggle.is-main {
+}
+
 .studio-pill.active,
 .studio-pill:hover {
   background: rgba(8, 10, 0, 0.05);
@@ -817,4 +832,3 @@ margin-bottom: 6px;
 .profile-card-recreate:active {
   opacity: 0.6;
 }
-
