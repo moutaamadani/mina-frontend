@@ -396,6 +396,42 @@ useEffect(() => {
   // - double click (custom only) = ask to delete with bold YES/NO
   const [deleteConfirm, setDeleteConfirm] = useState<{ key: string; label: string } | null>(null);
   // ============================================================
+  // Tutorial lightbox (video + quick steps)
+  // ============================================================
+  const TUTORIAL_VIDEO_URL =
+    "https://assets.faltastudio.com/Website%20Assets/Video%20Mina%20tutorial.mp4";
+
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialMobile, setTutorialMobile] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 900px)");
+    const update = () => setTutorialMobile(mq.matches);
+    update();
+
+    // Safari fallback
+    // @ts-ignore
+    if (mq.addEventListener) mq.addEventListener("change", update);
+    else mq.addListener(update);
+
+    return () => {
+      // @ts-ignore
+      if (mq.removeEventListener) mq.removeEventListener("change", update);
+      else mq.removeListener(update);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!tutorialOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTutorialOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tutorialOpen]);
+
+  const closeTutorial = () => setTutorialOpen(false);
+  // ============================================================
   // Matcha quantity popup (opens Shopify with chosen quantity)
   // ============================================================
   const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
@@ -925,6 +961,121 @@ useEffect(() => {
       )}
       style={timingVars}
     >      
+      {tutorialOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={closeTutorial}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(980px, 96vw)",
+              background: "#fff",
+              borderRadius: 0,
+              padding: 16,
+              boxShadow: "0 16px 50px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-0.01em", opacity: 0.9 }}>
+                Mina tutorial
+              </div>
+
+              <button type="button" className="studio-footer-link" onClick={closeTutorial}>
+                <b>Close</b>
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: tutorialMobile ? "column" : "row",
+                gap: 16,
+                alignItems: "stretch",
+              }}
+            >
+              {/* Mobile: video first, then text */}
+              {tutorialMobile ? (
+                <>
+                  <div style={{ flex: "0 0 auto" }}>
+                    <video
+                      src={TUTORIAL_VIDEO_URL}
+                      autoPlay
+                      playsInline
+                      controls
+                      style={{
+                        width: "100%",
+                        maxHeight: "70vh",
+                        background: "#000",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: 12, lineHeight: 1.35, opacity: 0.85 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>For Instagram & TikTok</div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      <li>Upload your main image (you or your product).</li>
+                      <li>Add your logo / label design.</li>
+                      <li>Add inspiration images (up to 4). If you need more, use Moodboard (up to 10).</li>
+                      <li>Pick your mode: <b>Main</b> (faster) or <b>Niche</b> (slower, more detailed).</li>
+                      <li>Set your ratio (usually <b>2:3</b> works everywhere).</li>
+                      <li>Describe what you want in your own words (many languages + dialects).</li>
+                      <li>Hit <b>Create</b>. Keep <b>Vision Intelligence</b> ON so Mina learns your taste.</li>
+                      <li>When you like a result, tap <b>Love</b> → “more like this”.</li>
+                      <li>Small change? Use the <b>Tweak</b> bar. Want animation? Tap <b>Animate</b> and keep prompts simple.</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Desktop: text left, video right */}
+                  <div style={{ flex: "1 1 320px", minWidth: 280, fontSize: 12, lineHeight: 1.35, opacity: 0.85 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 8 }}>For Instagram & TikTok</div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      <li>Upload your main image (you or your product).</li>
+                      <li>Add your logo / label design.</li>
+                      <li>Add inspiration images (up to 4). If you need more, use Moodboard (up to 10).</li>
+                      <li>Pick your mode: <b>Main</b> (faster) or <b>Niche</b> (slower, more detailed).</li>
+                      <li>Set your ratio (usually <b>2:3</b> works everywhere).</li>
+                      <li>Describe what you want in your own words (many languages + dialects).</li>
+                      <li>Hit <b>Create</b>. Keep <b>Vision Intelligence</b> ON so Mina learns your taste.</li>
+                      <li>When you like a result, tap <b>Love</b> → “more like this”.</li>
+                      <li>Small change? Use the <b>Tweak</b> bar. Want animation? Tap <b>Animate</b> and keep prompts simple.</li>
+                    </ul>
+                  </div>
+
+                  <div style={{ flex: "2 1 520px" }}>
+                    <video
+                      src={TUTORIAL_VIDEO_URL}
+                      autoPlay
+                      playsInline
+                      controls
+                      style={{
+                        width: "100%",
+                        maxHeight: "70vh",
+                        background: "#000",
+                        display: "block",
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <MatchaQtyModal
         open={matchaQtyOpen}
         qty={matchaQty}
@@ -1523,7 +1674,9 @@ useEffect(() => {
         <a className="studio-footer-link" href="https://wa.me/971522177594" target="_blank" rel="noreferrer">
           Need help?
         </a>
-        <span className="studio-footer-link studio-footer-link--disabled">Tutorial</span>
+        <button type="button" className="studio-footer-link" onClick={() => setTutorialOpen(true)}>
+          Tutorial
+        </button>
       </div>
     </div>
   );
