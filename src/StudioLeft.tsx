@@ -1031,7 +1031,7 @@ useEffect(() => {
                     onClick={() => setModelFlavor(nicheIsActive ? "main" : "niche")}
                     title={nicheIsActive ? "Niche selected (click to switch to Main)" : "Main selected (click to switch to Niche)"}
                   >
-                    <span className="studio-pill-main">Niche</span>
+                    <span className="studio-pill-main"> Niche</span>
                   </button>
 
                 </>
