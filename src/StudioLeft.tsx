@@ -706,7 +706,6 @@ useEffect(() => {
   const productThumb = getFirstImageUrl(uploads.product);
   const logoThumb = getFirstImageUrl(uploads.logo);
   const inspirationThumb = getFirstImageUrl(uploads.inspiration);
-  const refCap = styleMode === "niche" ? 14 : 10;
 
   const allStyleCards = useMemo(() => {
     return [
@@ -997,7 +996,7 @@ useEffect(() => {
                     onMouseEnter={() => openPanel("inspiration")}
                   >
                     {renderPillIcon(inspirationThumb, "+", true)}
-                    <span className="studio-pill-main">Inspiration ({refCap})</span>
+                    <span className="studio-pill-main">Inspiration</span>
                   </button>
 
                   {/* Style */}
@@ -1018,11 +1017,14 @@ useEffect(() => {
                     className={classNames("studio-pill", "studio-pill--mode")}
                     style={pillBaseStyle(4)}
                     onClick={() => setStyleMode(styleMode === "main" ? "niche" : "main")}
-                    title="Reference limit"
                   >
-                    {renderPillIcon("", styleMode === "main" ? "M" : "N", false)}
+                    {/* spacer to keep pill alignment without showing an icon */}
+                    <span className="studio-pill-icon studio-pill-icon--spacer" aria-hidden="true" />
                     <span className="studio-pill-main">{styleMode === "main" ? "Main" : "Niche"}</span>
-                    <span className="studio-pill-sub">{styleMode === "main" ? "10 refs" : "14 refs"}</span>
+                    {/* spacer to keep 2-line pill height without showing refs text */}
+                    <span className="studio-pill-sub studio-pill-sub--spacer" aria-hidden="true">
+                      &nbsp;
+                    </span>
                   </button>
 
                   {/* Ratio */}

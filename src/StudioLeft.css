@@ -817,3 +817,14 @@ margin-bottom: 6px;
 .profile-card-recreate:active {
   opacity: 0.6;
 }
+
+/* Keep layout spacing but hide old "icon" and "refs" text */
+.studio-pill-icon--spacer {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.studio-pill-sub--spacer {
+  opacity: 0;
+}
