@@ -944,6 +944,22 @@ useEffect(() => {
             <div className={classNames("studio-row", "studio-row--pills", !showPills && "hidden")}>
               {!isMotion ? (
                 <>
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      "pill-infinite-toggle",
+                      stillLane === "niche" ? "is-niche" : "is-main"
+                    )}
+                    style={pillBaseStyle(0)}
+                    onClick={onToggleStillLane}
+                    disabled={!!stillLaneDisabled}
+                    aria-label="Toggle still engine lane"
+                    title="Toggle still engine"
+                  >
+                    <span className="studio-pill-main">{stillLane === "niche" ? "Niche" : "Main"}</span>
+                  </button>
+
                   {/* Product */}
                   <button
                     type="button"
@@ -952,7 +968,7 @@ useEffect(() => {
                       effectivePanel === "product" && "active",
                       !productThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(0)}
+                    style={pillBaseStyle(1)}
                     onClick={() => {
                       if (!productThumb) triggerPick("product");
                       else openPanel("product");
@@ -971,7 +987,7 @@ useEffect(() => {
                       activePanel === "logo" && "active",
                       !logoThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(1)}
+                    style={pillBaseStyle(2)}
                     onClick={() => {
                       if (!logoThumb) triggerPick("logo");
                       else openPanel("logo");
@@ -990,7 +1006,7 @@ useEffect(() => {
                       activePanel === "inspiration" && "active",
                       !inspirationThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(2)}
+                    style={pillBaseStyle(3)}
                     onClick={() => {
                       if (!inspirationThumb) triggerPick("inspiration");
                       else openPanel("inspiration");
@@ -1005,7 +1021,7 @@ useEffect(() => {
                   <button
                     type="button"
                     className={classNames("studio-pill", activePanel === "style" && "active", !styleThumb && "studio-pill--solo-plus")}
-                    style={pillBaseStyle(3)}
+                    style={pillBaseStyle(4)}
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
@@ -1013,25 +1029,11 @@ useEffect(() => {
                     <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "pill-infinite-toggle",
-                      stillLane === "niche" ? "is-niche" : "is-main"
-                    )}
-                    onClick={onToggleStillLane}
-                    disabled={!!stillLaneDisabled}
-                    aria-label="Toggle still engine lane"
-                  >
-                    {stillLane === "niche" ? "Niche" : "Main"}
-                  </button>
-
                   {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(4)}
+                    style={pillBaseStyle(6)}
                     onClick={onCycleAspect}
                   >
                     <span className="studio-pill-icon">
