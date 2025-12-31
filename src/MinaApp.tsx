@@ -215,6 +215,8 @@ type AspectOption = {
   platformKey: string;
 };
 
+type StyleMode = "main" | "niche";
+
 type MinaAppProps = Record<string, never>;
 // ============================================================================
 // [PART 2 END]
@@ -639,6 +641,25 @@ const MinaApp: React.FC<MinaAppProps> = () => {
 
   // Style selection
   const [stylePresetKeys, setStylePresetKeys] = useState<string[]>([]);
+
+  // ✅ NEW: Main(10) / Niche(14) reference caps
+  const [styleMode, setStyleMode] = useState<StyleMode>(() => {
+    try {
+      const raw = window.localStorage.getItem("minaStyleMode");
+      return raw === "niche" ? "niche" : "main";
+    } catch {
+      return "main";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("minaStyleMode", styleMode);
+    } catch {
+      // ignore
+    }
+  }, [styleMode]);
+
   const [minaVisionEnabled, setMinaVisionEnabled] = useState(true);
 
   // Inline rename for styles
@@ -754,7 +775,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       if (stageT2Ref.current !== null) window.clearTimeout(stageT2Ref.current);
       if (stageT3Ref.current !== null) window.clearTimeout(stageT3Ref.current);
     };
-  }, []);
+  }, [styleMode]);
 
   // Persist maps
   useEffect(() => {
@@ -2119,8 +2140,25 @@ const styleHeroUrls = (stylePresetKeys || [])
         .map((u) => u.remoteUrl || u.url)
         .filter((u) => isHttpUrl(u));
 
-      // final list sent to backend (cap to 4)
-      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
+      // ✅ TOTAL reference cap (product + logo + inspiration combined)
+      const refCap = styleMode === "niche" ? 14 : 10;
+
+      const productStable = stripSignedQuery(productUrl || "");
+      const logoStable = stripSignedQuery(logoUrl || "");
+
+      const baseCount =
+        (productStable && isHttpUrl(productStable) ? 1 : 0) + (logoStable && isHttpUrl(logoStable) ? 1 : 0);
+
+      const remaining = Math.max(0, refCap - baseCount);
+
+      // pool = style heroes first, then user inspiration
+      const pool = [...styleHeroUrls, ...userInspirationUrls]
+        .map((u) => stripSignedQuery(String(u || "").trim()))
+        .filter((u) => isHttpUrl(u))
+        .filter((u) => u !== productStable && u !== logoStable);
+
+      // dedupe + trim to remaining
+      const inspirationUrls = Array.from(new Set(pool)).slice(0, remaining);
 
 
       const mmaBody = {
@@ -2832,7 +2870,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
 
   const capForPanel = (panel: UploadPanelKey) => {
-    if (panel === "inspiration") return 4;
+    if (panel === "inspiration") return styleMode === "niche" ? 14 : 10;
     if (panel === "product") return animateMode ? 2 : 1;
     return 1;
   };
@@ -3174,6 +3212,12 @@ const styleHeroUrls = (stylePresetKeys || [])
     const vision = draft?.settings?.minaVisionEnabled ?? draft?.inputs?.minaVisionEnabled;
     if (typeof vision === "boolean") setMinaVisionEnabled(vision);
 
+    const smRaw = String(draft?.settings?.styleMode || draft?.styleMode || "").toLowerCase();
+    const sm = smRaw === "niche" ? ("niche" as StyleMode) : smRaw === "main" ? ("main" as StyleMode) : null;
+    if (sm) setStyleMode(sm);
+
+    const recreateCap = (sm || styleMode) === "niche" ? 14 : 10;
+
     const assets = (draft.assets || {}) as any;
     const pickStr = (...keys: string[]) => {
       for (const k of keys) {
@@ -3224,7 +3268,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             .concat(endUrl ? [mkUrlItem("product", endUrl)] : [])
         : (productUrl ? [mkUrlItem("product", productUrl)] : []),
       logo: logoUrl ? [mkUrlItem("logo", logoUrl)] : [],
-      inspiration: inspUrls.slice(0, 4).map((u) => mkUrlItem("inspiration", u)),
+      inspiration: inspUrls.slice(0, recreateCap).map((u) => mkUrlItem("inspiration", u)),
     }));
 
     setActivePanel("product");
@@ -3809,6 +3853,8 @@ const headerOverlayClass =
               inspirationInputRef={inspirationInputRef}
               stylePresetKeys={stylePresetKeys}
               setStylePresetKeys={setStylePresetKeys}
+              styleMode={styleMode}
+              setStyleMode={setStyleMode}
               stylePresets={computedStylePresets}
               customStyles={customStyles}
               getStyleLabel={getStyleLabel}
