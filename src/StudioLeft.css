@@ -71,8 +71,8 @@
    Pills
 ------------------------------------------ */
 .studio-pills-slot {
-  min-height: 30px;
-  margin-bottom: 16px;
+  min-height: 26px;
+  margin-bottom: 14px;
   display: flex;
   align-items: center;
 }
@@ -180,10 +180,10 @@ background-color 0s ease 0s,
 
 
 .studio-pill-icon {
-  min-width: 24px;
-  min-height: 24px;
-  width: 24px;
-  height: 24px;
+  min-width: 18px;
+  min-height: 18px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -203,16 +203,16 @@ background-color 0s ease 0s,
 
 .studio-pill-icon-mark {
   font-weight: 700;
-  font-size: 12px;
+  font-size: 10px;
   line-height: 1;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   margin-right: 2px;
 }
 
 .studio-pill-icon img {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   display: block;
   object-fit: contain;
 }
@@ -239,7 +239,7 @@ background-color 0s ease 0s,
 
 .studio-pill-main,
 .studio-pill-sub {
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
 }
@@ -249,7 +249,7 @@ background-color 0s ease 0s,
 }
 
 .studio-pill-note {
-  font-size: 11px;
+  font-size: 8px;
   color: rgba(8, 10, 0, 0.7);
   margin-top: 4px;
   margin-left: 4px;
@@ -257,8 +257,8 @@ background-color 0s ease 0s,
 
 /* keep aspect pill same height */
 .studio-pill--aspect {
-  height: 34px;
-  min-height: 34px;
+  height: 28px;
+  min-height: 28px;
   white-space: nowrap;
 }
 
