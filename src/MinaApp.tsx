@@ -1575,6 +1575,7 @@ async function mmaFetchResult(generationId: string): Promise<MmaGenerationRespon
   const outputUrl =
     json?.outputUrl ??
     json?.mg_output_url ??
+    outputs?.nanobanana_image_url ??
     outputs?.seedream_image_url ??
     outputs?.kling_video_url ??
     outputs?.image_url ??
@@ -1628,6 +1629,7 @@ async function mmaWaitForFinal(
 
     // sometimes outputs appear before status flips
     const hasOutputs =
+      !!last?.outputs?.nanobanana_image_url ||
       !!last?.outputs?.seedream_image_url ||
       !!last?.outputs?.kling_video_url ||
       !!last?.outputs?.image_url ||
