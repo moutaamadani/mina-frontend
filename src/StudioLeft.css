@@ -140,12 +140,14 @@ background-color 0s ease 0s,
 
 }
 
-/* Text-only lane toggle pill */
+/* Text-only lane toggle pill (behaves like other pills) */
 .pill-infinite-toggle {
   padding-left: 14px;
   padding-right: 14px; /* equal padding */
   justify-content: center;
   gap: 0;
+  font-size: 10px; /* ✅ requested */
+  line-height: 1; /* keeps it compact like a filter toggle */
 }
 
 /* Optional: tiny visual cue (remove if you want identical look) */

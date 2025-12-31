@@ -1020,18 +1020,20 @@ useEffect(() => {
                       "pill-infinite-toggle",
                       stillLane === "niche" ? "is-niche" : "is-main"
                     )}
+                    style={pillBaseStyle(4)}
                     onClick={onToggleStillLane}
                     disabled={!!stillLaneDisabled}
                     aria-label="Toggle still engine lane"
+                    title="Toggle still engine"
                   >
-                    {stillLane === "niche" ? "Niche" : "Main"}
+                    <span className="studio-pill-main">{stillLane === "niche" ? "Niche" : "Main"}</span>
                   </button>
 
                   {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(4)}
+                    style={pillBaseStyle(5)}
                     onClick={onCycleAspect}
                   >
                     <span className="studio-pill-icon">
