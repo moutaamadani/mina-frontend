@@ -2176,8 +2176,14 @@ const styleHeroUrls = (stylePresetKeys || [])
           stylePresetKeys: stylePresetKeysForApi,
           stylePresetKey: primaryStyleKeyForApi,
           minaVisionEnabled,
+          // ✅ send niche/main to backend
+          styleMode,
+          style_mode: styleMode,
         },
-        settings: {},
+        settings: {
+          // ✅ also here (some backends read settings, not inputs)
+          styleMode,
+        },
         history: {
           sessionId: sid || sessionId || null,
           sessionTitle: sessionTitle || null,
