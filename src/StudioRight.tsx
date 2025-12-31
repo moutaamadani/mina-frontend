@@ -53,6 +53,13 @@ export default function StudioRight(props: StudioRightProps) {
     setShowMotion(!!currentMotion);
   }, [currentMotion?.url]);
 
+  const openTutorial = () => {
+    try {
+      // @ts-ignore
+      window.dispatchEvent(new Event("mina:openTutorial"));
+    } catch {}
+  };
+
   const media = useMemo(() => {
     // If we have motion and we either want to show it, OR we have no still to show, display video.
     if (currentMotion && (showMotion || !currentStill)) {
@@ -225,7 +232,12 @@ export default function StudioRight(props: StudioRightProps) {
 
   return (
     <div className="studio-right">
-      <div className="studio-right-surface">
+      <div className="studio-right-surface" style={{ position: "relative" }}>
+        <div style={{ position: "absolute", top: 16, left: 16, zIndex: 5 }}>
+          <button type="button" className="studio-footer-link" onClick={openTutorial}>
+            Tutorial
+          </button>
+        </div>
         {isEmpty ? (
           <div className="studio-empty-text">New ideas don’t exist, just recycle.</div>
         ) : (
