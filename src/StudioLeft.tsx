@@ -58,6 +58,8 @@ export type AspectOptionLike = {
 
 export type MotionStyleKey = "melt" | "drop" | "expand" | "satisfying" | "slow_motion" | "fix_camera" | "loop";
 
+type StyleMode = "main" | "niche";
+
 type StudioLeftProps = {
   globalDragging: boolean;
   typingHidden: boolean;
@@ -104,6 +106,8 @@ type StudioLeftProps = {
 
   stylePresetKeys: string[];
   setStylePresetKeys: (k: string[]) => void;
+  styleMode: StyleMode;
+  setStyleMode: (m: StyleMode) => void;
 
   stylePresets: readonly StylePreset[];
   customStyles: CustomStyle[];
@@ -326,6 +330,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     stylePresetKeys,
     setStylePresetKeys,
+    styleMode,
+    setStyleMode,
     stylePresets,
     customStyles,
     getStyleLabel,
@@ -700,6 +706,7 @@ useEffect(() => {
   const productThumb = getFirstImageUrl(uploads.product);
   const logoThumb = getFirstImageUrl(uploads.logo);
   const inspirationThumb = getFirstImageUrl(uploads.inspiration);
+  const refCap = styleMode === "niche" ? 14 : 10;
 
   const allStyleCards = useMemo(() => {
     return [
@@ -990,7 +997,7 @@ useEffect(() => {
                     onMouseEnter={() => openPanel("inspiration")}
                   >
                     {renderPillIcon(inspirationThumb, "+", true)}
-                    <span className="studio-pill-main">Inspiration</span>
+                    <span className="studio-pill-main">Inspiration ({refCap})</span>
                   </button>
 
                   {/* Style */}
@@ -1005,11 +1012,24 @@ useEffect(() => {
                     <span className="studio-pill-main">{styleLabel}</span>
                   </button>
 
+                  {/* Mode (Main / Niche) */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", "studio-pill--mode")}
+                    style={pillBaseStyle(4)}
+                    onClick={() => setStyleMode(styleMode === "main" ? "niche" : "main")}
+                    title="Reference limit"
+                  >
+                    {renderPillIcon("", styleMode === "main" ? "M" : "N", false)}
+                    <span className="studio-pill-main">{styleMode === "main" ? "Main" : "Niche"}</span>
+                    <span className="studio-pill-sub">{styleMode === "main" ? "10 refs" : "14 refs"}</span>
+                  </button>
+
                   {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(4)}
+                    style={pillBaseStyle(5)}
                     onClick={onCycleAspect}
                   >
                     <span className="studio-pill-icon">
