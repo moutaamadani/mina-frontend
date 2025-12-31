@@ -30,6 +30,13 @@ const normalizeBase = (raw?: string | null) => {
 
 const MATCHA_URL = "https://www.faltastudio.com/cart/43328351928403:1";
 
+// Still engine lane:
+// - "main"  => Seedream (default)
+// - "niche" => Nano Banana (only if backend has MMA_NANOBANANA_VERSION set)
+const STILL_LANE: "main" | "niche" =
+  typeof window !== "undefined" && window.localStorage.getItem("mina_still_lane") === "niche"
+    ? "niche"
+    : "main";
 
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied.
@@ -159,6 +166,7 @@ type MmaGenerationResponse = {
   mode?: string; // "still" | "video"
   mma_vars?: any;
   outputs?: {
+    nanobanana_image_url?: string;
     seedream_image_url?: string;
     kling_video_url?: string;
     image_url?: string;
@@ -2138,6 +2146,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           stylePresetKeys: stylePresetKeysForApi,
           stylePresetKey: primaryStyleKeyForApi,
           minaVisionEnabled,
+          still_lane: STILL_LANE,
         },
         settings: {},
         history: {
@@ -2166,6 +2175,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       }
 
       const rawUrl =
+        result?.outputs?.nanobanana_image_url ||
         result?.outputs?.seedream_image_url ||
         result?.outputs?.image_url ||
         (result as any)?.imageUrl ||
@@ -2524,6 +2534,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               stylePresetKey: primaryStyleKeyForApi,
 
               minaVisionEnabled,
+              still_lane: STILL_LANE,
             },
             settings: {},
             history: { sessionId: sid || sessionId || null, sessionTitle: sessionTitle || null },
@@ -2544,6 +2555,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           }
 
           const rawUrl =
+            result?.outputs?.nanobanana_image_url ||
             result?.outputs?.seedream_image_url ||
             result?.outputs?.image_url ||
             (result as any)?.imageUrl ||
