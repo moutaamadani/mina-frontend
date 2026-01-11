@@ -205,16 +205,23 @@ function looksLikeSystemPrompt(s: string) {
   if (!t) return false;
 
   const low = t.toLowerCase();
-
-  // Only detect real "system-ish" text patterns (DO NOT use length)
   if (low.includes("you are") && (low.includes("assistant") || low.includes("system"))) return true;
-  if (low.includes("output format") && low.includes("json")) return true;
   if (low.includes("return strict json")) return true;
+  if (low.includes("output format")) return true;
   if (low.includes("safety:")) return true;
 
   return false;
 }
 
+
+function sanitizeUserBrief(s: string) {
+  let t = (s || "").trim();
+
+  // Fix your stored typo like "chttps://..."
+  if (t.startsWith("chttp://") || t.startsWith("chttps://")) t = t.slice(1);
+
+  return t.trim();
+}
 
 function sanitizeUserBrief(s: string) {
   let t = (s || "").trim();
@@ -245,51 +252,64 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   const varsMeta = vars && typeof vars === "object" ? (vars as any).meta : null;
   const varsFeedback = vars && typeof vars === "object" ? (vars as any).feedback : null;
 
-  const flow = String(varsMeta?.flow || meta?.flow || "").toLowerCase(); // "still_create", "motion_create", etc.
-  const isTweak = flow.includes("tweak") || flow.includes("edit") || flow.includes("revise");
+  const flow = String(varsMeta?.flow || meta?.flow || "").toLowerCase();
+  const mmaMode = String((row as any)?.mg_mma_mode || vars?.mode || "").toLowerCase();
+
+  const isTweak =
+    flow.includes("tweak") ||
+    flow.includes("edit") ||
+    flow.includes("revise") ||
+    flow.includes("variant") ||
+    flow.includes("iterate");
+
   const isMotion =
     typeof isMotionHint === "boolean"
       ? isMotionHint
-      : flow.includes("motion") ||
-        String((row as any)?.mg_mma_mode || "").toLowerCase() === "motion" ||
-        String(vars?.mode || "").toLowerCase() === "motion";
+      : mmaMode === "video" ||
+        mmaMode === "motion" ||
+        flow.includes("video") ||
+        flow.includes("animate") ||
+        flow.includes("motion");
 
-  // ---- user-entered brief sources (NO generated prompt fields) ----
+  // ----------------------------
+  // ✅ USER BRIEF ONLY (no AI prompt)
+  // ----------------------------
 
-  // STILL create (user typed)
-  const stillCreate = pick(varsInputs, ["brief", "user_brief", "userBrief", "create_brief", "createBrief"], "");
-
-  // STILL tweak (user typed)
-  const stillTweak = pick(varsInputs, ["tweak_brief", "tweak_user_brief", "tweakBrief", "edit_brief", "editBrief"], "");
-
-  // MOTION create (user typed)
-  const motionCreate = pick(varsInputs, ["motion_user_brief", "motionUserBrief", "animate_brief", "animateBrief"], "");
-
-  // MOTION tweak (user typed)
-  const motionTweak = pick(varsInputs, ["tweak_motion_user_brief", "tweakMotionUserBrief", "tweak_animate_brief", "tweakAnimateBrief"], "");
-
-  // Feedback fields (often hold the tweak text)
+  // Still
+  const stillCreate = pick(varsInputs, ["brief", "user_brief", "userBrief"], "");
+  const stillTweak = pick(varsInputs, ["tweak_brief", "tweak_user_brief", "tweakBrief"], "");
   const fbStill = pick(varsFeedback, ["still_feedback", "stillFeedback"], "");
+
+  // Video / Animate
+  const motionCreate = pick(varsInputs, ["motion_user_brief", "motionUserBrief"], "");
+  const motionTweak = pick(varsInputs, ["tweak_motion_user_brief", "tweakMotionUserBrief"], "");
   const fbMotion = pick(varsFeedback, ["motion_feedback", "motionFeedback"], "");
 
-  // Legacy user message fields (still user-entered, not generated)
-  const legacyUser = pick(row, ["mg_user_prompt", "mg_user_message", "mg_brief"], "") ||
-                     pick(payload?.inputs, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
-                     pick(payload, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
-                     pick(meta, ["brief", "user_brief", "userBrief", "userPrompt", "user_prompt"], "");
+  // Last resort legacy user fields (still user-entered)
+  const legacyUser =
+    pick(row, ["mg_user_prompt", "mg_user_message", "mg_brief"], "") ||
+    pick(payload?.inputs, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
+    pick(payload, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
+    pick(meta, ["brief", "user_brief", "userBrief", "userPrompt", "user_prompt"], "");
 
-  // Choose the right brief for THIS item
   const candidates: string[] = isMotion
-    ? (isTweak ? [motionTweak, fbMotion, motionCreate, stillCreate, fbStill, legacyUser] : [motionCreate, fbMotion, motionTweak, stillCreate, fbStill, legacyUser])
-    : (isTweak ? [stillTweak, fbStill, stillCreate, fbMotion, motionCreate, legacyUser] : [stillCreate, fbStill, stillTweak, legacyUser]);
+    ? isTweak
+      ? [motionTweak, fbMotion, motionCreate, fbStill, stillCreate, legacyUser]
+      : [motionCreate, fbMotion, motionTweak, fbStill, stillCreate, legacyUser]
+    : isTweak
+    ? [stillTweak, fbStill, stillCreate, fbMotion, motionCreate, legacyUser]
+    : [stillCreate, fbStill, stillTweak, legacyUser];
 
-  const brief = candidates
-    .map((s) => sanitizeUserBrief(String(s || "")))
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .filter((s) => !looksLikeSystemPrompt(s))[0] || "";
+  const brief =
+    candidates
+      .map((s) => sanitizeUserBrief(String(s || "")))
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => !looksLikeSystemPrompt(s))[0] || "";
 
-  // ---- keep the rest of your existing extraction ----
+  // ----------------------------
+  // keep your existing extractions
+  // ----------------------------
 
   const aspect =
     normalizeAspectRatio(
@@ -437,8 +457,6 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     platform,
   };
 }
-
-
 
 type ProfileProps = {
   email?: string;
@@ -700,7 +718,7 @@ export default function Profile({
 
         const liked = (generationId && likedGenIdSet.has(generationId)) || (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
 
-        const inputs = extractInputsForDisplay(g, isMotion);
+        const inputs = extractInputsForDisplay(g, isMotion || looksVideoMeta);
         const prompt = (inputs.brief || "").trim();
 
         const canRecreate = source === "generation" && !!onRecreate && !!prompt;
