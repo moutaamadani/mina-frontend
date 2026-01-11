@@ -574,6 +574,7 @@ export default function Profile({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Video refs
+  const lightboxVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
   const hoveredVideoIdRef = useRef<string | null>(null);
 
@@ -659,6 +660,20 @@ export default function Profile({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lightbox]);
+
+  useEffect(() => {
+    if (!lightbox?.isMotion) return;
+
+    const v = lightboxVideoRef.current;
+    if (!v) return;
+
+    try {
+      v.muted = false;
+      v.volume = 1;
+      v.currentTime = 0;
+      v.play().catch(() => {});
+    } catch {}
   }, [lightbox]);
 
   const askDelete = (id: string) => {
@@ -985,9 +1000,18 @@ export default function Profile({
       {/* ✅ Lightbox: stopPropagation so video controls work (mobile) */}
       {lightbox ? (
         <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
+          {/* stop click bubbling so tapping the media DOES NOT close */}
           <div className="profile-lightbox-media" onClick={(e) => e.stopPropagation()}>
             {lightbox.isMotion ? (
-              <video src={lightbox.url} autoPlay loop muted playsInline controls />
+              <video
+                ref={lightboxVideoRef}
+                src={lightbox.url}
+                autoPlay
+                loop
+                playsInline
+                controls
+                muted={false}
+              />
             ) : (
               <img src={lightbox.url} alt="" loading="lazy" />
             )}

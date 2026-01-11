@@ -775,3 +775,8 @@
   transform: scale(1.04);
 }
 .profile-card-recreate { display: none !important; }
+
+/* Keep ONLY the first filter pill (motion/still/show all). Hide the rest */
+.profile-filters .profile-filter-pill:nth-child(n + 2) {
+  display: none !important;
+}
