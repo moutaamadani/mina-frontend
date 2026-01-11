@@ -208,7 +208,7 @@ type UploadPanelKey = "product" | "logo" | "inspiration";
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
 type StillLane = "main" | "niche";
-const STILL_LANE_LS_KEY = "mina_still_lane_v1";
+const STILL_LANE_LS_KEY = "mina_still_lane_v2";
 
 type AspectOption = {
   key: AspectKey;
