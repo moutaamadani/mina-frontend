@@ -220,8 +220,16 @@ function sanitizeUserBrief(s: string) {
   // Fix your stored typo like "chttps://..."
   if (t.startsWith("chttp://") || t.startsWith("chttps://")) t = t.slice(1);
 
-  return t.trim();
+  t = t.trim();
+
+  // ✅ Treat placeholder dashes as "empty"
+  // Examples: "-", "—", "–", "--", " —  — "
+  const withoutDashes = t.replace(/[-–—]/g, "").trim();
+  if (!withoutDashes) return "";
+
+  return t;
 }
+
 
 function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
