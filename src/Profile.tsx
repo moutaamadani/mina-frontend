@@ -574,7 +574,6 @@ export default function Profile({
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Video refs
-  const lightboxVideoRef = useRef<HTMLVideoElement | null>(null);
   const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
   const hoveredVideoIdRef = useRef<string | null>(null);
 
@@ -609,6 +608,103 @@ export default function Profile({
     setLightbox({ url, isMotion });
   };
   const closeLightbox = () => setLightbox(null);
+
+  const preloadedRef = useRef<Set<string>>(new Set());
+
+  const prefetchImage = useCallback((url: string) => {
+    if (!url) return;
+    if (preloadedRef.current.has(url)) return;
+    preloadedRef.current.add(url);
+
+    const img = new Image();
+    try {
+      (img as any).decoding = "async";
+    } catch {}
+    img.src = url;
+  }, []);
+
+  // -----------------------------
+  // Lightbox close: swipe any direction (mobile) + click/esc (desktop)
+  // -----------------------------
+  const lightboxSwipeRef = useRef<{
+    active: boolean;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startedAt: number;
+    pointerType: string;
+  }>({
+    active: false,
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    startedAt: 0,
+    pointerType: "",
+  });
+
+  const lightboxJustSwipedRef = useRef(false);
+
+  const SWIPE_CLOSE_PX = 70;
+  const SWIPE_MAX_MS = 900;
+
+  const onLightboxPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!lightbox) return;
+
+      const pt = String((e as any).pointerType || "");
+      if (pt === "mouse") return;
+
+      lightboxSwipeRef.current = {
+        active: true,
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        startedAt: Date.now(),
+        pointerType: pt,
+      };
+
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {}
+
+      e.preventDefault();
+    },
+    [lightbox]
+  );
+
+  const onLightboxPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const st = lightboxSwipeRef.current;
+      if (!lightbox) return;
+      if (!st.active) return;
+      if (st.pointerId !== e.pointerId) return;
+
+      const dx = e.clientX - st.startX;
+      const dy = e.clientY - st.startY;
+      const dist = Math.hypot(dx, dy);
+      const age = Date.now() - st.startedAt;
+
+      if (dist >= SWIPE_CLOSE_PX && age <= SWIPE_MAX_MS) {
+        lightboxJustSwipedRef.current = true;
+        st.active = false;
+        try {
+          e.currentTarget.releasePointerCapture(e.pointerId);
+        } catch {}
+        closeLightbox();
+        e.preventDefault();
+      }
+    },
+    [lightbox, closeLightbox]
+  );
+
+  const onLightboxPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const st = lightboxSwipeRef.current;
+    if (st.pointerId !== e.pointerId) return;
+    st.active = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {}
+  }, []);
 
   // ============================================================
   // Matcha quantity popup (same behavior as StudioLeft)
@@ -660,20 +756,6 @@ export default function Profile({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [lightbox]);
-
-  useEffect(() => {
-    if (!lightbox?.isMotion) return;
-
-    const v = lightboxVideoRef.current;
-    if (!v) return;
-
-    try {
-      v.muted = false;
-      v.volume = 1;
-      v.currentTime = 0;
-      v.play().catch(() => {});
-    } catch {}
   }, [lightbox]);
 
   const askDelete = (id: string) => {
@@ -997,23 +1079,52 @@ export default function Profile({
         max={10}
       />
 
-      {/* ✅ Lightbox: stopPropagation so video controls work (mobile) */}
       {lightbox ? (
-        <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
-          {/* stop click bubbling so tapping the media DOES NOT close */}
-          <div className="profile-lightbox-media" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="profile-lightbox"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => {
+            if (lightboxJustSwipedRef.current) {
+              lightboxJustSwipedRef.current = false;
+              return;
+            }
+            closeLightbox();
+          }}
+          onPointerDown={onLightboxPointerDown}
+          onPointerMove={onLightboxPointerMove}
+          onPointerUp={onLightboxPointerUp}
+          onPointerCancel={onLightboxPointerUp}
+        >
+          <div
+            className="profile-lightbox-media"
+            onClick={(e) => {
+              e.stopPropagation();
+              closeLightbox();
+            }}
+          >
             {lightbox.isMotion ? (
               <video
-                ref={lightboxVideoRef}
+                className="profile-lightbox-video"
                 src={lightbox.url}
                 autoPlay
                 loop
+                muted
                 playsInline
-                controls
-                muted={false}
+                controls={false}
+                disablePictureInPicture
+                controlsList="nodownload noplaybackrate noremoteplayback"
               />
             ) : (
-              <img src={lightbox.url} alt="" loading="lazy" />
+              <img
+                className="profile-lightbox-img"
+                src={lightbox.url}
+                alt=""
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+                draggable={false}
+              />
             )}
           </div>
         </div>
@@ -1186,10 +1297,17 @@ export default function Profile({
                   className="profile-card-media"
                   role="button"
                   tabIndex={0}
-                  onClick={() => openLightbox(it.isMotion ? it.url : cfThumb(it.url, 2400, 85), it.isMotion)}
+                  onClick={() => {
+                    const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                    if (!it.isMotion) prefetchImage(big);
+                    openLightbox(big, it.isMotion);
+                  }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ")
-                      openLightbox(it.isMotion ? it.url : cfThumb(it.url, 2400, 85), it.isMotion);
+                    if (e.key === "Enter" || e.key === " ") {
+                      const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                      if (!it.isMotion) prefetchImage(big);
+                      openLightbox(big, it.isMotion);
+                    }
                   }}
                 >
                   {it.url ? (
@@ -1293,7 +1411,10 @@ export default function Profile({
                               <button
                                 className="profile-card-mini"
                                 type="button"
-                                onClick={() => openLightbox(inputs.productImageUrl, false)}
+                                onClick={() => {
+                                  prefetchImage(inputs.productImageUrl);
+                                  openLightbox(inputs.productImageUrl, false);
+                                }}
                               >
                                 view
                               </button>
@@ -1308,7 +1429,10 @@ export default function Profile({
                               <button
                                 className="profile-card-mini"
                                 type="button"
-                                onClick={() => openLightbox(inputs.logoImageUrl, false)}
+                                onClick={() => {
+                                  prefetchImage(inputs.logoImageUrl);
+                                  openLightbox(inputs.logoImageUrl, false);
+                                }}
                               >
                                 view
                               </button>
@@ -1323,7 +1447,10 @@ export default function Profile({
                               <button
                                 className="profile-card-mini"
                                 type="button"
-                                onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
+                                onClick={() => {
+                                  prefetchImage(inputs.styleImageUrls[0]);
+                                  openLightbox(inputs.styleImageUrls[0], false);
+                                }}
                               >
                                 view
                               </button>
