@@ -83,6 +83,9 @@ type StudioLeftProps = {
   currentAspect: AspectOptionLike;
   currentAspectIconUrl: string;
   onCycleAspect: () => void;
+  // ✅ long-press on Ratio toggles landscape (swap w:h)
+  aspectLandscape?: boolean;
+  onToggleAspectLandscape?: () => void;
 
   animateAspect?: AspectOptionLike;
   animateAspectIconUrl?: string;
@@ -312,6 +315,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     currentAspect,
     currentAspectIconUrl,
     onCycleAspect,
+    aspectLandscape: aspectLandscapeProp,
+    onToggleAspectLandscape,
 
     animateAspect,
     animateAspectIconUrl,
@@ -402,6 +407,78 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     const t = window.setTimeout(() => onCycleAspect?.(), 0);
     return () => window.clearTimeout(t);
   }, [aspectToken, onCycleAspect]);
+
+  const aspectLandscape = !!aspectLandscapeProp;
+
+  const aspectHoldTimerRef = useRef<number | null>(null);
+  const suppressNextAspectClickRef = useRef(false);
+
+  const parseRatio = (s: string) => {
+    const t = String(s || "").trim();
+    if (!t) return null;
+
+    // accept "9:16", "9/16", "9-16", "9 x 16"
+    const m = t.match(/^(\d+(?:\.\d+)?)\s*[:\/xX-]\s*(\d+(?:\.\d+)?)$/);
+    if (!m) return null;
+
+    const a = Number(m[1]);
+    const b = Number(m[2]);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) return null;
+    return { a, b };
+  };
+
+  const swapRatioText = (s: string) => {
+    const r = parseRatio(s);
+    if (!r) return s;
+    if (r.a === r.b) return `${r.a}:${r.b}`;
+    return `${r.b}:${r.a}`;
+  };
+
+  const isSquareRatio = (s: string) => {
+    const r = parseRatio(s);
+    if (!r) return false;
+    return r.a === r.b;
+  };
+
+  const displayAspectLabel = useMemo(() => {
+    const base = String(currentAspect?.label || currentAspect?.ratio || "").trim();
+    if (!aspectLandscape) return base;
+    return swapRatioText(base);
+  }, [aspectLandscape, currentAspect?.label, currentAspect?.ratio]);
+
+  const aspectIconRotate = useMemo(() => {
+    const base = String(currentAspect?.label || currentAspect?.ratio || "").trim();
+    return aspectLandscape && base && !isSquareRatio(base) ? "rotate(90deg)" : undefined;
+  }, [aspectLandscape, currentAspect?.label, currentAspect?.ratio]);
+
+  const clearAspectHold = () => {
+    if (aspectHoldTimerRef.current !== null) {
+      window.clearTimeout(aspectHoldTimerRef.current);
+      aspectHoldTimerRef.current = null;
+    }
+  };
+
+  const onAspectPointerDown = () => {
+    // only if parent supports it
+    if (!onToggleAspectLandscape) return;
+
+    suppressNextAspectClickRef.current = false;
+    clearAspectHold();
+
+    aspectHoldTimerRef.current = window.setTimeout(() => {
+      suppressNextAspectClickRef.current = true;
+      onToggleAspectLandscape?.();
+      clearAspectHold();
+    }, 520);
+  };
+
+  const onAspectClick = () => {
+    if (suppressNextAspectClickRef.current) {
+      suppressNextAspectClickRef.current = false;
+      return; // swallow click after long-press
+    }
+    onCycleAspect?.();
+  };
 
 
   const imageCreditsOk = imageCreditsOkProp ?? true;
@@ -1203,12 +1280,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
                     style={pillBaseStyle(5)}
-                    onClick={onCycleAspect}
+                    onPointerDown={onAspectPointerDown}
+                    onPointerUp={clearAspectHold}
+                    onPointerCancel={clearAspectHold}
+                    onPointerLeave={clearAspectHold}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={onAspectClick}
+                    title={onToggleAspectLandscape ? "Tap to cycle • Hold to flip landscape" : "Tap to cycle"}
                   >
                     <span className="studio-pill-icon">
-                      <img src={currentAspectIconUrl} alt="" />
+                      <img src={currentAspectIconUrl} alt="" style={{ transform: aspectIconRotate }} />
                     </span>
-                    <span className="studio-pill-main">{currentAspect.label}</span>
+                    <span className="studio-pill-main">{displayAspectLabel}</span>
                     <span className="studio-pill-sub">{currentAspect.subtitle}</span>
                   </button>
                 </>

@@ -594,13 +594,14 @@ const MinaApp: React.FC<MinaAppProps> = () => {
 
   const [, setPlatform] = useState("tiktok");
   const [aspectIndex, setAspectIndex] = useState(() => {
-  // ✅ Mobile default ratio = 9:16
-  if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
-    return 0; // ASPECT_OPTIONS[0] = 9:16
-  }
-  return 2; // desktop default stays 2:3
-});
+    // ✅ Mobile default ratio = 9:16
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 900px)").matches) {
+      return 0; // ASPECT_OPTIONS[0] = 9:16
+    }
+    return 2; // desktop default stays 2:3
+  });
 
+  const [aspectLandscape, setAspectLandscape] = useState(false);
 
   const [animateAspectKey, setAnimateAspectKey] = useState<AspectKey>(ASPECT_OPTIONS[aspectIndex].key);
   const [animateMode, setAnimateMode] = useState(false);
@@ -959,6 +960,24 @@ const showControls = uiStage >= 3 || hasEverTyped;
   );
 
   const currentAspect = ASPECT_OPTIONS[aspectIndex];
+  function swapAspectRatio(raw: string) {
+    const s = String(raw || "").trim();
+    if (!s) return s;
+
+    const m = s.match(/^(\d+(?:\.\d+)?)\s*[:\/xX-]\s*(\d+(?:\.\d+)?)$/);
+    if (!m) return s;
+
+    const a = m[1];
+    const b = m[2];
+    if (a === b) return `${a}:${b}`;
+    return `${b}:${a}`;
+  }
+
+  // ✅ this is what you actually send to backend
+  const effectiveAspectRatio = useMemo(() => {
+    const base = String(currentAspect?.ratio || currentAspect?.label || "").trim();
+    return aspectLandscape ? swapAspectRatio(base) : base;
+  }, [aspectLandscape, currentAspect?.ratio, currentAspect?.label]);
   const latestStill: StillItem | null = stillItems[0] || null;
   const currentStill: StillItem | null = stillItems[stillIndex] || stillItems[0] || null;
   const currentMotion: MotionItem | null = motionItems[motionIndex] || motionItems[0] || null;
@@ -2112,7 +2131,7 @@ async function mmaWaitForFinal(
 
     try {
       const safeAspectRatio =
-        REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3";
+        REPLICATE_ASPECT_RATIO_MAP[effectiveAspectRatio] || effectiveAspectRatio || "2:3";
 
       const sid = await ensureSession();
 
@@ -2222,7 +2241,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         url,
         createdAt: new Date().toISOString(),
         prompt: String(result?.prompt || trimmed),
-        aspectRatio: currentAspect.ratio,
+        aspectRatio: effectiveAspectRatio,
       };
 
       setStillItems((prev) => {
@@ -3834,6 +3853,8 @@ const headerOverlayClass =
               currentAspect={currentAspect}
               currentAspectIconUrl={ASPECT_ICON_URLS[currentAspect.key]}
               onCycleAspect={handleCycleAspect}
+              aspectLandscape={aspectLandscape}
+              onToggleAspectLandscape={() => setAspectLandscape((v) => !v)}
               animateAspect={animateAspectOption}
               animateAspectIconUrl={animateAspectIconUrl}
               animateAspectIconRotated={animateAspectRotated}
