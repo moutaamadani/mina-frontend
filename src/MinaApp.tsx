@@ -255,31 +255,30 @@ const STYLE_PRESETS = [
   {
     key: "vintage",
     label: "Vintage",
-    thumb: "https://assets.faltastudio.com/mma/still/c0e36258-3c2d-4509-93f0-6d29a65ce291.jpg",
+    thumb: "https://assets.faltastudio.com/mma/still/8a098823-1373-4caf-8851-63ad2d7edb95.png",
     hero: [
-      "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/vintage-hero.png",//luxury pearl
-      "https://assets.faltastudio.com/mma/still/c0e36258-3c2d-4509-93f0-6d29a65ce291.jpg",//brown wood
-      "https://assets.faltastudio.com/mma/still/8089c15b-895a-41e4-a46f-b3d0790da584.jpg", //brown eggplant
+      "https://assets.faltastudio.com/mma/still/8167b69f-048f-49d3-a45d-669303cefc70.png",//luxury pearl
+      "https://assets.faltastudio.com/mma/still/368bd75e-92ec-4d1d-a887-dc269804c043.png",//brown wood
     ],
   },
   {
     key: "gradient",
     label: "Luxury",
-    thumb: "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-thumb.png",
+    thumb: "https://assets.faltastudio.com/mma/still/fb5512eb-05bd-4e69-a07f-d7b4a7c397eb.png",
     hero: [
-      "https://assets.faltastudio.com/Website%20Assets/Editorial%20style/gradient-hero.png", //horse
-      "https://assets.faltastudio.com/mma/still/1163bcdd-5dbf-4fe0-adc4-8348f3b1b5df.jpg", //candle
-      "https://assets.faltastudio.com/mma/still/c106e481-3cbb-47b1-a4bc-52d383c62875.jpg", //tomato
+      "https://assets.faltastudio.com/mma/still/fb5512eb-05bd-4e69-a07f-d7b4a7c397eb.png", //grey
+      "https://assets.faltastudio.com/mma/still/eb667709-b1f3-42af-8357-92da11a7356e.png", //white
+      "https://assets.faltastudio.com/mma/still/8a098823-1373-4caf-8851-63ad2d7edb95.png", //
     ],
   },
   {
     key: "back-light",
     label: "Minimal",
-    thumb: "https://assets.faltastudio.com/mma/still/4f5cd0c9-5aac-4728-b26a-7733419040f6.jpg",
+    thumb: "https://assets.faltastudio.com/mma/still/33adf824-9895-43cf-b1fb-3d2aa414d4fe.png",
     hero: [
-      "https://assets.faltastudio.com/mma/still/c8b0c214-bd61-4b39-ae27-7af2f4de5460.jpg", //Poire
-      "https://assets.faltastudio.com/mma/still/d70ea648-bf74-4e1f-8a39-83f6d3f962af.jpg", //Vanilla Sticks
-      "https://assets.faltastudio.com/mma/still/7f1615a9-95f7-4659-a293-960b287d8c96.jpg", //Cerise bowl
+      "https://assets.faltastudio.com/mma/still/ba77edf8-4efe-443e-9128-9a810ba1013e.png", //purple
+      "https://assets.faltastudio.com/mma/still/e213a6c9-7705-426d-a057-84af20a05e60.png", //red
+      "https://assets.faltastudio.com/mma/still/33adf824-9895-43cf-b1fb-3d2aa414d4fe.png", //beige
       "",
     ],
   },
