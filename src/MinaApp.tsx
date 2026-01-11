@@ -1713,7 +1713,7 @@ async function mmaWaitForFinal(
         balance,
         meta: {
           imageCost: Number(json?.meta?.imageCost ?? credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1),
-          motionCost: Number(json?.meta?.motionCost ?? credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5),
+          motionCost: Number(json?.meta?.motionCost ?? credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 10),
           expiresAt,
         },
       };
@@ -1816,7 +1816,7 @@ async function mmaWaitForFinal(
           balance: history.credits.balance,
           meta: {
             imageCost: prev?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1,
-            motionCost: prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5,
+            motionCost: prev?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 10,
             expiresAt: history.credits.expiresAt ?? prev?.meta?.expiresAt ?? null,
           },
         }));
