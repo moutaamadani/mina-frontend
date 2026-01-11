@@ -1,11 +1,13 @@
 // =============================================================
 // FILE: src/Profile.tsx
 // Mina — Profile (Render-only, data comes from MinaApp)
-// - show real user prompt
-// - confirm delete + fade out
+// - show real user prompt (user-typed brief, not system prompt)
+// - likes + ratio filters actually filter (not just dim)
+// - delete confirm + fade out
 // - better download
-// - Re-create (left) + Animate (right)
-// - Get more Matchas opens qty popup (same as StudioLeft)
+// - Re-create + Animate (if still image)
+// - Video: autoplay muted in grid, UNMUTE on hover (desktop)
+// - Lightbox: stop click-bubbling so controls work on mobile
 // =============================================================
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +15,6 @@ import "./Profile.css";
 import TopLoadingBar from "./components/TopLoadingBar";
 import MatchaQtyModal from "./components/MatchaQtyModal";
 import { downloadMinaAsset } from "./lib/minaDownload";
-
 
 type Row = Record<string, any>;
 
@@ -71,31 +72,23 @@ function normalizeMediaUrl(url: string) {
   return base || url;
 }
 
+// Make likes match even if one URL is Cloudflare transformed and the other is raw.
+function canonicalAssetUrl(url: string) {
+  const s = normalizeMediaUrl(url);
+  if (!s) return "";
+
+  // https://assets.faltastudio.com/cdn-cgi/image/width=...,quality=...,format=auto/<path>
+  const m = s.match(/^https?:\/\/assets\.faltastudio\.com\/cdn-cgi\/image\/[^/]+\/(.+)$/);
+  if (m?.[1]) return `https://assets.faltastudio.com/${m[1]}`;
+
+  return s;
+}
+
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
-}
-
-function guessDownloadExt(url: string, fallbackExt: string) {
-  const lower = (url || "").toLowerCase().split("?")[0].split("#")[0];
-  if (lower.endsWith(".mp4")) return ".mp4";
-  if (lower.endsWith(".webm")) return ".webm";
-  if (lower.endsWith(".mov")) return ".mov";
-  if (lower.endsWith(".m4v")) return ".m4v";
-  if (lower.match(/\.jpe?g$/)) return ".jpg";
-  if (lower.endsWith(".png")) return ".png";
-  if (lower.endsWith(".gif")) return ".gif";
-  if (lower.endsWith(".webp")) return ".webp";
-  return fallbackExt;
-}
-
-function buildDownloadName(url: string, id?: string | null) {
-  const ext = guessDownloadExt(url, ".png");
-  const short = (id || "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 10);
-  const base = short ? `Mina_${short}` : "Mina_export";
-  return base.endsWith(ext) ? base : `${base}${ext}`;
 }
 
 async function downloadMedia(url: string, prompt: string, isMotion: boolean) {
@@ -108,11 +101,8 @@ async function downloadMedia(url: string, prompt: string, isMotion: boolean) {
     });
   } catch (err) {
     console.warn("Download failed:", err);
-    // Optional: alert("Download failed. Please try again.");
   }
 }
-
-
 
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
@@ -128,6 +118,12 @@ function normalizeAspectRatio(raw: string | null | undefined) {
   const trimmed = raw.trim();
   if (!trimmed) return "";
 
+  // ✅ Accept keys like "9-16", "2-3"
+  const asKey = trimmed.replace("/", "-").replace(":", "-");
+  const byKey = ASPECT_OPTIONS.find((opt) => opt.key === asKey);
+  if (byKey) return byKey.ratio;
+
+  // direct ratio form
   const direct = trimmed.replace("/", ":");
   if (direct.includes(":")) {
     const [a, b] = direct.split(":").map((p) => p.trim());
@@ -138,6 +134,7 @@ function normalizeAspectRatio(raw: string | null | undefined) {
     }
   }
 
+  // parse "9 x 16" etc and pick closest
   const re = /([0-9.]+)\s*[xX:\/ ]\s*([0-9.]+)/;
   const m = trimmed.match(re);
   if (m) {
@@ -160,46 +157,6 @@ function normalizeAspectRatio(raw: string | null | undefined) {
   return "";
 }
 
-// Likes are feedback rows where comment is empty.
-function findLikeUrl(row: Row) {
-  const payload = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
-  const payloadObj = tryParseJson<any>(payload) ?? payload;
-
-  const payloadComment = typeof payloadObj?.comment === "string" ? payloadObj.comment.trim() : null;
-
-  const commentFieldPresent =
-    Object.prototype.hasOwnProperty.call(row, "mg_comment") || Object.prototype.hasOwnProperty.call(row, "comment");
-
-  const commentValue = commentFieldPresent ? pick(row, ["mg_comment", "comment"], "") : null;
-  const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
-
-  const isLike = (payloadComment !== null && payloadComment === "") || (commentTrim !== null && commentTrim === "");
-  if (!isLike) return "";
-
-  const out = pick(row, ["mg_output_url", "outputUrl", "output_url"], "").trim();
-  const img = pick(row, ["mg_image_url", "imageUrl", "image_url"], "").trim();
-  const vid = pick(row, ["mg_video_url", "videoUrl", "video_url"], "").trim();
-
-  return vid || (isVideoUrl(out) ? out : "") || img || out;
-}
-
-type RecreateDraft = {
-  mode: "still" | "motion";
-  brief: string;
-  settings: {
-    aspect_ratio?: string;
-    minaVisionEnabled?: boolean;
-    stylePresetKeys?: string[];
-  };
-  assets: {
-    productImageUrl?: string;
-    logoImageUrl?: string;
-    styleImageUrls?: string[];
-    kling_start_image_url?: string;
-    kling_end_image_url?: string;
-  };
-};
-
 function looksLikeSystemPrompt(s: string) {
   const t = (s || "").trim();
   if (!t) return false;
@@ -213,23 +170,86 @@ function looksLikeSystemPrompt(s: string) {
   return false;
 }
 
-
 function sanitizeUserBrief(s: string) {
   let t = (s || "").trim();
 
-  // Fix your stored typo like "chttps://..."
+  // Fix stored typo like "chttps://..."
   if (t.startsWith("chttp://") || t.startsWith("chttps://")) t = t.slice(1);
 
-  t = t.trim();
-
-  // ✅ Treat placeholder dashes as "empty"
-  // Examples: "-", "—", "–", "--", " —  — "
+  // Treat placeholder dashes as empty
   const withoutDashes = t.replace(/[-–—]/g, "").trim();
   if (!withoutDashes) return "";
 
-  return t;
+  return t.trim();
 }
 
+// ---------- LIKES (MMA + legacy safe) ----------
+
+function isLikeEventRow(row: Row) {
+  const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
+  const metaObj = tryParseJson<any>(metaRaw) ?? metaRaw ?? {};
+  const eventType = String(metaObj?.event_type ?? metaObj?.eventType ?? (row as any)?.event_type ?? "").toLowerCase();
+  if (eventType === "like") return true;
+
+  // legacy: payload.liked true
+  const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? {};
+  const rawLiked = payload?.liked ?? payload?.isLiked ?? payload?.like ?? (row as any)?.liked;
+  if (rawLiked === true || rawLiked === 1 || rawLiked === "true") return true;
+
+  // legacy: "likes are feedback rows where comment is empty"
+  const payloadComment = typeof payload?.comment === "string" ? payload.comment.trim() : null;
+  const commentFieldPresent =
+    Object.prototype.hasOwnProperty.call(row, "mg_comment") || Object.prototype.hasOwnProperty.call(row, "comment");
+  const commentValue = commentFieldPresent ? pick(row, ["mg_comment", "comment"], "") : null;
+  const commentTrim = typeof commentValue === "string" ? commentValue.trim() : null;
+  if ((payloadComment !== null && payloadComment === "") || (commentTrim !== null && commentTrim === "")) return true;
+
+  return false;
+}
+
+function findLikeUrl(row: Row) {
+  if (!isLikeEventRow(row)) return "";
+
+  const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
+  const metaObj = tryParseJson<any>(metaRaw) ?? metaRaw ?? {};
+  const metaPayloadRaw = metaObj?.payload ?? null;
+  const metaPayload = tryParseJson<any>(metaPayloadRaw) ?? metaPayloadRaw ?? {};
+
+  const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? {};
+
+  const out =
+    pick(metaPayload, ["output_url", "outputUrl", "url", "media_url", "mediaUrl"], "").trim() ||
+    pick(payload, ["output_url", "outputUrl", "url", "media_url", "mediaUrl"], "").trim() ||
+    pick(payload, ["image_url", "imageUrl", "video_url", "videoUrl"], "").trim() ||
+    pick(row, ["mg_output_url", "outputUrl", "output_url"], "").trim() ||
+    pick(row, ["mg_image_url", "imageUrl", "image_url"], "").trim() ||
+    pick(row, ["mg_video_url", "videoUrl", "video_url"], "").trim();
+
+  return out;
+}
+
+function findLikedGenerationId(row: Row) {
+  if (!isLikeEventRow(row)) return "";
+
+  const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
+  const metaObj = tryParseJson<any>(metaRaw) ?? metaRaw ?? {};
+  const metaPayloadRaw = metaObj?.payload ?? null;
+  const metaPayload = tryParseJson<any>(metaPayloadRaw) ?? metaPayloadRaw ?? {};
+
+  const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
+  const payload = tryParseJson<any>(payloadRaw) ?? payloadRaw ?? {};
+
+  const gid =
+    safeString((row as any)?.mg_generation_id, "").trim() ||
+    safeString(metaPayload?.generation_id ?? metaPayload?.generationId ?? metaPayload?.generationID, "").trim() ||
+    safeString(payload?.generation_id ?? payload?.generationId ?? payload?.generationID, "").trim();
+
+  return gid;
+}
+
+// ---------- INPUT EXTRACTION (USER BRIEF) ----------
 
 function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
@@ -274,27 +294,36 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   // ✅ USER BRIEF ONLY (no AI prompt)
   // ----------------------------
 
+  const commonUser = pick(varsInputs, ["brief", "user_brief", "userBrief", "prompt", "user_prompt", "userPrompt"], "");
+  const commonUserMeta = pick(varsMeta, ["brief", "user_brief", "userBrief", "prompt", "user_prompt", "userPrompt"], "");
+
   // Still
-  const stillCreate = pick(varsInputs, ["brief", "user_brief", "userBrief"], "");
+  const stillCreate = commonUser || commonUserMeta;
   const stillTweak = pick(varsInputs, ["tweak_brief", "tweak_user_brief", "tweakBrief"], "");
-  const fbStill = pick(varsFeedback, ["still_feedback", "stillFeedback"], "");
+  const fbStill = pick(varsFeedback, ["still_feedback", "stillFeedback", "feedback_still"], "");
 
-  // Video / Animate
-  const motionCreate = pick(varsInputs, ["motion_user_brief", "motionUserBrief"], "");
+  // Motion / Video
+  const motionCreate =
+    pick(varsInputs, ["motion_user_brief", "motionUserBrief", "motion_brief", "motionBrief"], "") ||
+    commonUser ||
+    commonUserMeta;
+
+  const motionOverride = pick(varsInputs, ["prompt_override", "motion_prompt_override", "motionPromptOverride"], "");
+
   const motionTweak = pick(varsInputs, ["tweak_motion_user_brief", "tweakMotionUserBrief"], "");
-  const fbMotion = pick(varsFeedback, ["motion_feedback", "motionFeedback"], "");
+  const fbMotion = pick(varsFeedback, ["motion_feedback", "motionFeedback", "feedback_motion"], "");
 
-  // Last resort legacy user fields (still user-entered)
+  // Last resort user-entered legacy fields (still user-typed)
   const legacyUser =
     pick(row, ["mg_user_prompt", "mg_user_message", "mg_brief"], "") ||
-    pick(payload?.inputs, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
-    pick(payload, ["brief", "user_brief", "userBrief", "motion_user_brief"], "") ||
-    pick(meta, ["brief", "user_brief", "userBrief", "userPrompt", "user_prompt"], "");
+    pick(payload?.inputs, ["brief", "user_brief", "userBrief", "motion_user_brief", "prompt", "userPrompt"], "") ||
+    pick(payload, ["brief", "user_brief", "userBrief", "motion_user_brief", "prompt", "userPrompt"], "") ||
+    pick(meta, ["brief", "user_brief", "userBrief", "userPrompt", "user_prompt", "prompt"], "");
 
   const candidates: string[] = isMotion
     ? isTweak
-      ? [motionTweak, fbMotion, motionCreate, fbStill, stillCreate, legacyUser]
-      : [motionCreate, fbMotion, motionTweak, fbStill, stillCreate, legacyUser]
+      ? [motionTweak, fbMotion, motionOverride, motionCreate, fbStill, stillCreate, legacyUser]
+      : [motionCreate, motionOverride, fbMotion, motionTweak, fbStill, stillCreate, legacyUser]
     : isTweak
     ? [stillTweak, fbStill, stillCreate, fbMotion, motionCreate, legacyUser]
     : [stillCreate, fbStill, stillTweak, legacyUser];
@@ -307,7 +336,7 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
       .filter((s) => !looksLikeSystemPrompt(s))[0] || "";
 
   // ----------------------------
-  // keep your existing extractions
+  // extractions for recreate + details
   // ----------------------------
 
   const aspect =
@@ -316,8 +345,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
         pick(meta, ["aspectRatio", "aspect_ratio"], "") ||
         pick(payload, ["aspect_ratio", "aspectRatio"], "") ||
         pick(payload?.inputs, ["aspect_ratio", "aspectRatio"], "") ||
-        pick(varsInputs, ["aspect_ratio", "aspectRatio"], "") ||
-        pick(varsMeta, ["aspectRatio", "aspect_ratio"], "")
+        pick(varsInputs, ["aspect_ratio", "aspectRatio", "ratio"], "") ||
+        pick(varsMeta, ["aspectRatio", "aspect_ratio", "ratio"], "")
     ) || "";
 
   const stylePresetKeysRaw =
@@ -331,6 +360,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     varsMeta?.style_preset_keys ??
     varsInputs?.stylePresetKeys ??
     varsInputs?.style_preset_keys ??
+    vars?.stylePresetKeys ??
+    vars?.style_preset_keys ??
     null;
 
   const stylePresetKeyRaw =
@@ -344,6 +375,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     varsMeta?.style_preset_key ??
     varsInputs?.stylePresetKey ??
     varsInputs?.style_preset_key ??
+    vars?.stylePresetKey ??
+    vars?.style_preset_key ??
     null;
 
   const stylePresetKeys: string[] = Array.isArray(stylePresetKeysRaw)
@@ -407,7 +440,7 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     [];
 
   const styleImages: string[] = Array.isArray(styleImageUrls)
-    ? styleImageUrls.map(String).filter((u) => u.startsWith("http"))
+    ? styleImageUrls.map(String).filter((u) => String(u).startsWith("http"))
     : [];
 
   const startImageUrl =
@@ -416,6 +449,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
         varsAssets?.startImageUrl ||
         varsInputs?.start_image_url ||
         varsInputs?.startImageUrl ||
+        varsInputs?.kling_start_image_url ||
+        varsInputs?.klingStartImageUrl ||
         ""
     ).trim() || "";
 
@@ -425,6 +460,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
         varsAssets?.endImageUrl ||
         varsInputs?.end_image_url ||
         varsInputs?.endImageUrl ||
+        varsInputs?.kling_end_image_url ||
+        varsInputs?.klingEndImageUrl ||
         ""
     ).trim() || "";
 
@@ -457,6 +494,23 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   };
 }
 
+type RecreateDraft = {
+  mode: "still" | "motion";
+  brief: string;
+  settings: {
+    aspect_ratio?: string;
+    minaVisionEnabled?: boolean;
+    stylePresetKeys?: string[];
+  };
+  assets: {
+    productImageUrl?: string;
+    logoImageUrl?: string;
+    styleImageUrls?: string[];
+    kling_start_image_url?: string;
+    kling_end_image_url?: string;
+  };
+};
+
 type ProfileProps = {
   email?: string;
   credits?: number | null;
@@ -474,7 +528,6 @@ type ProfileProps = {
   // ✅ for Matcha popup (same URL you pass to StudioLeft)
   matchaUrl?: string;
 
-  // keep prop for compatibility, but UI no longer shows Refresh
   onRefresh?: () => void;
 
   onDelete?: (id: string) => Promise<void> | void;
@@ -522,10 +575,32 @@ export default function Profile({
 
   // Video refs
   const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const hoveredVideoIdRef = useRef<string | null>(null);
+
   const registerVideoEl = useCallback((id: string, el: HTMLVideoElement | null) => {
     const m = videoElsRef.current;
-    if (el) m.set(id, el);
-    else m.delete(id);
+    if (el) {
+      el.dataset.minaId = id; // ✅ safe
+      m.set(id, el);
+    } else {
+      m.delete(id);
+    }
+  }, []);
+
+  // Hover audio (desktop only). Browsers may still block sound in some cases,
+  // but this is the correct / safest approach.
+  const setVideoHover = useCallback((id: string, hovering: boolean) => {
+    const el = videoElsRef.current.get(id);
+    if (!el) return;
+
+    hoveredVideoIdRef.current =
+      hovering ? id : hoveredVideoIdRef.current === id ? null : hoveredVideoIdRef.current;
+
+    try {
+      el.muted = !hovering;
+      el.volume = 1;
+      if (hovering) el.play().catch(() => {});
+    } catch {}
   }, []);
 
   const openLightbox = (url: string | null, isMotion: boolean) => {
@@ -608,10 +683,8 @@ export default function Profile({
       if (!onDelete) throw new Error("Delete not available.");
       await onDelete(id);
 
-      // 👻 turn into ghost (keeps grid space)
       setGhostIds((prev) => ({ ...prev, [id]: true }));
 
-      // remove after fade finishes
       setTimeout(() => {
         setRemovedIds((prev) => ({ ...prev, [id]: true }));
         setGhostIds((prev) => {
@@ -621,6 +694,7 @@ export default function Profile({
         });
       }, 260);
     } catch (e: any) {
+      setDeleteErrors((prev) => ({ ...prev, [id]: safeString(e?.message, "Delete failed.") }));
       setRemovingIds((prev) => {
         const next = { ...prev };
         delete next[id];
@@ -632,40 +706,29 @@ export default function Profile({
         delete next[id];
         return next;
       });
+      setRemovingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   };
 
-  // Likes set (by URL)
+  // Likes set (by canonical URL)
   const likedUrlSet = useMemo(() => {
     const s = new Set<string>();
     for (const f of feedbacks) {
-      const likeUrl = normalizeMediaUrl(findLikeUrl(f));
+      const likeUrl = canonicalAssetUrl(findLikeUrl(f));
       if (likeUrl) s.add(likeUrl);
     }
     return s;
   }, [feedbacks]);
 
   const { items, activeCount } = useMemo(() => {
-    // liked generation ids from feedback payloads
+    // liked generation ids from feedback events
     const likedGenIdSet = new Set<string>();
     for (const f of feedbacks) {
-      const fpRaw: any = (f as any)?.mg_payload ?? (f as any)?.payload ?? {};
-      const fp = tryParseJson<any>(fpRaw) ?? fpRaw;
-
-      const rawLiked = fp?.liked ?? fp?.isLiked ?? fp?.like ?? (f as any)?.liked;
-      const isLiked = rawLiked === true || rawLiked === 1 || rawLiked === "true";
-      if (!isLiked) continue;
-
-      const gid = safeString(
-        (f as any)?.mg_generation_id ??
-          fp?.generationId ??
-          fp?.generation_id ??
-          fp?.generationID ??
-          fp?.generation ??
-          "",
-        ""
-      ).trim();
-
+      const gid = findLikedGenerationId(f);
       if (gid) likedGenIdSet.add(gid);
     }
 
@@ -709,15 +772,23 @@ export default function Profile({
         const url = (videoUrl || imageUrl || outUrl).trim();
         const isMotion = Boolean(videoUrl);
 
+        const inputs = extractInputsForDisplay(g, isMotion || looksVideoMeta);
+
         const aspectRatio =
+          inputs.aspectRatio ||
           normalizeAspectRatio(aspectRaw) ||
           normalizeAspectRatio(
-            typeof payload?.aspect_ratio === "string" ? payload.aspect_ratio : typeof payload?.aspectRatio === "string" ? payload.aspectRatio : ""
+            typeof payload?.aspect_ratio === "string"
+              ? payload.aspect_ratio
+              : typeof payload?.aspectRatio === "string"
+              ? payload.aspectRatio
+              : ""
           );
 
-        const liked = (generationId && likedGenIdSet.has(generationId)) || (url ? likedUrlSet.has(normalizeMediaUrl(url)) : false);
+        const liked =
+          (generationId && likedGenIdSet.has(generationId)) ||
+          (url ? likedUrlSet.has(canonicalAssetUrl(url)) : false);
 
-        const inputs = extractInputsForDisplay(g, isMotion || looksVideoMeta);
         const prompt = (inputs.brief || "").trim();
 
         const canRecreate = source === "generation" && !!onRecreate && !!prompt;
@@ -735,8 +806,6 @@ export default function Profile({
                 productImageUrl: inputs.productImageUrl || undefined,
                 logoImageUrl: inputs.logoImageUrl || undefined,
                 styleImageUrls: inputs.styleImageUrls.length ? inputs.styleImageUrls : undefined,
-
-                // ✅ if this item is already a motion/video generation, preserve its original start/end
                 ...(isMotion && inputs.startImageUrl ? { kling_start_image_url: inputs.startImageUrl } : {}),
                 ...(isMotion && inputs.endImageUrl ? { kling_end_image_url: inputs.endImageUrl } : {}),
               },
@@ -762,10 +831,10 @@ export default function Profile({
 
     base.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
 
-    // Merge duplicates by URL
+    // Merge duplicates by canonical URL
     const merged = new Map<string, typeof base[number]>();
     for (const it of base) {
-      const key = normalizeMediaUrl(it.url);
+      const key = canonicalAssetUrl(it.url);
       const existing = merged.get(key);
       if (!existing) {
         merged.set(key, it);
@@ -782,25 +851,25 @@ export default function Profile({
       merged.set(key, next);
     }
 
-    base = Array.from(merged.values());
+    const deduped = Array.from(merged.values());
 
-    const out = base.map((it, idx) => {
+    // ✅ ACTUAL FILTERING (not just dimming)
+    const filtered = deduped.filter((it) => {
       const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
       const matchesLiked = !likedOnly || it.liked;
       const matchesAspect = !activeAspectFilter || it.aspectRatio === activeAspectFilter.ratio;
+      return matchesMotion && matchesLiked && matchesAspect;
+    });
 
-      const dimmed = !(matchesMotion && matchesLiked && matchesAspect);
-
+    const out = filtered.map((it, idx) => {
       let sizeClass = "profile-card--tall";
       if (idx % 13 === 0) sizeClass = "profile-card--hero";
       else if (idx % 9 === 0) sizeClass = "profile-card--wide";
       else if (idx % 7 === 0) sizeClass = "profile-card--mini";
-
-      return { ...it, sizeClass, dimmed };
+      return { ...it, sizeClass };
     });
 
-    const activeCount = out.filter((it) => !it.dimmed).length;
-    return { items: out, activeCount };
+    return { items: out, activeCount: out.length };
   }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter, onRecreate, removedIds]);
 
   // Reset paging when list changes
@@ -827,7 +896,7 @@ export default function Profile({
 
   const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
 
-  // Grid video autoplay (plays ONLY most-visible)
+  // Grid video autoplay (muted) + hover audio (desktop)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!("IntersectionObserver" in window)) return;
@@ -843,22 +912,26 @@ export default function Profile({
       });
     };
 
-      const playMostVisible = () => {
-          els.forEach((v) => {
-            const ratio = visible.get(v) ?? 0;
-            const shouldPlay = ratio >= 0.35;
-        
-            try {
-              v.muted = true;
-              if (shouldPlay) {
-                if (v.paused) v.play().catch(() => {});
-              } else {
-                if (!v.paused) v.pause();
-              }
-            } catch {}
-          });
-        };
+    const playVisible = () => {
+      els.forEach((v) => {
+        const ratio = visible.get(v) ?? 0;
+        const shouldPlay = ratio >= 0.35;
 
+        try {
+          const id = v.dataset?.minaId || "";
+          const hovering = id && hoveredVideoIdRef.current === id;
+
+          // autoplay must be muted; only unmute on hover
+          v.muted = !hovering;
+
+          if (shouldPlay) {
+            if (v.paused) v.play().catch(() => {});
+          } else {
+            if (!v.paused) v.pause();
+          }
+        } catch {}
+      });
+    };
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -868,7 +941,7 @@ export default function Profile({
           if (e.isIntersecting && ratio >= 0.35) visible.set(v, ratio);
           else visible.delete(v);
         }
-        playMostVisible();
+        playVisible();
       },
       {
         root: null,
@@ -881,7 +954,7 @@ export default function Profile({
 
     const onVis = () => {
       if (document.hidden) pauseAll();
-      else playMostVisible();
+      else playVisible();
     };
     document.addEventListener("visibilitychange", onVis);
 
@@ -909,10 +982,15 @@ export default function Profile({
         max={10}
       />
 
+      {/* ✅ Lightbox: stopPropagation so video controls work (mobile) */}
       {lightbox ? (
         <div className="profile-lightbox" role="dialog" aria-modal="true" onClick={closeLightbox}>
-          <div className="profile-lightbox-media">
-            {lightbox.isMotion ? <video src={lightbox.url} autoPlay loop muted playsInline /> : <img src={lightbox.url} alt="" loading="lazy" />}
+          <div className="profile-lightbox-media" onClick={(e) => e.stopPropagation()}>
+            {lightbox.isMotion ? (
+              <video src={lightbox.url} autoPlay loop muted playsInline controls />
+            ) : (
+              <img src={lightbox.url} alt="" loading="lazy" />
+            )}
           </div>
         </div>
       ) : null}
@@ -967,20 +1045,40 @@ export default function Profile({
             <div>
               <div className="profile-archive-title">Archive</div>
               <div className="profile-archive-sub">
-                {error ? <span className="profile-error">{error}</span> : loading ? "Loading…" : items.length ? `${activeCount} creation${activeCount === 1 ? "" : "s"}` : "No creations yet."}
+                {error ? (
+                  <span className="profile-error">{error}</span>
+                ) : loading ? (
+                  "Loading…"
+                ) : items.length ? (
+                  `${activeCount} creation${activeCount === 1 ? "" : "s"}`
+                ) : (
+                  "No creations yet."
+                )}
               </div>
             </div>
 
             <div className="profile-filters">
-              <button type="button" className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`} onClick={cycleMotion}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
+                onClick={cycleMotion}
+              >
                 {motionLabel}
               </button>
 
-              <button type="button" className={`profile-filter-pill ${likedOnly ? "active" : ""}`} onClick={() => setLikedOnly((v) => !v)}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${likedOnly ? "active" : ""}`}
+                onClick={() => setLikedOnly((v) => !v)}
+              >
                 Liked
               </button>
 
-              <button type="button" className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`} onClick={cycleAspectFilter}>
+              <button
+                type="button"
+                className={`profile-filter-pill ${activeAspectFilter ? "active" : ""}`}
+                onClick={cycleAspectFilter}
+              >
                 {aspectFilterLabel}
               </button>
             </div>
@@ -1003,33 +1101,55 @@ export default function Profile({
             return (
               <div
                 key={it.id}
-                className={`profile-card ${it.sizeClass} ${it.dimmed ? "is-dim" : ""} ${removing ? "is-removing" : ""} ${ghostIds[it.id] ? "is-ghost" : ""}`}
+                className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
+                  ghostIds[it.id] ? "is-ghost" : ""
+                }`}
               >
                 <div className="profile-card-top">
                   <button
-                          className="profile-card-show"
-                          type="button"
-                          onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
-                          disabled={!it.url}
-                        >
-                          Download
-                        </button>
-
+                    className="profile-card-show"
+                    type="button"
+                    onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
+                    disabled={!it.url}
+                  >
+                    Download
+                  </button>
 
                   <div className="profile-card-top-right">
-                    {it.liked ? <span className="profile-card-liked">Liked</span> : <span className="profile-card-liked ghost">Liked</span>}
+                    {it.liked ? (
+                      <span className="profile-card-liked">Liked</span>
+                    ) : (
+                      <span className="profile-card-liked ghost">Liked</span>
+                    )}
 
                     {confirming ? (
                       <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
-                        <button className="profile-card-confirm-yes" type="button" onClick={() => deleteItem(it.id)} disabled={deleting || !onDelete}>
+                        <button
+                          className="profile-card-confirm-yes"
+                          type="button"
+                          onClick={() => deleteItem(it.id)}
+                          disabled={deleting || !onDelete}
+                        >
                           delete
                         </button>
-                        <button className="profile-card-confirm-no" type="button" onClick={() => cancelDelete(it.id)} disabled={deleting}>
+                        <button
+                          className="profile-card-confirm-no"
+                          type="button"
+                          onClick={() => cancelDelete(it.id)}
+                          disabled={deleting}
+                        >
                           cancel
                         </button>
                       </div>
                     ) : (
-                      <button className="profile-card-delete" type="button" onClick={() => askDelete(it.id)} disabled={deleting || !onDelete} title="Delete" aria-label="Delete">
+                      <button
+                        className="profile-card-delete"
+                        type="button"
+                        onClick={() => askDelete(it.id)}
+                        disabled={deleting || !onDelete}
+                        title="Delete"
+                        aria-label="Delete"
+                      >
                         −
                       </button>
                     )}
@@ -1044,33 +1164,33 @@ export default function Profile({
                   tabIndex={0}
                   onClick={() => openLightbox(it.isMotion ? it.url : cfThumb(it.url, 2400, 85), it.isMotion)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") openLightbox(it.url, it.isMotion);
+                    if (e.key === "Enter" || e.key === " ")
+                      openLightbox(it.isMotion ? it.url : cfThumb(it.url, 2400, 85), it.isMotion);
                   }}
                 >
                   {it.url ? (
                     it.isMotion ? (
                       <video
-                      ref={(el) => registerVideoEl(it.id, el)}
-                      src={it.url}
-                      muted
-                      loop
-                      playsInline
-                      preload="auto"
-                      autoPlay
-                    />
-
+                        ref={(el) => registerVideoEl(it.id, el)}
+                        src={it.url}
+                        loop
+                        playsInline
+                        preload="auto"
+                        autoPlay
+                        muted
+                        onMouseEnter={() => setVideoHover(it.id, true)}
+                        onMouseLeave={() => setVideoHover(it.id, false)}
+                      />
                     ) : (
                       <img
-                      src={cfThumb(it.url, 1200, 75)}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      onError={(e) => {
-                        // fallback to original if anything goes wrong
-                        (e.currentTarget as HTMLImageElement).src = it.url;
-                      }}
-                    />
-
+                        src={cfThumb(it.url, 1200, 75)}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = it.url;
+                        }}
+                      />
                     )
                   ) : (
                     <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
@@ -1078,129 +1198,127 @@ export default function Profile({
                 </div>
 
                 <div className="profile-card-promptline">
-                <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
-                  {it.prompt || "—"}
-              
-                  {expanded && inputs ? (
-                    <div className="profile-card-details">
-                      {it.canRecreate && it.draft ? (
-                        <div className="profile-card-detailrow">
-                          <button
-                            type="button"
-                            className="profile-card-show profile-card-recreate"
-                            onClick={() => {
-                              onRecreate?.(it.draft!);
-                              onBackToStudio?.();
-                            }}
-                          >
-                            Re-create
-                          </button>
-                      
-                          {canAnimate ? (
+                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
+                    {it.prompt || "—"}
+
+                    {expanded && inputs ? (
+                      <div className="profile-card-details">
+                        {it.canRecreate && it.draft ? (
+                          <div className="profile-card-detailrow">
                             <button
                               type="button"
-                              className="profile-card-show profile-card-animate"
+                              className="profile-card-show profile-card-recreate"
                               onClick={() => {
-                                const motionDraft: RecreateDraft = {
-                                  ...it.draft!,
-                                  mode: "motion",
-                                  assets: {
-                                    ...it.draft!.assets,
-                                    kling_start_image_url: it.url,
-                                  },
-                                };
-                                onRecreate?.(motionDraft);
+                                onRecreate?.(it.draft!);
                                 onBackToStudio?.();
                               }}
                             >
-                              Animate
+                              Re-create
                             </button>
-                          ) : (
-                            <span />
-                          )}
-                        </div>
-                      ) : null}
 
-              
-                      {inputs.aspectRatio ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Aspect</span>
-                          <span className="v">{inputs.aspectRatio}</span>
-                        </div>
-                      ) : null}
-              
-                      {typeof inputs.minaVisionEnabled === "boolean" ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Vision</span>
-                          <span className="v">{inputs.minaVisionEnabled ? "On" : "Off"}</span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.stylePresetKeys?.length ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Styles</span>
-                          <span className="v">{inputs.stylePresetKeys.join(", ")}</span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.productImageUrl ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Product</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.productImageUrl, false)}
-                            >
-                              view
-                            </button>
-                          </span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.logoImageUrl ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Logo</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.logoImageUrl, false)}
-                            >
-                              view
-                            </button>
-                          </span>
-                        </div>
-                      ) : null}
-              
-                      {inputs.styleImageUrls?.length ? (
-                        <div className="profile-card-detailrow">
-                          <span className="k">Inspo</span>
-                          <span className="v">
-                            <button
-                              className="profile-card-mini"
-                              type="button"
-                              onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
-                            >
-                              view
-                            </button>
-                            {inputs.styleImageUrls.length > 1 ? (
-                              <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
-                            ) : null}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
+                            {canAnimate ? (
+                              <button
+                                type="button"
+                                className="profile-card-show profile-card-animate"
+                                onClick={() => {
+                                  const motionDraft: RecreateDraft = {
+                                    ...it.draft!,
+                                    mode: "motion",
+                                    assets: {
+                                      ...it.draft!.assets,
+                                      kling_start_image_url: it.url,
+                                    },
+                                  };
+                                  onRecreate?.(motionDraft);
+                                  onBackToStudio?.();
+                                }}
+                              >
+                                Animate
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                          </div>
+                        ) : null}
+
+                        {inputs.aspectRatio ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Aspect</span>
+                            <span className="v">{inputs.aspectRatio}</span>
+                          </div>
+                        ) : null}
+
+                        {typeof inputs.minaVisionEnabled === "boolean" ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Vision</span>
+                            <span className="v">{inputs.minaVisionEnabled ? "On" : "Off"}</span>
+                          </div>
+                        ) : null}
+
+                        {inputs.stylePresetKeys?.length ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Styles</span>
+                            <span className="v">{inputs.stylePresetKeys.join(", ")}</span>
+                          </div>
+                        ) : null}
+
+                        {inputs.productImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Product</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.productImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {inputs.logoImageUrl ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Logo</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.logoImageUrl, false)}
+                              >
+                                view
+                              </button>
+                            </span>
+                          </div>
+                        ) : null}
+
+                        {inputs.styleImageUrls?.length ? (
+                          <div className="profile-card-detailrow">
+                            <span className="k">Inspo</span>
+                            <span className="v">
+                              <button
+                                className="profile-card-mini"
+                                type="button"
+                                onClick={() => openLightbox(inputs.styleImageUrls[0], false)}
+                              >
+                                view
+                              </button>
+                              {inputs.styleImageUrls.length > 1 ? (
+                                <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
+                              ) : null}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {showViewMore ? (
+                    <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
+                      {expanded ? "less" : "more"}
+                    </button>
                   ) : null}
                 </div>
-              
-                {showViewMore ? (
-                  <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
-                    {expanded ? "less" : "more"}
-                  </button>
-                ) : null}
-              </div>
-
               </div>
             );
           })}
