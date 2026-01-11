@@ -1311,7 +1311,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 className="studio-brief-input"
                 maxLength={1000}
                 placeholder={
-                  isMotion ? "Describe the motion you want (loop, camera, drips, melt, etc.)" : "Describe how you want your still life image to look like"
+                  isMotion ? "Describe the motion, the sound and the scene" : "Describe how you want your image"
                 }
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
