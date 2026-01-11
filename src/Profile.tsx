@@ -31,6 +31,16 @@ function pick(row: any, keys: string[], fallback = ""): string {
   return fallback;
 }
 
+function cfThumb(url: string, width = 1200, quality = 75) {
+  if (!url) return url;
+  if (!url.includes("assets.faltastudio.com/")) return url;
+  if (url.includes("/cdn-cgi/image/")) return url; // already transformed
+  return `https://assets.faltastudio.com/cdn-cgi/image/width=${width},quality=${quality},format=auto/${url.replace(
+    "https://assets.faltastudio.com/",
+    ""
+  )}`;
+}
+
 function tryParseJson<T = any>(v: any): T | null {
   if (!v) return null;
   if (typeof v === "object") return v as T;
@@ -976,7 +986,7 @@ export default function Profile({
                   className="profile-card-media"
                   role="button"
                   tabIndex={0}
-                  onClick={() => openLightbox(it.url, it.isMotion)}
+                  onClick={() => openLightbox(it.isMotion ? it.url : cfThumb(it.url, 2400, 85), it.isMotion)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") openLightbox(it.url, it.isMotion);
                   }}
@@ -994,7 +1004,17 @@ export default function Profile({
                     />
 
                     ) : (
-                      <img src={it.url} alt="" loading="lazy" />
+                      <img
+                      src={cfThumb(it.url, 1200, 75)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        // fallback to original if anything goes wrong
+                        (e.currentTarget as HTMLImageElement).src = it.url;
+                      }}
+                    />
+
                     )
                   ) : (
                     <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
