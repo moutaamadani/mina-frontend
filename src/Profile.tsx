@@ -223,15 +223,6 @@ function sanitizeUserBrief(s: string) {
   return t.trim();
 }
 
-function sanitizeUserBrief(s: string) {
-  let t = (s || "").trim();
-
-  // Fix your stored typo like "chttps://..."
-  if (t.startsWith("chttp://") || t.startsWith("chttps://")) t = t.slice(1);
-
-  return t.trim();
-}
-
 function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
   const payloadRaw = (row as any)?.mg_payload ?? (row as any)?.payload ?? null;
   const metaRaw = (row as any)?.mg_meta ?? (row as any)?.meta ?? null;
