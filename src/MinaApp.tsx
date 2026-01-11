@@ -993,7 +993,7 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
 
   const imageCost = credits?.meta?.imageCost ?? adminConfig.pricing?.imageCost ?? 1;
-  const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 5;
+  const motionCost = credits?.meta?.motionCost ?? adminConfig.pricing?.motionCost ?? 10;
 
   const creditBalance = credits?.balance;
   const imageCreditsOk = creditBalance === null || creditBalance === undefined ? true : creditBalance >= imageCost;
