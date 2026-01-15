@@ -587,6 +587,26 @@ video {
   justify-content: center;
 }
 
+/* 5s soft pink flash on the upload area */
+.mina-upload-flash {
+  --mina-upload-flash-bg: rgba(255, 90, 150, 0.12);
+  --mina-upload-flash-border: rgba(255, 90, 150, 0.35);
+}
+
+/* This tries to catch your upload squares without changing layout.
+   If one selector doesn’t hit your element, keep the one that does. */
+.mina-upload-flash .mina-modal-drop,
+.mina-upload-flash .upload-drop,
+.mina-upload-flash .upload-square,
+.mina-upload-flash .mina-upload-drop,
+.mina-upload-flash .studio-upload-drop,
+.mina-upload-flash .panel-drop {
+  background: var(--mina-upload-flash-bg) !important;
+  outline: 2px solid var(--mina-upload-flash-border) !important;
+  outline-offset: 2px;
+  transition: background 180ms ease, outline-color 180ms ease;
+}
+
 .studio-frame {
   position: relative;
   width: 100%;

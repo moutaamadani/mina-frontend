@@ -1963,6 +1963,240 @@ async function mmaWaitForFinal(
   };
 
   // ========================================================================
+  // Upload safety (friendly UX)
+  // - Allow: png/jpg/jpeg/webp
+  // - Max: 25MB
+  // - Auto-convert unsupported-but-decodable images (ex: AVIF) to JPEG
+  // - Auto-resize/compress huge images to avoid “broken upload” + slow downloads
+  // - Show simple messages, flash for 5s, then ready to upload again
+  // ========================================================================
+  const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB
+  const ALLOWED_EXTS = new Set(["png", "jpg", "jpeg", "webp"]);
+  const ALLOWED_MIMES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+  // When we decide to “optimize”, we re-encode to JPEG (most compatible)
+  const OPT_OUT_TYPE = "image/jpeg";
+  const OPT_MAX_DIM = 3072; // keeps quality high but avoids giant inputs
+  const OPT_START_QUALITY = 0.92;
+
+  // Transient UX: flash + message for 5s, then clear
+  const [uploadFlashPanel, setUploadFlashPanel] = useState<UploadPanelKey | null>(null);
+  const uploadFlashTimerRef = useRef<number | null>(null);
+  const uploadMsgTimerRef = useRef<number | null>(null);
+
+  const showUploadNotice = useCallback((panel: UploadPanelKey, message: string) => {
+    // flash panel (pink) for 5s
+    setUploadFlashPanel(panel);
+    if (uploadFlashTimerRef.current !== null) window.clearTimeout(uploadFlashTimerRef.current);
+    uploadFlashTimerRef.current = window.setTimeout(() => {
+      setUploadFlashPanel(null);
+      uploadFlashTimerRef.current = null;
+    }, 5000);
+
+    // show message in your existing single error spot (below Create)
+    // (no provider names, no tech jargon)
+    setStillError(message);
+    setMotionError(message);
+
+    if (uploadMsgTimerRef.current !== null) window.clearTimeout(uploadMsgTimerRef.current);
+    uploadMsgTimerRef.current = window.setTimeout(() => {
+      // only clear if nothing else replaced it
+      setStillError((prev) => (prev === message ? null : prev));
+      setMotionError((prev) => (prev === message ? null : prev));
+      uploadMsgTimerRef.current = null;
+    }, 5000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (uploadFlashTimerRef.current !== null) window.clearTimeout(uploadFlashTimerRef.current);
+      if (uploadMsgTimerRef.current !== null) window.clearTimeout(uploadMsgTimerRef.current);
+    };
+  }, []);
+
+  function getFileExt(name: string) {
+    const m = String(name || "").toLowerCase().match(/\.([a-z0-9]+)$/i);
+    return m ? m[1] : "";
+  }
+
+  function friendlyUploadError(reason: "unsupported" | "too_big" | "broken" | "link_broken") {
+    switch (reason) {
+      case "unsupported":
+        return "That file type isn’t supported. Please upload a JPG, PNG, or WebP.";
+      case "too_big":
+        return "That image is too large. Please choose one under 25MB.";
+      case "broken":
+        return "We couldn’t read that image. Please try a different file.";
+      case "link_broken":
+        return "That link didn’t load as an image. Please paste a direct image link.";
+      default:
+        return "Upload failed. Please try again.";
+    }
+  }
+
+  function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) {
+    return new Promise<Blob>((resolve, reject) => {
+      try {
+        canvas.toBlob(
+          (b) => (b ? resolve(b) : reject(new Error("toBlob failed"))),
+          type,
+          quality
+        );
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function decodeToBitmap(file: Blob): Promise<ImageBitmap | null> {
+    try {
+      // Fast path
+      // @ts-ignore
+      if (typeof createImageBitmap === "function") return await createImageBitmap(file);
+    } catch {}
+    // Fallback path (Image element)
+    try {
+      const url = URL.createObjectURL(file);
+      const bmp = await new Promise<ImageBitmap>((resolve, reject) => {
+        const img = new Image();
+        (img as any).decoding = "async";
+        img.onload = async () => {
+          try {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.naturalWidth || 1;
+            canvas.height = img.naturalHeight || 1;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("No canvas");
+            ctx.drawImage(img, 0, 0);
+            // @ts-ignore
+            const b = await createImageBitmap(canvas);
+            resolve(b);
+          } catch (e) {
+            reject(e);
+          }
+        };
+        img.onerror = () => reject(new Error("Image decode failed"));
+        img.src = url;
+      });
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+      return bmp;
+    } catch {
+      return null;
+    }
+  }
+
+  async function normalizeImageForUpload(
+    file: File
+  ): Promise<{ file: File; previewUrl?: string; changed: boolean }> {
+    const ext = getFileExt(file.name);
+    const mime = String(file.type || "").toLowerCase();
+
+    const extAllowed = ext ? ALLOWED_EXTS.has(ext) : false;
+    const mimeAllowed = mime ? ALLOWED_MIMES.has(mime) : false;
+    const isAllowed = extAllowed || mimeAllowed;
+
+    // If totally huge, we’ll try to optimize; if still > 25MB after optimization, we reject.
+    const tooBig = file.size > MAX_UPLOAD_BYTES;
+
+    // Decide when to optimize:
+    // - unsupported format BUT decodable (ex AVIF) → convert to JPEG
+    // - too big → compress/resize to safe JPEG
+    // - very large files (even if under max) → optional optimization to avoid broken/slow downstream
+    const shouldOptimize = !isAllowed || tooBig || file.size > 18 * 1024 * 1024;
+
+    if (!shouldOptimize) return { file, changed: false };
+
+    const bmp = await decodeToBitmap(file);
+    if (!bmp) {
+      // If it’s unsupported or broken, we fail nicely.
+      throw new Error(!isAllowed ? "UNSUPPORTED" : "BROKEN");
+    }
+
+    const srcW = (bmp as any).width || 0;
+    const srcH = (bmp as any).height || 0;
+    if (!srcW || !srcH) {
+      try {
+        (bmp as any).close?.();
+      } catch {}
+      throw new Error("BROKEN");
+    }
+
+    const scale = Math.min(1, OPT_MAX_DIM / Math.max(srcW, srcH));
+    const outW = Math.max(1, Math.round(srcW * scale));
+    const outH = Math.max(1, Math.round(srcH * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: false } as any);
+    if (!ctx) {
+      try {
+        (bmp as any).close?.();
+      } catch {}
+      throw new Error("BROKEN");
+    }
+
+    ctx.drawImage(bmp as any, 0, 0, outW, outH);
+    try {
+      (bmp as any).close?.();
+    } catch {}
+
+    // Iteratively reduce quality until under MAX_UPLOAD_BYTES
+    let q = OPT_START_QUALITY;
+    let blob: Blob | null = null;
+    for (let i = 0; i < 7; i++) {
+      blob = await canvasToBlob(canvas, OPT_OUT_TYPE, q).catch(() => null);
+      if (blob && blob.size <= MAX_UPLOAD_BYTES) break;
+      q = Math.max(0.5, q - 0.08);
+    }
+
+    if (!blob) throw new Error("BROKEN");
+    if (blob.size > MAX_UPLOAD_BYTES) throw new Error("TOO_BIG");
+
+    const baseName = file.name.replace(/\.[^.]+$/i, "") || "upload";
+    const newName = `${baseName}.jpg`;
+    const newFile = new File([blob], newName, { type: OPT_OUT_TYPE });
+
+    const previewUrl = URL.createObjectURL(newFile);
+    return { file: newFile, previewUrl, changed: true };
+  }
+
+  function probeImageUrl(url: string, timeoutMs = 8000): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!url || !isHttpUrl(url)) return resolve(false);
+
+      const img = new Image();
+      (img as any).decoding = "async";
+
+      let done = false;
+      const finish = (ok: boolean) => {
+        if (done) return;
+        done = true;
+        try {
+          img.src = "";
+        } catch {}
+        resolve(ok);
+      };
+
+      const t = window.setTimeout(() => finish(false), timeoutMs);
+
+      img.onload = () => {
+        window.clearTimeout(t);
+        finish(true);
+      };
+      img.onerror = () => {
+        window.clearTimeout(t);
+        finish(false);
+      };
+
+      img.src = url;
+    });
+  }
+
+  // ========================================================================
   // R2 helpers
   // ========================================================================
   function pickUrlFromR2Response(json: any): string | null {
@@ -2093,20 +2327,103 @@ async function mmaWaitForFinal(
   async function startUploadForFileItem(panel: UploadPanelKey, id: string, file: File) {
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
-      const remoteUrl = await uploadFileToR2(panel, file);
-      patchUploadItem(panel, id, { remoteUrl, uploading: false });
-    } catch (err: any) {
-      patchUploadItem(panel, id, { uploading: false, error: err?.message || "Upload failed" });
+
+      // 1) Validate / normalize (auto convert + resize if needed)
+      const ext = getFileExt(file.name);
+      const mime = String(file.type || "").toLowerCase();
+
+      const extAllowed = ext ? ALLOWED_EXTS.has(ext) : false;
+      const mimeAllowed = mime ? ALLOWED_MIMES.has(mime) : false;
+      const isAllowed = extAllowed || mimeAllowed;
+
+      // If it’s not allowed and can’t be decoded -> friendly message + auto-remove
+      // If it’s huge -> try to optimize; if still too big -> friendly message + auto-remove
+      let normalized = file;
+      let newPreviewUrl: string | undefined;
+
+      try {
+        const norm = await normalizeImageForUpload(file);
+        normalized = norm.file;
+        newPreviewUrl = norm.previewUrl;
+
+        // If we generated a new preview, swap it in (feels automatic)
+        if (norm.changed && newPreviewUrl) {
+          setUploads((prev) => {
+            const item = prev[panel].find((x) => x.id === id);
+            if (item?.kind === "file" && item.url?.startsWith("blob:")) {
+              try {
+                URL.revokeObjectURL(item.url);
+              } catch {}
+            }
+            return {
+              ...prev,
+              [panel]: prev[panel].map((it) =>
+                it.id === id ? { ...it, file: normalized, url: newPreviewUrl } : it
+              ),
+            };
+          });
+        }
+      } catch (e: any) {
+        const code = String(e?.message || "");
+        const reason =
+          code === "TOO_BIG" || file.size > MAX_UPLOAD_BYTES
+            ? "too_big"
+            : !isAllowed || code === "UNSUPPORTED"
+              ? "unsupported"
+              : "broken";
+
+        const msg = friendlyUploadError(reason as any);
+        showUploadNotice(panel, msg);
+
+        // Remove bad item immediately so user can upload again right away
+        removeUploadItem(panel, id);
+        return;
+      }
+
+      // 2) Upload to R2
+      const remoteUrl = await uploadFileToR2(panel, normalized);
+
+      // 3) Verify the uploaded URL actually loads as an image (catches “broken upload”)
+      const ok = await probeImageUrl(remoteUrl, 8000);
+      if (!ok) {
+        showUploadNotice(panel, friendlyUploadError("broken"));
+        removeUploadItem(panel, id);
+        return;
+      }
+
+      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined });
+    } catch {
+      showUploadNotice(panel, "Upload failed. Please try again.");
+      removeUploadItem(panel, id);
     }
   }
 
   async function startStoreForUrlItem(panel: UploadPanelKey, id: string, url: string) {
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
+
+      // quick sanity: does the link load as an image?
+      const ok = await probeImageUrl(url, 7000);
+      if (!ok) {
+        showUploadNotice(panel, friendlyUploadError("link_broken"));
+        removeUploadItem(panel, id);
+        return;
+      }
+
       const remoteUrl = await storeRemoteToR2(url, panel);
-      patchUploadItem(panel, id, { remoteUrl, uploading: false });
-    } catch (err: any) {
-      patchUploadItem(panel, id, { uploading: false, error: err?.message || "Store failed" });
+
+      // verify stored URL too
+      const ok2 = await probeImageUrl(remoteUrl, 8000);
+      if (!ok2) {
+        showUploadNotice(panel, friendlyUploadError("broken"));
+        removeUploadItem(panel, id);
+        return;
+      }
+
+      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined });
+    } catch {
+      showUploadNotice(panel, "Upload failed. Please try again.");
+      removeUploadItem(panel, id);
     }
   }
 
@@ -3743,7 +4060,12 @@ const headerOverlayClass =
   headerIsDark === true ? "header-on-dark" : "header-on-light";
 
   const appUi = (
-    <div className="mina-studio-root">
+    <div
+      className={classNames(
+        "mina-studio-root",
+        uploadFlashPanel ? `mina-upload-flash mina-upload-flash--${uploadFlashPanel}` : ""
+      )}
+    >
       <div className={classNames("mina-drag-overlay", globalDragging && "show")} />
       <div className="studio-frame">
         <div className={classNames("studio-header-overlay", headerOverlayClass)}>
