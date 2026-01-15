@@ -362,7 +362,7 @@ function extractFirstHttpUrl(text: string) {
 
 function humanizeMmaError(err: any): string {
   const raw = String(err?.message || err || "").trim();
-  if (!raw) return "Something went wrong. Please try again.";
+  if (!raw) return "I couldn't make it. Please try again.";
 
   const s = raw.toLowerCase();
 
@@ -372,10 +372,10 @@ function humanizeMmaError(err: any): string {
     s.includes("seedream_no_url") ||
     s.includes("nanobanana_no_url")
   ) {
-    return "It generated, but we couldn’t retrieve the file. Please tap Create again (or try again in a few seconds).";
+    return "That was too complicated, try simpler task.";
   }
 
-  if (s.includes("timeout")) return "This is taking longer than usual. Please try again.";
+  if (s.includes("timeout")) return "Oops I run out of time. Try better images.";
   if (s.includes("credit")) return "You don’t have enough matchas to do that.";
   if (s.includes("failed to fetch") || s.includes("network"))
     return "Connection issue. Please check your internet and try again.";
