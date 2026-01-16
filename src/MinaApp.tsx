@@ -1744,7 +1744,7 @@ const showControls = uiStage >= 3 || hasEverTyped;
       json?.mg_output_url ??
       (mode.toLowerCase().includes("video")
         ? pickMmaVideoUrl({ outputs, mma_vars: mmaVars, ...json })
-        : pickMmaImageUrl({ outputs, mma_vars: mmaVars, ...json })) ||
+        : pickMmaImageUrl({ outputs, mma_vars: mmaVars, ...json })) ??
       "";
 
     return {
