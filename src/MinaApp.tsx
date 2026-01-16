@@ -1579,122 +1579,227 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
 
   // ============================================================================
-// MMA result polling helpers (backend: GET /mma/generations/:generation_id)
-// ============================================================================
+  // MMA result polling helpers (backend: GET /mma/generations/:generation_id)
+  // FIX: handle provider outputs nested/array + mg_mma_vars JSON-string
+  // ============================================================================
 
-async function mmaFetchResult(generationId: string): Promise<MmaGenerationResponse> {
-  const id = encodeURIComponent(String(generationId || ""));
-  const res = await apiFetch(`/mma/generations/${id}`);
+  function deepPickHttpUrl(root: any, opts?: { preferVideo?: boolean }): string {
+    const preferVideo = !!opts?.preferVideo;
+    const isHttp = (s: any) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
+    const clean = (s: string) => s.trim();
 
-  // Keep UI alive even if backend is briefly behind
-  if (!res.ok) {
-    return { generation_id: String(generationId), status: "queued" } as any;
+    const seen = new Set<any>();
+    let bestUrl = "";
+    let bestScore = -1;
+
+    const scoreUrl = (url: string, keyHint = "") => {
+      const u = url.toLowerCase();
+      const k = keyHint.toLowerCase();
+
+      let score = 0;
+
+      const isVid = /\.(mp4|webm|mov|m4v)(\?|#|$)/.test(u);
+      const isImg = /\.(png|jpe?g|webp|gif|avif)(\?|#|$)/.test(u);
+
+      if (preferVideo) {
+        if (isVid) score += 80;
+        if (k.includes("video") || k.includes("kling")) score += 40;
+        if (isImg) score -= 20;
+      } else {
+        if (isImg) score += 80;
+        if (k.includes("image") || k.includes("seedream") || k.includes("nanobanana")) score += 40;
+        if (isVid) score -= 20;
+      }
+
+      if (k.includes("output")) score += 10;
+      if (k.includes("url")) score += 10;
+      if (u.includes("assets.faltastudio.com")) score += 25;
+
+      return score;
+    };
+
+    const visit = (node: any, depth: number, keyHint = "") => {
+      if (depth > 10 || node == null) return;
+
+      if (isHttp(node)) {
+        const url = clean(node);
+        const sc = scoreUrl(url, keyHint);
+        if (sc > bestScore) {
+          bestScore = sc;
+          bestUrl = url;
+        }
+        return;
+      }
+
+      if (typeof node !== "object") return;
+      if (seen.has(node)) return;
+      seen.add(node);
+
+      if (Array.isArray(node)) {
+        for (const item of node) visit(item, depth + 1, keyHint);
+        return;
+      }
+
+      const keys = Object.keys(node);
+
+      const keyPriority = preferVideo
+        ? ["video_url", "kling", "video", "mp4", "outputs", "output", "url", "result", "provider_outputs"]
+        : ["image_url", "seedream", "nanobanana", "image", "png", "jpg", "jpeg", "webp", "outputs", "output", "url", "result", "provider_outputs"];
+
+      keys.sort((a, b) => {
+        const ai = keyPriority.findIndex((p) => a.toLowerCase().includes(p));
+        const bi = keyPriority.findIndex((p) => b.toLowerCase().includes(p));
+        const ax = ai === -1 ? 999 : ai;
+        const bx = bi === -1 ? 999 : bi;
+        if (ax !== bx) return ax - bx;
+        return a.localeCompare(b);
+      });
+
+      for (const k of keys) visit((node as any)[k], depth + 1, k);
+    };
+
+    visit(root, 0, "");
+    return bestUrl;
   }
 
-  const json = (await res.json().catch(() => ({}))) as any;
+  function pickMmaImageUrl(resp: any): string {
+    return (
+      resp?.outputs?.nanobanana_image_url ||
+      resp?.outputs?.seedream_image_url ||
+      resp?.outputs?.image_url ||
+      resp?.mma_vars?.assets?.end_image_url ||
+      (resp as any)?.imageUrl ||
+      (resp as any)?.outputUrl ||
+      deepPickHttpUrl(resp?.outputs, { preferVideo: false }) ||
+      deepPickHttpUrl(resp?.mma_vars, { preferVideo: false }) ||
+      deepPickHttpUrl(resp, { preferVideo: false }) ||
+      ""
+    );
+  }
 
-  const mmaVars = json?.mma_vars ?? json?.mg_mma_vars ?? json?.vars ?? undefined;
+  function pickMmaVideoUrl(resp: any): string {
+    return (
+      resp?.outputs?.kling_video_url ||
+      resp?.outputs?.video_url ||
+      (resp as any)?.videoUrl ||
+      (resp as any)?.outputUrl ||
+      deepPickHttpUrl(resp?.outputs, { preferVideo: true }) ||
+      deepPickHttpUrl(resp?.mma_vars, { preferVideo: true }) ||
+      deepPickHttpUrl(resp, { preferVideo: true }) ||
+      ""
+    );
+  }
 
-  const status =
-    json?.status ??
-    json?.mg_mma_status ??
-    json?.mma_status ??
-    json?.state ??
-    "queued";
+  async function mmaFetchResult(generationId: string): Promise<MmaGenerationResponse> {
+    const id = encodeURIComponent(String(generationId || ""));
+    const res = await apiFetch(`/mma/generations/${id}`);
 
-  const outputs =
-    json?.outputs ??
-    mmaVars?.outputs ??
-    mmaVars?.provider_outputs ??
-    mmaVars?.result?.outputs ??
-    undefined;
-
-  const prompt =
-    json?.prompt ??
-    json?.mg_prompt ??
-    mmaVars?.prompt ??
-    null;
-
-  const error =
-    json?.error ??
-    json?.mg_error ??
-    mmaVars?.error ??
-    undefined;
-
-  // helpful fallbacks for your later `(result as any)?.outputUrl/imageUrl/videoUrl` checks
-  const outputUrl =
-    json?.outputUrl ??
-    json?.mg_output_url ??
-    outputs?.nanobanana_image_url ??
-    outputs?.seedream_image_url ??
-    outputs?.kling_video_url ??
-    outputs?.image_url ??
-    outputs?.video_url ??
-    "";
-
-  return {
-    generation_id: String(json?.generation_id ?? json?.mg_generation_id ?? generationId),
-    status: String(status),
-    mode: json?.mode ?? json?.mg_mma_mode,
-    mma_vars: mmaVars,
-    outputs,
-    prompt,
-    error,
-    credits: json?.credits ?? json?.billing ?? undefined,
-    ...(outputUrl ? { outputUrl } : {}),
-  } as any;
-}
-
-async function mmaWaitForFinal(
-  generationId: string,
-  opts?: { timeoutMs?: number; intervalMs?: number }
-): Promise<MmaGenerationResponse> {
-  const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 180_000)); // 3 min default
-  const intervalMs = Math.max(400, Number(opts?.intervalMs ?? 900));
-
-  const started = Date.now();
-  let last: MmaGenerationResponse = { generation_id: generationId, status: "queued" } as any;
-
-  const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
-
-  while (Date.now() - started < timeoutMs) {
-    last = await mmaFetchResult(generationId);
-
-    const st = String(last?.status || "").toLowerCase().trim();
-
-    // terminal statuses (cover common variants)
-    if (
-      st === "done" ||
-      st === "error" ||
-      st === "failed" ||
-      st === "succeeded" ||
-      st === "success" ||
-      st === "completed" ||
-      st === "cancelled" ||
-      st === "canceled" ||
-      st === "suggested"
-    ) {
-      return last;
+    if (!res.ok) {
+      return { generation_id: String(generationId), status: "queued" } as any;
     }
 
-    // sometimes outputs appear before status flips
-    const hasOutputs =
-      !!last?.outputs?.nanobanana_image_url ||
-      !!last?.outputs?.seedream_image_url ||
-      !!last?.outputs?.kling_video_url ||
-      !!last?.outputs?.image_url ||
-      !!last?.outputs?.video_url ||
-      !!(last as any)?.outputUrl ||
-      !!(last as any)?.imageUrl ||
-      !!(last as any)?.videoUrl;
+    const json = (await res.json().catch(() => ({}))) as any;
 
-    if (hasOutputs) return last;
+    const mmaVarsRaw = json?.mma_vars ?? json?.mg_mma_vars ?? json?.vars ?? undefined;
 
-    await sleep(intervalMs);
+    let mmaVars: any = mmaVarsRaw;
+    if (typeof mmaVarsRaw === "string") {
+      try {
+        mmaVars = JSON.parse(mmaVarsRaw);
+      } catch {
+        mmaVars = undefined;
+      }
+    }
+
+    const status =
+      json?.status ??
+      json?.mg_mma_status ??
+      json?.mma_status ??
+      json?.state ??
+      "queued";
+
+    const mode = (json?.mode ?? json?.mg_mma_mode ?? mmaVars?.mode ?? "").toString();
+
+    const outputs =
+      json?.outputs ??
+      mmaVars?.outputs ??
+      mmaVars?.provider_outputs ??
+      mmaVars?.result?.outputs ??
+      undefined;
+
+    const prompt =
+      json?.prompt ??
+      json?.mg_prompt ??
+      mmaVars?.prompt ??
+      null;
+
+    const error =
+      json?.error ??
+      json?.mg_error ??
+      mmaVars?.error ??
+      undefined;
+
+    const outputUrl =
+      json?.outputUrl ??
+      json?.mg_output_url ??
+      (mode.toLowerCase().includes("video")
+        ? pickMmaVideoUrl({ outputs, mma_vars: mmaVars, ...json })
+        : pickMmaImageUrl({ outputs, mma_vars: mmaVars, ...json })) ||
+      "";
+
+    return {
+      generation_id: String(json?.generation_id ?? json?.mg_generation_id ?? generationId),
+      status: String(status),
+      mode: mode || undefined,
+      mma_vars: mmaVars,
+      outputs,
+      prompt,
+      error,
+      credits: json?.credits ?? json?.billing ?? undefined,
+      ...(outputUrl ? { outputUrl } : {}),
+    } as any;
   }
 
-  return last;
-}
+  async function mmaWaitForFinal(
+    generationId: string,
+    opts?: { timeoutMs?: number; intervalMs?: number }
+  ): Promise<MmaGenerationResponse> {
+    const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 600_000)); // 10 minutes
+    const intervalMs = Math.max(400, Number(opts?.intervalMs ?? 900));
+
+    const started = Date.now();
+    let last: MmaGenerationResponse = { generation_id: generationId, status: "queued" } as any;
+
+    const sleep = (ms: number) => new Promise((r) => window.setTimeout(r, ms));
+
+    while (Date.now() - started < timeoutMs) {
+      last = await mmaFetchResult(generationId);
+
+      const st = String(last?.status || "").toLowerCase().trim();
+
+      if (
+        st === "done" ||
+        st === "error" ||
+        st === "failed" ||
+        st === "succeeded" ||
+        st === "success" ||
+        st === "completed" ||
+        st === "cancelled" ||
+        st === "canceled" ||
+        st === "suggested"
+      ) {
+        return last;
+      }
+
+      // If a URL exists, treat it as finished even if status lags
+      const hasMedia = !!pickMmaImageUrl(last) || !!pickMmaVideoUrl(last);
+      if (hasMedia) return last;
+
+      await sleep(intervalMs);
+    }
+
+    return last;
+  }
 
 
 
@@ -1875,31 +1980,31 @@ async function mmaWaitForFinal(
       const gens = history?.generations || [];
       const feedbacks = history?.feedbacks || [];
 
-      const strippedGens = gens.map((g) => {
-        const original = g.outputUrl || "";
-        const stable = stripSignedQuery(original);
-        return stable && stable !== original ? { ...g, outputUrl: stable } : g;
-      });
+      const updated = await Promise.all(
+        gens.map(async (g) => {
+          const original = String(g.outputUrl || "").trim();
+          if (!original) return g;
 
-      const hasReplicate = strippedGens.some((g) => isReplicateUrl(g.outputUrl || ""));
+          const stable = stripSignedQuery(original);
 
-      const updated = hasReplicate
-        ? await Promise.all(
-            strippedGens.map(async (g) => {
-              const url = g.outputUrl || "";
-              if (!url) return g;
-              if (!isReplicateUrl(url)) return g;
-              try {
-                const kind = isVideoUrl(url) ? "motions" : "generations";
-                const r2 = await storeRemoteToR2(url, kind);
-                const stable = stripSignedQuery(r2);
-                return stable ? { ...g, outputUrl: stable } : g;
-              } catch {
-                return g;
-              }
-            })
-          )
-        : strippedGens;
+          // Replicate: never keep/display it. Store to assets or blank.
+          if (isReplicateUrl(original) || isReplicateUrl(stable)) {
+            try {
+              const kind = isVideoUrl(original) ? "motions" : "generations";
+              const r2 = await storeRemoteToR2(original, kind);
+              const r2Stable = stripSignedQuery(r2);
+              if (r2Stable && isAssetsUrl(r2Stable)) return { ...g, outputUrl: r2Stable };
+              if (r2 && isAssetsUrl(r2)) return { ...g, outputUrl: r2 };
+              return { ...g, outputUrl: "" };
+            } catch {
+              return { ...g, outputUrl: "" };
+            }
+          }
+
+          // Non-replicate: safe to strip signatures for display
+          return stable && stable !== original ? { ...g, outputUrl: stable } : g;
+        })
+      );
 
       historyCacheRef.current[currentPassId] = { generations: updated, feedbacks };
       historyDirtyRef.current = false;
@@ -2339,13 +2444,34 @@ async function mmaWaitForFinal(
   }
 
   async function ensureAssetsUrl(url: string, kind: "generations" | "motions") {
-    const stable = stripSignedQuery(url || "");
-    if (!stable) return "";
-    if (isAssetsUrl(stable)) return stable;
+    const raw = String(url || "").trim();
+    if (!raw) return "";
 
-    const stored = await storeRemoteToR2(stable, kind);
-    const storedStable = stripSignedQuery(stored);
-    return storedStable || stable;
+    const displayStable = stripSignedQuery(raw);
+
+    // Already our CDN/assets -> OK to display
+    if (displayStable && isAssetsUrl(displayStable)) return displayStable;
+
+    // If it's a Replicate URL, we NEVER want to show it to the user.
+    const isReplicate = isReplicateUrl(raw) || isReplicateUrl(displayStable);
+
+    // Try to store using the ORIGINAL (possibly signed) URL
+    try {
+      const stored = await storeRemoteToR2(raw, kind);
+      const storedStable = stripSignedQuery(stored);
+
+      // Only return if it becomes an assets URL
+      if (storedStable && isAssetsUrl(storedStable)) return storedStable;
+      if (stored && isAssetsUrl(stored)) return stored;
+    } catch {
+      // ignore, handled below
+    }
+
+    // If it's Replicate and store failed -> return empty so UI shows friendly retry (not Replicate URL)
+    if (isReplicate) return "";
+
+    // Non-replicate fallback: allow displaying the stable remote URL
+    return displayStable || raw;
   }
 
   function patchUploadItem(panel: UploadPanelKey, id: string, patch: Partial<UploadItem>) {
@@ -2567,14 +2693,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         throw new Error(String(msg));
       }
 
-      const rawUrl =
-        result?.outputs?.nanobanana_image_url ||
-        result?.outputs?.seedream_image_url ||
-        result?.outputs?.image_url ||
-        (result as any)?.imageUrl ||
-        (result as any)?.outputUrl ||
-        "";
-
+      const rawUrl = pickMmaImageUrl(result);
       const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
       if (!url) throw new Error("That was too complicated, try simpler task.");
 
@@ -2826,15 +2945,9 @@ const styleHeroUrls = (stylePresetKeys || [])
         throw new Error(String(msg));
       }
 
-      const rawUrl =
-        result?.outputs?.kling_video_url ||
-        result?.outputs?.video_url ||
-        (result as any)?.videoUrl ||
-        (result as any)?.outputUrl ||
-        "";
-
+      const rawUrl = pickMmaVideoUrl(result);
       const url = rawUrl ? await ensureAssetsUrl(rawUrl, "motions") : "";
-      if (!url) throw new Error("MMA returned no video URL.");
+      if (!url) throw new Error("That was too complicated, try simpler task.");
 
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
@@ -2948,16 +3061,9 @@ const styleHeroUrls = (stylePresetKeys || [])
             throw new Error(String(msg));
           }
 
-          const rawUrl =
-            result?.outputs?.nanobanana_image_url ||
-            result?.outputs?.seedream_image_url ||
-            result?.outputs?.image_url ||
-            (result as any)?.imageUrl ||
-            (result as any)?.outputUrl ||
-            "";
-
+          const rawUrl = pickMmaImageUrl(result);
           const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
-          if (!url) throw new Error("MMA tweak returned no image URL.");
+          if (!url) throw new Error("That was too complicated, try simpler task.");
 
           applyCreditsFromResponse(result?.credits);
 
@@ -3023,15 +3129,9 @@ const styleHeroUrls = (stylePresetKeys || [])
             throw new Error(String(msg));
           }
 
-          const rawUrl =
-            result?.outputs?.kling_video_url ||
-            result?.outputs?.video_url ||
-            (result as any)?.videoUrl ||
-            (result as any)?.outputUrl ||
-            "";
-
+          const rawUrl = pickMmaVideoUrl(result);
           const url = rawUrl ? await ensureAssetsUrl(rawUrl, "motions") : "";
-          if (!url) throw new Error("MMA tweak returned no video URL.");
+          if (!url) throw new Error("That was too complicated, try simpler task.");
 
           applyCreditsFromResponse(result?.credits);
 
