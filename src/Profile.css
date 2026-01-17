@@ -795,3 +795,60 @@
 .profile-filters .profile-filter-pill:nth-child(n + 2) {
   display: none !important;
 }
+
+/* =============================================================
+   Profile: input thumbs + compact details
+   ============================================================= */
+
+.profile-card-details {
+  font-size: 10px !important; /* same as prompt text */
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
+.profile-card-detailrow .k,
+.profile-card-detailrow .v {
+  font-size: 10px !important;
+}
+
+/* Small square thumbnails (no button) */
+.profile-input-thumb {
+  width: 26px;
+  height: 26px;
+  object-fit: cover;
+  display: block;
+  background: rgba(8, 10, 0, 0.06);
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+/* Thumbs layout helpers */
+.profile-thumbstack,
+.profile-thumbrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.profile-thumbbadge {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(8, 10, 0, 0.55);
+}
+
+/* Actions row: right aligned, Animate then Re-create */
+.profile-card-detailrow--actions .v.profile-card-actionwrap {
+  display: inline-flex;
+  gap: 14px;
+  justify-content: flex-end;
+  align-items: baseline;
+}
+
+/* You had a hard hide somewhere: `.profile-card-recreate { display: none !important; }`
+   Force show inside details */
+.profile-card-details .profile-card-recreate,
+.profile-card-details .profile-card-animate {
+  display: inline-flex !important;
+}

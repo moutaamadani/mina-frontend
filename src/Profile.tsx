@@ -465,6 +465,37 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
         ""
     ).trim() || "";
 
+  const klingFramesRaw =
+    varsAssets?.kling_image_urls ||
+    varsAssets?.klingImageUrls ||
+    varsInputs?.kling_image_urls ||
+    varsInputs?.klingImageUrls ||
+    vars?.kling_image_urls ||
+    vars?.klingImageUrls ||
+    [];
+
+  const klingFrameUrls: string[] = Array.isArray(klingFramesRaw)
+    ? klingFramesRaw.map(String).filter((u) => /^https?:\/\//i.test(String(u)))
+    : [];
+
+  const stillLane = String(
+    varsInputs?.still_lane ||
+      varsInputs?.stillLane ||
+      varsMeta?.still_lane ||
+      varsMeta?.stillLane ||
+      ""
+  ).trim();
+
+  const movementStyle = String(
+    varsInputs?.selected_movement_style ||
+      varsInputs?.selectedMovementStyle ||
+      varsInputs?.movement_style ||
+      varsInputs?.movementStyle ||
+      ""
+  ).trim();
+
+  const styleLabel = (movementStyle || stillLane || "").trim();
+
   const tone = String(
     meta?.tone || payload?.inputs?.tone || payload?.tone || varsInputs?.tone || varsMeta?.tone || vars?.tone || ""
   ).trim();
@@ -489,6 +520,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     styleImageUrls: styleImages,
     startImageUrl,
     endImageUrl,
+    klingFrameUrls,
+    styleLabel,
     tone,
     platform,
   };
@@ -1360,121 +1393,192 @@ export default function Profile({
 
                     {expanded && inputs ? (
                       <div className="profile-card-details">
+                        {/* Actions (right aligned): Animate then Re-create */}
                         {it.canRecreate && it.draft ? (
-                          <div className="profile-card-detailrow">
-                            <button
-                              type="button"
-                              className="profile-card-show profile-card-recreate"
-                              onClick={() => {
-                                onRecreate?.(it.draft!);
-                                onBackToStudio?.();
-                              }}
-                            >
-                              Re-create
-                            </button>
+                          <div className="profile-card-detailrow profile-card-detailrow--actions">
+                            <span className="k">Actions</span>
+                            <span className="v profile-card-actionwrap">
+                              {canAnimate ? (
+                                <button
+                                  type="button"
+                                  className="profile-card-show profile-card-animate"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const motionDraft: RecreateDraft = {
+                                      ...it.draft!,
+                                      mode: "motion",
+                                      assets: {
+                                        ...it.draft!.assets,
+                                        kling_start_image_url: it.url,
+                                      },
+                                    };
+                                    onRecreate?.(motionDraft);
+                                    onBackToStudio?.();
+                                  }}
+                                >
+                                  Animate
+                                </button>
+                              ) : null}
 
-                            {canAnimate ? (
                               <button
                                 type="button"
-                                className="profile-card-show profile-card-animate"
-                                onClick={() => {
-                                  const motionDraft: RecreateDraft = {
-                                    ...it.draft!,
-                                    mode: "motion",
-                                    assets: {
-                                      ...it.draft!.assets,
-                                      kling_start_image_url: it.url,
-                                    },
-                                  };
-                                  onRecreate?.(motionDraft);
+                                className="profile-card-show profile-card-recreate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onRecreate?.(it.draft!);
                                   onBackToStudio?.();
                                 }}
                               >
-                                Animate
+                                Re-create
                               </button>
-                            ) : (
-                              <span />
-                            )}
+                            </span>
                           </div>
                         ) : null}
 
-                        {inputs.aspectRatio ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Aspect</span>
-                            <span className="v">{inputs.aspectRatio}</span>
-                          </div>
-                        ) : null}
+                        {/* Style (movement style / lane / presets) */}
+                        {(() => {
+                          const styleText =
+                            (inputs.styleLabel || "").trim() ||
+                            (inputs.stylePresetKeys?.length ? inputs.stylePresetKeys.join(", ") : "");
+                          return styleText ? (
+                            <div className="profile-card-detailrow">
+                              <span className="k">Style</span>
+                              <span className="v">{styleText}</span>
+                            </div>
+                          ) : null;
+                        })()}
 
-                        {typeof inputs.minaVisionEnabled === "boolean" ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Vision</span>
-                            <span className="v">{inputs.minaVisionEnabled ? "On" : "Off"}</span>
-                          </div>
-                        ) : null}
-
-                        {inputs.stylePresetKeys?.length ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Styles</span>
-                            <span className="v">{inputs.stylePresetKeys.join(", ")}</span>
-                          </div>
-                        ) : null}
-
+                        {/* Product thumb */}
                         {inputs.productImageUrl ? (
                           <div className="profile-card-detailrow">
                             <span className="k">Product</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => {
+                              <img
+                                className="profile-input-thumb"
+                                src={cfThumb(inputs.productImageUrl, 140, 70)}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (it.draft) {
+                                    onRecreate?.(it.draft);
+                                    onBackToStudio?.();
+                                    return;
+                                  }
                                   prefetchImage(inputs.productImageUrl);
                                   openLightbox(inputs.productImageUrl, false);
                                 }}
-                              >
-                                view
-                              </button>
+                              />
                             </span>
                           </div>
                         ) : null}
 
+                        {/* Logo thumb */}
                         {inputs.logoImageUrl ? (
                           <div className="profile-card-detailrow">
                             <span className="k">Logo</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => {
+                              <img
+                                className="profile-input-thumb"
+                                src={cfThumb(inputs.logoImageUrl, 140, 70)}
+                                alt=""
+                                loading="lazy"
+                                decoding="async"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (it.draft) {
+                                    onRecreate?.(it.draft);
+                                    onBackToStudio?.();
+                                    return;
+                                  }
                                   prefetchImage(inputs.logoImageUrl);
                                   openLightbox(inputs.logoImageUrl, false);
                                 }}
-                              >
-                                view
-                              </button>
+                              />
                             </span>
                           </div>
                         ) : null}
 
+                        {/* Inspo thumb (+count) */}
                         {inputs.styleImageUrls?.length ? (
                           <div className="profile-card-detailrow">
                             <span className="k">Inspo</span>
                             <span className="v">
-                              <button
-                                className="profile-card-mini"
-                                type="button"
-                                onClick={() => {
-                                  prefetchImage(inputs.styleImageUrls[0]);
-                                  openLightbox(inputs.styleImageUrls[0], false);
-                                }}
-                              >
-                                view
-                              </button>
-                              {inputs.styleImageUrls.length > 1 ? (
-                                <span className="profile-card-miniNote">+{inputs.styleImageUrls.length - 1}</span>
-                              ) : null}
+                              <span className="profile-thumbstack">
+                                <img
+                                  className="profile-input-thumb"
+                                  src={cfThumb(inputs.styleImageUrls[0], 140, 70)}
+                                  alt=""
+                                  loading="lazy"
+                                  decoding="async"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (it.draft) {
+                                      onRecreate?.(it.draft);
+                                      onBackToStudio?.();
+                                      return;
+                                    }
+                                    prefetchImage(inputs.styleImageUrls[0]);
+                                    openLightbox(inputs.styleImageUrls[0], false);
+                                  }}
+                                />
+                                {inputs.styleImageUrls.length > 1 ? (
+                                  <span className="profile-thumbbadge">+{inputs.styleImageUrls.length - 1}</span>
+                                ) : null}
+                              </span>
                             </span>
                           </div>
                         ) : null}
+
+                        {/* Motion frames (start/end + any kling frames) */}
+                        {(() => {
+                          const frames: string[] = [];
+                          if (inputs.startImageUrl) frames.push(inputs.startImageUrl);
+                          if (inputs.endImageUrl) frames.push(inputs.endImageUrl);
+
+                          if (Array.isArray((inputs as any).klingFrameUrls)) {
+                            for (const u of (inputs as any).klingFrameUrls as string[]) {
+                              if (u && !frames.includes(u)) frames.push(u);
+                            }
+                          }
+
+                          const show = it.isMotion && frames.length;
+                          if (!show) return null;
+
+                          return (
+                            <div className="profile-card-detailrow">
+                              <span className="k">Frames</span>
+                              <span className="v">
+                                <span className="profile-thumbrow">
+                                  {frames.slice(0, 2).map((u) => (
+                                    <img
+                                      key={u}
+                                      className="profile-input-thumb"
+                                      src={cfThumb(u, 140, 70)}
+                                      alt=""
+                                      loading="lazy"
+                                      decoding="async"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (it.draft) {
+                                          onRecreate?.(it.draft);
+                                          onBackToStudio?.();
+                                          return;
+                                        }
+                                        prefetchImage(u);
+                                        openLightbox(u, false);
+                                      }}
+                                    />
+                                  ))}
+                                  {frames.length > 2 ? (
+                                    <span className="profile-thumbbadge">+{frames.length - 2}</span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : null}
                   </div>
