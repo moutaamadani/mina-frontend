@@ -3159,10 +3159,8 @@ const styleHeroUrls = (stylePresetKeys || [])
       try {
         const sid = await ensureSession();
 
-        // ✅ include current UI assets for tweak too (logo especially)
-        const uiLogoUrl = uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
-
         const selectedMediaUrl = isMotion ? currentMotion?.url : currentStill?.url;
+        const uiLogoUrl = isMotion ? "" : uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
 
         const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
@@ -3273,7 +3271,6 @@ const styleHeroUrls = (stylePresetKeys || [])
             passId: currentPassId,
             assets: {
               video_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
-              logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
             },
             inputs: {
               intent: "tweak",
