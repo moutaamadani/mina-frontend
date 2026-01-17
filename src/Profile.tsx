@@ -1430,37 +1430,30 @@ export default function Profile({
                                   className="profile-card-show profile-card-scene"
                                   onClick={(e) => {
                                     e.stopPropagation();
-
-                                    const sceneUrl = canonicalAssetUrl(sceneImageUrl);
-
+                              
                                     const draft: RecreateDraft = {
                                       mode: "still",
                                       brief: SCENE_PROMPT,
                                       settings: {
-                                        // keep ratio/vision/presets if you want (safe)
                                         aspect_ratio: inputs?.aspectRatio || undefined,
                                         minaVisionEnabled: inputs?.minaVisionEnabled,
                                         stylePresetKeys: inputs?.stylePresetKeys?.length ? inputs.stylePresetKeys : undefined,
                                       },
                                       assets: {
-                                          // ✅ Scene image goes into the "product/scene" slot
-                                          productImageUrl: sceneUrl || undefined,
-                                        
-                                          // ✅ Keep the logo if it existed on that creation
-                                          logoImageUrl: inputs?.logoImageUrl ? canonicalAssetUrl(inputs.logoImageUrl) : undefined,
-                                        
-                                          // ✅ Do NOT carry inspiration/moodboard (so it doesn't behave like recreate)
-                                          styleImageUrls: undefined,
-                                        },
+                                        productImageUrl: inputs?.productImageUrl || undefined,
+                                        logoImageUrl: inputs?.logoImageUrl || undefined,
+                                        styleImageUrls: [canonicalAssetUrl(sceneImageUrl)],
+                                      },
                                     };
-                                    
+                              
                                     onRecreate?.(draft);
                                     onBackToStudio?.();
-
+                                  }}
                                 >
                                   Scene
                                 </button>
                               ) : null}
+
 
                               {canAnimateBtn ? (
                                 <button
