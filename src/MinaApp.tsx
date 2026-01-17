@@ -1579,8 +1579,38 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
   function deepPickHttpUrl(root: any, opts?: { preferVideo?: boolean }): string {
     const preferVideo = !!opts?.preferVideo;
-    const isHttp = (s: any) => typeof s === "string" && /^https?:\/\//i.test(s.trim());
+    const isHttp = (s: any) => typeof s === "string" && /^https?:\/\//i.test(String(s).trim());
     const clean = (s: string) => s.trim();
+
+    // 🚫 Never treat inputs/assets/reference URLs as "outputs"
+    const BAD_HINTS = [
+      "asset",
+      "assets",
+      "input",
+      "inputs",
+      "inspiration",
+      "product",
+      "product_image",
+      "logo",
+      "logo_image",
+      "start_image",
+      "end_image",
+      "reference",
+      "kling_image",
+      "kling_image_urls",
+      "style",
+      "hero",
+      "thumb",
+      "brief",
+      "prompt",
+      "text",
+    ];
+
+    const isBadHint = (hint: string) => {
+      const h = String(hint || "").toLowerCase();
+      if (!h) return false;
+      return BAD_HINTS.some((w) => h.includes(w));
+    };
 
     const seen = new Set<any>();
     let bestUrl = "";
@@ -1589,6 +1619,9 @@ const showControls = uiStage >= 3 || hasEverTyped;
     const scoreUrl = (url: string, keyHint = "") => {
       const u = url.toLowerCase();
       const k = keyHint.toLowerCase();
+
+      // If this URL came from a bad key, ignore it completely
+      if (isBadHint(k)) return -999;
 
       let score = 0;
 
@@ -1605,9 +1638,11 @@ const showControls = uiStage >= 3 || hasEverTyped;
         if (isVid) score -= 20;
       }
 
-      if (k.includes("output")) score += 10;
+      if (k.includes("output")) score += 15;
       if (k.includes("url")) score += 10;
-      if (u.includes("assets.faltastudio.com")) score += 25;
+
+      // Prefer Mina assets if they come from OUTPUT fields (not assets/inputs)
+      if (u.includes("assets.faltastudio.com")) score += 20;
 
       return score;
     };
@@ -1615,8 +1650,11 @@ const showControls = uiStage >= 3 || hasEverTyped;
     const visit = (node: any, depth: number, keyHint = "") => {
       if (depth > 10 || node == null) return;
 
+      // Skip entire subtrees that are known "inputs/assets"
+      if (depth > 0 && isBadHint(keyHint)) return;
+
       if (isHttp(node)) {
-        const url = clean(node);
+        const url = clean(String(node));
         const sc = scoreUrl(url, keyHint);
         if (sc > bestScore) {
           bestScore = sc;
@@ -1657,31 +1695,62 @@ const showControls = uiStage >= 3 || hasEverTyped;
   }
 
   function pickMmaImageUrl(resp: any): string {
-    return (
+    const mv = resp?.mma_vars;
+
+    const direct =
       resp?.outputs?.nanobanana_image_url ||
       resp?.outputs?.seedream_image_url ||
       resp?.outputs?.image_url ||
-      resp?.mma_vars?.assets?.end_image_url ||
-      (resp as any)?.imageUrl ||
-      (resp as any)?.outputUrl ||
+      resp?.outputs?.url ||
+      resp?.outputs?.output_url ||
+      resp?.imageUrl ||
+      resp?.outputUrl ||
+      mv?.result?.image_url ||
+      mv?.result?.output_url ||
+      mv?.result?.url ||
+      null;
+
+    if (typeof direct === "string" && /^https?:\/\//i.test(direct.trim())) return direct.trim();
+
+    // ✅ Only scan OUTPUT-ish containers. Never scan mv.assets or mv.inputs.
+    const candidate =
       deepPickHttpUrl(resp?.outputs, { preferVideo: false }) ||
-      deepPickHttpUrl(resp?.mma_vars, { preferVideo: false }) ||
-      deepPickHttpUrl(resp, { preferVideo: false }) ||
-      ""
-    );
+      deepPickHttpUrl(mv?.outputs, { preferVideo: false }) ||
+      deepPickHttpUrl(mv?.provider_outputs, { preferVideo: false }) ||
+      deepPickHttpUrl(mv?.result?.outputs, { preferVideo: false }) ||
+      deepPickHttpUrl(mv?.result, { preferVideo: false }) ||
+      "";
+
+    return candidate || "";
   }
 
   function pickMmaVideoUrl(resp: any): string {
-    return (
+    const mv = resp?.mma_vars;
+
+    const direct =
       resp?.outputs?.kling_video_url ||
       resp?.outputs?.video_url ||
-      (resp as any)?.videoUrl ||
-      (resp as any)?.outputUrl ||
+      resp?.outputs?.url ||
+      resp?.outputs?.output_url ||
+      resp?.videoUrl ||
+      resp?.outputUrl ||
+      mv?.result?.video_url ||
+      mv?.result?.output_url ||
+      mv?.result?.url ||
+      null;
+
+    if (typeof direct === "string" && /^https?:\/\//i.test(direct.trim())) return direct.trim();
+
+    // ✅ Only scan OUTPUT-ish containers. Never scan mv.assets or mv.inputs.
+    const candidate =
       deepPickHttpUrl(resp?.outputs, { preferVideo: true }) ||
-      deepPickHttpUrl(resp?.mma_vars, { preferVideo: true }) ||
-      deepPickHttpUrl(resp, { preferVideo: true }) ||
-      ""
-    );
+      deepPickHttpUrl(mv?.outputs, { preferVideo: true }) ||
+      deepPickHttpUrl(mv?.provider_outputs, { preferVideo: true }) ||
+      deepPickHttpUrl(mv?.result?.outputs, { preferVideo: true }) ||
+      deepPickHttpUrl(mv?.result, { preferVideo: true }) ||
+      "";
+
+    return candidate || "";
   }
 
   async function mmaFetchResult(generationId: string): Promise<MmaGenerationResponse> {
@@ -1786,7 +1855,10 @@ const showControls = uiStage >= 3 || hasEverTyped;
       }
 
       // If a URL exists, treat it as finished even if status lags
-      const hasMedia = !!pickMmaImageUrl(last) || !!pickMmaVideoUrl(last);
+      // ✅ Only treat it as finished if we have REAL output urls (pickers are strict now)
+      const img = pickMmaImageUrl(last);
+      const vid = pickMmaVideoUrl(last);
+      const hasMedia = !!img || !!vid;
       if (hasMedia) return last;
 
       await sleep(intervalMs);
