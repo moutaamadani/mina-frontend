@@ -831,8 +831,8 @@ margin-bottom: 6px;
   box-shadow: none;
 }
 
-/* Hide Moodboard UI (custom styles + "Your style" add tile) */
-.studio-style-card.add {
+/* Hide the Moodboard (Style) pill in the top pills row */
+.studio-row--pills .studio-pill--moodboard {
   display: none !important;
 }
 
