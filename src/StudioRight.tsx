@@ -21,6 +21,10 @@ type StudioRightProps = {
   // ✅ NEW: recreate action (same behavior as Profile -> Recreate)
   onRecreate?: (args: { kind: "still" | "motion"; stillIndex: number }) => void;
 
+  // ✅ NEW: set current generated still as Scene (fills Scene pill = assets.product on your wiring)
+  // clearInspiration=true means: do NOT keep this image in inspiration/elements.
+  onSetScene?: (args: { url: string; clearInspiration?: boolean }) => void;
+
   sending?: boolean;
   error?: string | null;
 
@@ -40,6 +44,7 @@ export default function StudioRight(props: StudioRightProps) {
     setTweakText,
     onSendTweak,
     onRecreate,
+    onSetScene,
     sending,
     error,
     tweakCreditsOk,
@@ -357,6 +362,20 @@ export default function StudioRight(props: StudioRightProps) {
           />
 
           <div className="studio-feedback-actions">
+            <button
+              type="button"
+              className="studio-action-btn"
+              onClick={() => {
+                // ✅ Always use the best generated still (even if video is showing)
+                if (!safeStillUrl) return;
+                onSetScene?.({ url: safeStillUrl, clearInspiration: true });
+              }}
+              disabled={isEmpty || !!sending || !onSetScene || !safeStillUrl}
+              title={!onSetScene ? "Set Scene not available" : undefined}
+            >
+              Set Scene
+            </button>
+
             <button
               type="button"
               className="studio-action-btn"

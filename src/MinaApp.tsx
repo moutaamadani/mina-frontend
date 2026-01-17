@@ -4009,6 +4009,52 @@ const styleHeroUrls = (stylePresetKeys || [])
     applyRecreateDraft(draft);
   };
 
+  // --------------------------------------------------------------------------
+  // Set Scene (viewer button)
+  // - Scene pill = uploads.product (assets.product on your wiring)
+  // - NEVER put anything in inspiration (clear it)
+  // - Keep logo untouched
+  // --------------------------------------------------------------------------
+  const handleSetSceneFromViewer = useCallback(
+    (args: { url: string; clearInspiration?: boolean }) => {
+      const raw = String(args?.url || "").trim();
+      const url = stripSignedQuery(raw);
+
+      if (!url || !isHttpUrl(url)) return;
+
+      const mkUrlItem = (panel: UploadPanelKey, u: string): UploadItem => ({
+        id: `${panel}_scene_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+        kind: "url",
+        url: u,
+        remoteUrl: u,
+        uploading: false,
+        error: undefined,
+      });
+
+      // ✅ If animateMode is ON, keep existing 2nd frame if present
+      setUploads((prev) => {
+        const frame1 =
+          animateMode ? (prev.product?.[1]?.remoteUrl || prev.product?.[1]?.url || "") : "";
+        const keepFrame1 = animateMode && isHttpUrl(frame1) ? mkUrlItem("product", frame1) : null;
+
+        return {
+          ...prev,
+          product: animateMode
+            ? [mkUrlItem("product", url), ...(keepFrame1 ? [keepFrame1] : [])].slice(0, 2)
+            : [mkUrlItem("product", url)],
+          inspiration: args?.clearInspiration ? [] : prev.inspiration,
+          // logo unchanged on purpose
+        };
+      });
+
+      // ✅ open the panel so user sees it immediately
+      if (!hasEverTyped) setHasEverTyped(true);
+      setActivePanel("product");
+      setUiStage((s) => (s < 3 ? 3 : s));
+    },
+    [animateMode, hasEverTyped]
+  );
+
   useEffect(() => {
     if (activeTab !== "studio") return;
 
@@ -4225,6 +4271,9 @@ const styleHeroUrls = (stylePresetKeys || [])
         tweakCreditsOk={tweakCreditsOk}
         tweakBlockReason={tweakBlockReason}
         onRecreate={handleRecreateFromViewer}
+        onSetScene={({ url, clearInspiration }) =>
+          handleSetSceneFromViewer({ url, clearInspiration: clearInspiration ?? true })
+        }
       />
     );
   };
