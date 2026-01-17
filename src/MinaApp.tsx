@@ -3159,7 +3159,10 @@ const styleHeroUrls = (stylePresetKeys || [])
       try {
         const sid = await ensureSession();
 
-       const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
+        const selectedMediaUrl = isMotion ? currentMotion?.url : currentStill?.url;
+        const uiLogoUrl = isMotion ? "" : uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
+
+        const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
         };
@@ -3172,6 +3175,10 @@ const styleHeroUrls = (stylePresetKeys || [])
 
           const mmaBody = {
             passId: currentPassId,
+            assets: {
+              image_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
+              logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
+            },
             inputs: {
               intent: "tweak",
               tweak,
@@ -3263,9 +3270,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           const mmaBody = {
             passId: currentPassId,
             assets: {
-              start_image_url: startFrame,
-              end_image_url: endFrame || "",
-              kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+              video_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
             },
             inputs: {
               intent: "tweak",
@@ -3360,7 +3365,9 @@ const styleHeroUrls = (stylePresetKeys || [])
       currentPassId,
       activeMediaKind,
       currentMotion?.id,
+      currentMotion?.url,
       currentStill?.id,
+      currentStill?.url,
       stillBrief,
       brief,
       currentAspect.ratio,
