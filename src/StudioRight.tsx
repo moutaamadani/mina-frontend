@@ -18,10 +18,13 @@ type StudioRightProps = {
   setTweakText: (v: string) => void;
   onSendTweak: (text: string) => void;
 
+  // ✅ NEW: recreate action (same behavior as Profile -> Recreate)
+  onRecreate?: (args: { kind: "still" | "motion"; stillIndex: number }) => void;
+
   sending?: boolean;
   error?: string | null;
 
-  // ✅ NEW: credit gate for tweak
+  // ✅ credit gate for tweak
   tweakCreditsOk?: boolean;
   tweakBlockReason?: string | null;
 };
@@ -36,6 +39,7 @@ export default function StudioRight(props: StudioRightProps) {
     tweakText,
     setTweakText,
     onSendTweak,
+    onRecreate,
     sending,
     error,
     tweakCreditsOk,
@@ -356,8 +360,24 @@ export default function StudioRight(props: StudioRightProps) {
             <button
               type="button"
               className="studio-action-btn"
+              onClick={() => {
+                if (!media) return;
+                onRecreate?.({
+                  kind: media.type === "video" ? "motion" : "still",
+                  stillIndex,
+                });
+              }}
+              disabled={isEmpty || !!sending || !onRecreate}
+              title={!onRecreate ? "Re-create not available" : undefined}
+            >
+              Re-create
+            </button>
+
+            <button
+              type="button"
+              className="studio-action-btn"
               onClick={sendNow}
-              disabled={!canSend} // ✅ includes no-matcha case
+              disabled={!canSend}
               title={!creditsOk ? blockMsg : undefined}
             >
               {sending ? "Tweaking…" : "Tweak"}

@@ -134,6 +134,7 @@ type StillItem = {
   createdAt: string;
   prompt: string;
   aspectRatio?: string;
+  draft?: any; // ✅ used by "Re-create" button
 };
 
 type MotionItem = {
@@ -141,6 +142,7 @@ type MotionItem = {
   url: string;
   createdAt: string;
   prompt: string;
+  draft?: any; // ✅ used by "Re-create" button
 };
 
 // MMA (Mina Mind API) Types
@@ -2780,6 +2782,20 @@ const styleHeroUrls = (stylePresetKeys || [])
         createdAt: new Date().toISOString(),
         prompt: String(result?.prompt || trimmed),
         aspectRatio: effectiveAspectRatio,
+        draft: {
+          mode: "still",
+          brief: String(result?.prompt || trimmed),
+          assets: {
+            product_image_url: isHttpUrl(productUrl) ? productUrl : "",
+            logo_image_url: isHttpUrl(logoUrl) ? logoUrl : "",
+            inspiration_image_urls: inspirationUrls,
+          },
+          settings: {
+            aspect_ratio: safeAspectRatio,
+            stylePresetKeys: stylePresetKeys, // UI keys
+            minaVisionEnabled,
+          },
+        },
       };
 
       setStillItems((prev) => {
@@ -3031,6 +3047,19 @@ const styleHeroUrls = (stylePresetKeys || [])
         url,
         createdAt: new Date().toISOString(),
         prompt: String(result?.prompt || motionTextTrimmed),
+        draft: {
+          mode: "motion",
+          brief: String(result?.prompt || (motionFinalPrompt || motionTextTrimmed).trim()),
+          assets: {
+            start_image_url: startFrame,
+            end_image_url: endFrame || "",
+          },
+          settings: {
+            aspect_ratio: animateAspectOption.ratio,
+            stylePresetKeys: stylePresetKeys, // UI keys
+            minaVisionEnabled,
+          },
+        },
       };
 
       setMotionItems((prev) => {
@@ -3812,6 +3841,78 @@ const styleHeroUrls = (stylePresetKeys || [])
     }, 0);
   }, []);
 
+  // --------------------------------------------------------------------------
+  // Re-create (button next to Tweak)
+  // - Uses saved draft from the item if present
+  // - Falls back to rebuilding a draft from current UI state
+  // --------------------------------------------------------------------------
+  const buildRecreateDraftFromUi = (kind: "still" | "motion") => {
+    if (kind === "motion") {
+      const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+      const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
+      const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
+      const endFrame = isHttpUrl(frame1) ? frame1 : "";
+
+      const insp = (uploads.inspiration || [])
+        .map((u) => u.remoteUrl || u.url)
+        .filter((u) => isHttpUrl(u))
+        .slice(0, 4);
+
+      return {
+        mode: "motion",
+        brief: (motionFinalPrompt || motionTextTrimmed || motionDescription || brief || "").trim(),
+        assets: {
+          start_image_url: startFrame,
+          end_image_url: endFrame || "",
+          // optional extras (safe)
+          product_image_url: startFrame,
+          inspiration_image_urls: insp,
+        },
+        settings: {
+          aspect_ratio: animateAspectOption.ratio,
+          stylePresetKeys: stylePresetKeys, // IMPORTANT: UI keys (keep custom-xxx)
+          minaVisionEnabled,
+        },
+      };
+    }
+
+    const productUrl = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
+    const logoUrl = uploads.logo[0]?.remoteUrl || uploads.logo[0]?.url || "";
+
+    const insp = (uploads.inspiration || [])
+      .map((u) => u.remoteUrl || u.url)
+      .filter((u) => isHttpUrl(u))
+      .slice(0, 4);
+
+    return {
+      mode: "still",
+      brief: (lastStillPrompt || stillBrief || brief || "").trim(),
+      assets: {
+        product_image_url: isHttpUrl(productUrl) ? productUrl : "",
+        logo_image_url: isHttpUrl(logoUrl) ? logoUrl : "",
+        inspiration_image_urls: insp,
+      },
+      settings: {
+        aspect_ratio: effectiveAspectRatio,
+        stylePresetKeys: stylePresetKeys, // IMPORTANT: UI keys (keep custom-xxx)
+        minaVisionEnabled,
+      },
+    };
+  };
+
+  const handleRecreateFromViewer = (args: { kind: "still" | "motion"; stillIndex: number }) => {
+    if (args.kind === "motion") {
+      const candidate = motionItems?.[motionIndex] || motionItems?.[0] || null;
+      const draft = (candidate as any)?.draft || buildRecreateDraftFromUi("motion");
+      applyRecreateDraft(draft);
+      return;
+    }
+
+    const candidate = stillItems?.[args.stillIndex] || stillItems?.[stillIndex] || stillItems?.[0] || null;
+    const draft = (candidate as any)?.draft || buildRecreateDraftFromUi("still");
+    applyRecreateDraft(draft);
+  };
+
   useEffect(() => {
     if (activeTab !== "studio") return;
 
@@ -4027,6 +4128,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         error={feedbackError}
         tweakCreditsOk={tweakCreditsOk}
         tweakBlockReason={tweakBlockReason}
+        onRecreate={handleRecreateFromViewer}
       />
     );
   };
