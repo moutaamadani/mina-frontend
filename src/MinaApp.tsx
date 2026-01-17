@@ -3159,7 +3159,16 @@ const styleHeroUrls = (stylePresetKeys || [])
       try {
         const sid = await ensureSession();
 
-       const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
+        // ✅ include current UI assets for tweak too (logo especially)
+        const uiProductUrl = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
+        const uiLogoUrl = uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
+
+        const uiInspUrls = (uploads.inspiration || [])
+          .map((u) => u.remoteUrl || u.url)
+          .filter((u) => isHttpUrl(u))
+          .slice(0, 4);
+
+        const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
         };
@@ -3172,6 +3181,11 @@ const styleHeroUrls = (stylePresetKeys || [])
 
           const mmaBody = {
             passId: currentPassId,
+            assets: {
+              product_image_url: isHttpUrl(uiProductUrl) ? uiProductUrl : "",
+              logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
+              inspiration_image_urls: uiInspUrls,
+            },
             inputs: {
               intent: "tweak",
               tweak,
@@ -3266,6 +3280,12 @@ const styleHeroUrls = (stylePresetKeys || [])
               start_image_url: startFrame,
               end_image_url: endFrame || "",
               kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+
+              // ✅ include logo during motion tweak too (safe if backend ignores)
+              logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
+
+              // optional but consistent with still
+              inspiration_image_urls: uiInspUrls,
             },
             inputs: {
               intent: "tweak",
