@@ -565,6 +565,7 @@ type ProfileProps = {
 
   onDelete?: (id: string) => Promise<void> | void;
   onRecreate?: (draft: RecreateDraft) => void;
+  onToggleLike?: (args: { generationId?: string; url: string; isMotion: boolean; liked: boolean }) => Promise<void> | void;
 };
 
 export default function Profile({
@@ -579,6 +580,7 @@ export default function Profile({
   onLogout,
   onDelete,
   onRecreate,
+  onToggleLike,
   matchaUrl = "https://www.faltastudio.com/cart/43328351928403:1",
 }: ProfileProps) {
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
@@ -601,6 +603,7 @@ export default function Profile({
   const aspectFilterLabel = activeAspectFilter ? activeAspectFilter.label : "Ratio";
 
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
+  const [localLiked, setLocalLiked] = useState<Record<string, boolean>>({});
 
   // Pagination
   const [visibleCount, setVisibleCount] = useState(36);
@@ -844,6 +847,28 @@ export default function Profile({
     }
   };
 
+  const toggleLike = async (it: any) => {
+    if (!it?.url) return;
+
+    const key = it.likeKey || canonicalAssetUrl(it.url);
+    if (!key) return;
+
+    const nextLiked = !Boolean(it.liked);
+
+    setLocalLiked((prev) => ({ ...prev, [key]: nextLiked }));
+
+    try {
+      await onToggleLike?.({
+        generationId: it.generationId || undefined,
+        url: it.url,
+        isMotion: Boolean(it.isMotion),
+        liked: nextLiked,
+      });
+    } catch (e) {
+      setLocalLiked((prev) => ({ ...prev, [key]: Boolean(it.liked) }));
+    }
+  };
+
   // Likes set (by canonical URL)
   const likedUrlSet = useMemo(() => {
     const s = new Set<string>();
@@ -915,9 +940,11 @@ export default function Profile({
               : ""
           );
 
-        const liked =
-          (generationId && likedGenIdSet.has(generationId)) ||
-          (url ? likedUrlSet.has(canonicalAssetUrl(url)) : false);
+        const likeKey = canonicalAssetUrl(url);
+
+        const likedFromServer =
+          (generationId && likedGenIdSet.has(generationId)) || (likeKey ? likedUrlSet.has(likeKey) : false);
+        const liked = typeof localLiked[likeKey] === "boolean" ? localLiked[likeKey] : likedFromServer;
 
         const prompt = (inputs.brief || "").trim();
 
@@ -944,9 +971,11 @@ export default function Profile({
 
         return {
           id,
+          generationId,
           createdAt,
           prompt,
           url,
+          likeKey,
           liked,
           isMotion,
           aspectRatio,
@@ -1000,7 +1029,7 @@ export default function Profile({
     });
 
     return { items: out, activeCount: out.length };
-  }, [generations, feedbacks, likedUrlSet, motion, likedOnly, activeAspectFilter, onRecreate, removedIds]);
+  }, [generations, feedbacks, likedUrlSet, localLiked, motion, likedOnly, activeAspectFilter, onRecreate, removedIds]);
 
   // Reset paging when list changes
   useEffect(() => {
@@ -1274,14 +1303,64 @@ export default function Profile({
                 }`}
               >
                 <div className="profile-card-top">
-                  <button
-                    className="profile-card-show"
-                    type="button"
-                    onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
-                    disabled={!it.url}
-                  >
-                    Download
-                  </button>
+                  <div className="profile-card-top-left">
+                    <button
+                      className="profile-card-show"
+                      type="button"
+                      onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
+                      disabled={!it.url}
+                    >
+                      Download
+                    </button>
+
+                    {canAnimate ? (
+                      <button
+                        type="button"
+                        className="profile-card-show profile-card-animate"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const motionDraft: RecreateDraft = {
+                            ...it.draft!,
+                            mode: "motion",
+                            assets: {
+                              ...it.draft!.assets,
+                              kling_start_image_url: it.url,
+                            },
+                          };
+                          onRecreate?.(motionDraft);
+                          onBackToStudio?.();
+                        }}
+                      >
+                        Animate
+                      </button>
+                    ) : null}
+
+                    {it.canRecreate ? (
+                      <button
+                        type="button"
+                        className="profile-card-show profile-card-recreate"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRecreate?.(it.draft!);
+                          onBackToStudio?.();
+                        }}
+                      >
+                        Re-create
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="profile-card-show profile-card-like"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLike(it);
+                      }}
+                      disabled={!onToggleLike}
+                    >
+                      {it.liked ? "Liked" : "Like"}
+                    </button>
+                  </div>
 
                   <div className="profile-card-top-right">
                     {it.liked ? (
@@ -1393,48 +1472,6 @@ export default function Profile({
 
                     {expanded && inputs ? (
                       <div className="profile-card-details">
-                        {/* Actions (right aligned): Animate then Re-create */}
-                        {it.canRecreate && it.draft ? (
-                          <div className="profile-card-detailrow profile-card-detailrow--actions">
-                            <span className="k">Actions</span>
-                            <span className="v profile-card-actionwrap">
-                              {canAnimate ? (
-                                <button
-                                  type="button"
-                                  className="profile-card-show profile-card-animate"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const motionDraft: RecreateDraft = {
-                                      ...it.draft!,
-                                      mode: "motion",
-                                      assets: {
-                                        ...it.draft!.assets,
-                                        kling_start_image_url: it.url,
-                                      },
-                                    };
-                                    onRecreate?.(motionDraft);
-                                    onBackToStudio?.();
-                                  }}
-                                >
-                                  Animate
-                                </button>
-                              ) : null}
-
-                              <button
-                                type="button"
-                                className="profile-card-show profile-card-recreate"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onRecreate?.(it.draft!);
-                                  onBackToStudio?.();
-                                }}
-                              >
-                                Re-create
-                              </button>
-                            </span>
-                          </div>
-                        ) : null}
-
                         {/* Style (movement style / lane / presets) */}
                         {(() => {
                           const styleText =

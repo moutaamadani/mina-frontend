@@ -219,6 +219,12 @@
   min-height: 28px;               /* keep header height stable */
 }
 
+.profile-card-top-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 
 .profile-card-show {
   border: 0;
@@ -851,4 +857,19 @@
 .profile-card-details .profile-card-recreate,
 .profile-card-details .profile-card-animate {
   display: inline-flex !important;
+}
+
+.profile-card-like {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(8, 10, 0, 0.85);
+  cursor: pointer;
+}
+
+.profile-card-like:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
