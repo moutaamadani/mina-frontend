@@ -1656,32 +1656,109 @@ const showControls = uiStage >= 3 || hasEverTyped;
     return bestUrl;
   }
 
+  // ✅ Prevent "inspiration/product/logo" URLs from being mistaken as outputs
+  function normalizeCompareUrl(u: any): string {
+    if (typeof u !== "string") return "";
+    return stripSignedQuery(u).trim();
+  }
+
+  function isHttp(u: any): u is string {
+    return typeof u === "string" && /^https?:\/\//i.test(u.trim());
+  }
+
+  function collectInputAssetUrlSet(mmaVars: any): Set<string> {
+    const set = new Set<string>();
+    const add = (v: any) => {
+      const s = normalizeCompareUrl(v);
+      if (s && isHttp(s)) set.add(s);
+    };
+    const addArr = (arr: any) => {
+      if (!Array.isArray(arr)) return;
+      for (const v of arr) add(v);
+    };
+
+    const assets = mmaVars?.assets || mmaVars?.asset || {};
+    const inputs = mmaVars?.inputs || {};
+
+    // Common asset keys (still + motion)
+    add(assets.product_image_url);
+    add(assets.logo_image_url);
+    addArr(assets.inspiration_image_urls);
+
+    add(assets.start_image_url);
+    add(assets.end_image_url);
+    addArr(assets.kling_image_urls);
+
+    // Possible alternate keys your backend may emit
+    add(assets.productImageUrl);
+    add(assets.logoImageUrl);
+    addArr(assets.inspirationImageUrls);
+    addArr(assets.style_image_urls);
+    addArr(assets.styleImageUrls);
+
+    add(assets.startImageUrl);
+    add(assets.endImageUrl);
+
+    // Sometimes refs leak into inputs too
+    add(inputs.product_image_url);
+    add(inputs.logo_image_url);
+    addArr(inputs.inspiration_image_urls);
+    add(inputs.start_image_url);
+    add(inputs.end_image_url);
+    addArr(inputs.kling_image_urls);
+
+    addArr(inputs.style_image_urls);
+    addArr(inputs.styleImageUrls);
+
+    return set;
+  }
+
+  function pickFirstHttpNotInput(candidates: any[], inputSet: Set<string>): string {
+    for (const c of candidates) {
+      const s = normalizeCompareUrl(c);
+      if (!s || !isHttp(s)) continue;
+      if (inputSet.has(s)) continue; // ✅ skip inspiration/product/logo/start/end refs
+      return s;
+    }
+    return "";
+  }
+
   function pickMmaImageUrl(resp: any): string {
-    return (
-      resp?.outputs?.nanobanana_image_url ||
-      resp?.outputs?.seedream_image_url ||
-      resp?.outputs?.image_url ||
-      resp?.mma_vars?.assets?.end_image_url ||
-      (resp as any)?.imageUrl ||
-      (resp as any)?.outputUrl ||
-      deepPickHttpUrl(resp?.outputs, { preferVideo: false }) ||
-      deepPickHttpUrl(resp?.mma_vars, { preferVideo: false }) ||
-      deepPickHttpUrl(resp, { preferVideo: false }) ||
-      ""
-    );
+    const inputSet = collectInputAssetUrlSet(resp?.mma_vars);
+
+    // ✅ Only consider OUTPUT-shaped fields first, then deep-pick ONLY inside outputs
+    const candidates = [
+      resp?.outputs?.nanobanana_image_url,
+      resp?.outputs?.seedream_image_url,
+      resp?.outputs?.image_url,
+
+      // sometimes backend flattens:
+      resp?.imageUrl,
+      resp?.outputUrl,
+      resp?.mg_output_url,
+
+      // deep scan outputs only (not mma_vars!)
+      deepPickHttpUrl(resp?.outputs, { preferVideo: false }),
+    ];
+
+    return pickFirstHttpNotInput(candidates, inputSet);
   }
 
   function pickMmaVideoUrl(resp: any): string {
-    return (
-      resp?.outputs?.kling_video_url ||
-      resp?.outputs?.video_url ||
-      (resp as any)?.videoUrl ||
-      (resp as any)?.outputUrl ||
-      deepPickHttpUrl(resp?.outputs, { preferVideo: true }) ||
-      deepPickHttpUrl(resp?.mma_vars, { preferVideo: true }) ||
-      deepPickHttpUrl(resp, { preferVideo: true }) ||
-      ""
-    );
+    const inputSet = collectInputAssetUrlSet(resp?.mma_vars);
+
+    const candidates = [
+      resp?.outputs?.kling_video_url,
+      resp?.outputs?.video_url,
+
+      resp?.videoUrl,
+      resp?.outputUrl,
+      resp?.mg_output_url,
+
+      deepPickHttpUrl(resp?.outputs, { preferVideo: true }),
+    ];
+
+    return pickFirstHttpNotInput(candidates, inputSet);
   }
 
   async function mmaFetchResult(generationId: string): Promise<MmaGenerationResponse> {
