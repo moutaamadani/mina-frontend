@@ -1432,17 +1432,12 @@ const openPrompt = useCallback((id: string) => {
                                 <button
                                   type="button"
                                   className="profile-card-show profile-card-scene"
+                                  // REPLACE the whole Scene button onClick handler with this:
                                   onClick={(e) => {
                                     e.stopPropagation();
+                                  
                                     const scene = canonicalAssetUrl(sceneImageUrl);
-
-                                    // Put the generation into "inspiration" (your Product pill),
-                                    // and DO NOT touch assets.product (productImageUrl).
-                                    const mergedStyle = [scene, ...(inputs?.styleImageUrls || [])]
-                                      .map(canonicalAssetUrl)
-                                      .filter(Boolean)
-                                      .filter((u, i, a) => a.indexOf(u) === i);
-
+                                  
                                     const draft: RecreateDraft = {
                                       mode: "still",
                                       brief: SCENE_PROMPT,
@@ -1452,19 +1447,23 @@ const openPrompt = useCallback((id: string) => {
                                         stylePresetKeys: inputs?.stylePresetKeys?.length ? inputs.stylePresetKeys : undefined,
                                       },
                                       assets: {
-                                        // ✅ IMPORTANT: do NOT send productImageUrl here (scene pill uses assets.product in your wiring)
-                                        // ✅ optional safety: also don't send logo here so it never "falls back" into product slot
-                                        // logoImageUrl: undefined,
-                                        // productImageUrl: undefined,
-
-                                        // ✅ generation image goes to inspiration
-                                        styleImageUrls: mergedStyle,
+                                        // ✅ Scene pill (your wiring uses assets.product)
+                                        productImageUrl: scene || undefined,
+                                  
+                                        // ✅ Logo stays in logo slot (never falls into product/elements)
+                                        ...(inputs?.logoImageUrl
+                                          ? { logoImageUrl: canonicalAssetUrl(inputs.logoImageUrl) }
+                                          : {}),
+                                  
+                                        // ✅ Do NOT put anything into inspiration/elements
+                                        styleImageUrls: [],
                                       },
                                     };
-                              
+                                  
                                     onRecreate?.(draft);
                                     onBackToStudio?.();
                                   }}
+
                                 >
                                   Scene
                                 </button>
