@@ -839,3 +839,8 @@ margin-bottom: 6px;
 .profile-card-recreate:active {
   opacity: 0.6;
 }
+
+/* Hide Moodboard / Style pill */
+.studio-row--pills .studio-pill:nth-child(4) {
+  display: none !important;
+}

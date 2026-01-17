@@ -1215,6 +1215,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       !productThumb && "studio-pill--solo-plus"
                     )}
                     style={pillBaseStyle(0)}
+                    title="Scene / Composition"
                     onClick={() => {
                       if (!productThumb) triggerPick("product");
                       else openPanel("product");
@@ -1222,7 +1223,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onMouseEnter={() => openPanel("product")}
                   >
                     {renderPillIcon(productThumb, "+", true)}
-                    <span className="studio-pill-main">Product</span>
+                    <span className="studio-pill-main">Scene</span>
                   </button>
 
                   {/* Logo */}
@@ -1234,6 +1235,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       !logoThumb && "studio-pill--solo-plus"
                     )}
                     style={pillBaseStyle(1)}
+                    title="Logo / Label / Icon / Text"
                     onClick={() => {
                       if (!logoThumb) triggerPick("logo");
                       else openPanel("logo");
@@ -1253,6 +1255,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       !inspirationThumb && "studio-pill--solo-plus"
                     )}
                     style={pillBaseStyle(2)}
+                    title="Product / Element / Texture / Material"
                     onClick={() => {
                       if (!inspirationThumb) triggerPick("inspiration");
                       else openPanel("inspiration");
@@ -1260,7 +1263,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     onMouseEnter={() => openPanel("inspiration")}
                   >
                     {renderPillIcon(inspirationThumb, "+", true)}
-                    <span className="studio-pill-main">Inspiration</span>
+                    <span className="studio-pill-main">Elements</span>
                   </button>
 
                   {/* Style */}
@@ -1438,7 +1441,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             <>
               <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                 <div className="studio-panel">
-                  <div className="studio-panel-title">Add your product</div>
+                  <div className="studio-panel-title">Add your scene / composition</div>
 
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("product")}>
@@ -1477,7 +1480,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
               <Collapse open={showPanels && activePanel === "logo"} delayMs={panelRevealDelayMs}>
                 <div className="studio-panel">
-                  <div className="studio-panel-title">Add your logo</div>
+                  <div className="studio-panel-title">Add your logo / label / icon / text</div>
 
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("logo")}>
@@ -1499,7 +1502,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
               <Collapse open={showPanels && activePanel === "inspiration"} delayMs={panelRevealDelayMs}>
                 <div className="studio-panel">
-                  <div className="studio-panel-title">Add your inspirations</div>
+                  <div className="studio-panel-title">Add product elements / textures / materials</div>
 
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("inspiration")}>
