@@ -53,14 +53,37 @@ export default function StudioRight(props: StudioRightProps) {
     setShowMotion(!!currentMotion);
   }, [currentMotion?.url]);
 
+  const safeStillUrl = useMemo(() => {
+    const byIndex = stillItems?.[stillIndex]?.url || "";
+    const fromCurrent = currentStill?.url || "";
+    const candidate = (byIndex || fromCurrent || "").trim();
+    if (!candidate) return "";
+
+    // If something weird gets set as "currentStill" (product/logo/inspo),
+    // prefer a real generated still from the carousel if present.
+    const looksInputAsset = /\/(product|logo|inspiration|style)\//i.test(candidate);
+    const hasRealGen =
+      stillItems?.some((it) => /\/generations\//i.test(String(it?.url || ""))) || false;
+
+    if (looksInputAsset && hasRealGen) {
+      const best =
+        stillItems.find((it) => /\/generations\//i.test(String(it?.url || "")))?.url ||
+        byIndex ||
+        fromCurrent;
+      return String(best || "").trim();
+    }
+
+    return candidate;
+  }, [stillItems, stillIndex, currentStill?.url]);
+
   const media = useMemo(() => {
     // If we have motion and we either want to show it, OR we have no still to show, display video.
-    if (currentMotion && (showMotion || !currentStill)) {
+    if (currentMotion && (showMotion || !safeStillUrl)) {
       return { type: "video" as const, url: currentMotion.url };
     }
-    if (currentStill) return { type: "image" as const, url: currentStill.url };
+    if (safeStillUrl) return { type: "image" as const, url: safeStillUrl };
     return null;
-  }, [currentMotion, currentStill, showMotion]);
+  }, [currentMotion, showMotion, safeStillUrl]);
 
   // Swipe/drag handling
   const suppressClickRef = useRef(false);
@@ -244,6 +267,7 @@ export default function StudioRight(props: StudioRightProps) {
               <div className={`studio-output-frame ${containMode ? "is-contain" : ""}`}>
                 {media?.type === "video" ? (
                   <video
+                    key={media.url}
                     className="studio-output-media"
                     src={media.url}
                     autoPlay
@@ -255,6 +279,7 @@ export default function StudioRight(props: StudioRightProps) {
                   />
                 ) : (
                   <img
+                    key={media.url}
                     className="studio-output-media"
                     src={media?.url || ""}
                     alt=""

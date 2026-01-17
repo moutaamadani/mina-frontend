@@ -1324,15 +1324,30 @@ export default function Profile({
                         onMouseLeave={() => setVideoHover(it.id, false)}
                       />
                     ) : (
-                      <img
-                        src={cfThumb(it.url, 1200, 75)}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        onError={(e) => {
-                          (e.currentTarget as HTMLImageElement).src = it.url;
-                        }}
-                      />
+                      (() => {
+                        const w =
+                          it.sizeClass === "profile-card--hero"
+                            ? 1400
+                            : it.sizeClass === "profile-card--wide"
+                              ? 1200
+                              : it.sizeClass === "profile-card--mini"
+                                ? 700
+                                : 900;
+
+                        const thumb = cfThumb(it.url, w, 70);
+
+                        return (
+                          <img
+                            src={thumb}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = it.url;
+                            }}
+                          />
+                        );
+                      })()
                     )
                   ) : (
                     <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
