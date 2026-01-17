@@ -1434,7 +1434,15 @@ const openPrompt = useCallback((id: string) => {
                                   className="profile-card-show profile-card-scene"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                              
+                                    const scene = canonicalAssetUrl(sceneImageUrl);
+
+                                    // Put the generation into "inspiration" (your Product pill),
+                                    // and DO NOT touch assets.product (productImageUrl).
+                                    const mergedStyle = [scene, ...(inputs?.styleImageUrls || [])]
+                                      .map(canonicalAssetUrl)
+                                      .filter(Boolean)
+                                      .filter((u, i, a) => a.indexOf(u) === i);
+
                                     const draft: RecreateDraft = {
                                       mode: "still",
                                       brief: SCENE_PROMPT,
@@ -1444,9 +1452,13 @@ const openPrompt = useCallback((id: string) => {
                                         stylePresetKeys: inputs?.stylePresetKeys?.length ? inputs.stylePresetKeys : undefined,
                                       },
                                       assets: {
-                                        productImageUrl: inputs?.productImageUrl || undefined,
-                                        logoImageUrl: inputs?.logoImageUrl || undefined,
-                                        styleImageUrls: [canonicalAssetUrl(sceneImageUrl)],
+                                        // ✅ IMPORTANT: do NOT send productImageUrl here (scene pill uses assets.product in your wiring)
+                                        // ✅ optional safety: also don't send logo here so it never "falls back" into product slot
+                                        // logoImageUrl: undefined,
+                                        // productImageUrl: undefined,
+
+                                        // ✅ generation image goes to inspiration
+                                        styleImageUrls: mergedStyle,
                                       },
                                     };
                               
