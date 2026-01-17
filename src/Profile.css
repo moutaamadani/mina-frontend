@@ -861,16 +861,16 @@
   width: 100%;
   height: 100%;
   min-height: 220px;
-  border-radius: 16px;
-  background: #e6e6e6;
+  border-radius: 0px;
+  background: #F0EEE8;
   position: relative;
   overflow: hidden;
 }
 
 .profile-skel-line {
   height: 12px;
-  border-radius: 999px;
-  background: #e6e6e6;
+  border-radius: 0px;
+  background: #F0EEE8;
   position: relative;
   overflow: hidden;
 }
