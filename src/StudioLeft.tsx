@@ -140,6 +140,7 @@ type StudioLeftProps = {
   motionBlockReason?: string | null;
 
   imageCreditsOk?: boolean;
+  credits?: number;
   matchaUrl: string;
 
   motionGenerating?: boolean;
@@ -357,6 +358,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     onTypeForMe,
 
     imageCreditsOk: imageCreditsOkProp,
+    credits: creditsProp,
     matchaUrl,
 
     minaMessage,
@@ -480,8 +482,20 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     onCycleAspect?.();
   };
 
+  // ==========================
+  // Fixed matcha rules (your exact ask)
+  // - Animate/motion: need >= 10
+  // - Still niche:    need >= 2
+  // - Still main:     need >= 1
+  // ==========================
+  const creditBalance = Number(creditsProp);
+  const hasCreditNumber = Number.isFinite(creditBalance);
 
-  const imageCreditsOk = imageCreditsOkProp ?? true;
+  const STILL_COST = stillLane === "niche" ? 2 : 1;
+  const MOTION_COST = 10;
+
+  // If credits is not provided yet, fall back to existing props behavior
+  const imageCreditsOk = hasCreditNumber ? creditBalance >= STILL_COST : (imageCreditsOkProp ?? true);
   const hasMotionImage = !!motionHasImageProp;
 
   const briefInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -907,8 +921,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionSuggesting = !!props.motionSuggesting;
   const motionHasImage = !!props.motionHasImage;
   const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
-  const motionCreditsOk = props.motionCreditsOk ?? true;
-  const motionBlockReason = props.motionBlockReason || null;
+  const motionCreditsOk = hasCreditNumber ? creditBalance >= MOTION_COST : (props.motionCreditsOk ?? true);
+
+  const motionBlockReason =
+    !motionCreditsOk ? "Get more matchas to animate." : (props.motionBlockReason || null);
 
   const typeForMeLabel = motionSuggesting ? "Typing…" : "Type for me";
 
@@ -956,7 +972,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? "Add frame"
       : createState === "describe_more"
       ? wantsMatcha
-        ? "I need Matcha"
+        ? "Get more matchas"
         : "Describe more"
       : isMotion
       ? "Animate"
