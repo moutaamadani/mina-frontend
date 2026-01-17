@@ -4528,7 +4528,7 @@ const headerOverlayClass =
                     motionGenerating
                   }
                 >
-                  {isCurrentLiked ? "Thanks" : "Love it"}
+                  {isCurrentLiked ? "Ok" : "Like"}
                 </button>
           
                 <button
