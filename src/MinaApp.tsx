@@ -258,8 +258,6 @@ const STYLE_PRESETS = [
     thumb: "https://assets.faltastudio.com/Website%20Assets/Vintage.jpg",
     hero: [
       "https://assets.faltastudio.com/mma/still/8167b69f-048f-49d3-a45d-669303cefc70.png",//luxury pearl
-      "https://assets.faltastudio.com/mma/still/368bd75e-92ec-4d1d-a887-dc269804c043.png",//brown wood
-      "https://assets.faltastudio.com/mma/still/8a098823-1373-4caf-8851-63ad2d7edb95.png",//brown wood
     ],
   },
   {
@@ -267,8 +265,6 @@ const STYLE_PRESETS = [
     label: "Luxury",
     thumb: "https://assets.faltastudio.com/Website%20Assets/Luxury.jpg",
     hero: [
-      "https://assets.faltastudio.com/mma/still/fb5512eb-05bd-4e69-a07f-d7b4a7c397eb.png", //grey
-      "https://assets.faltastudio.com/mma/still/eb667709-b1f3-42af-8357-92da11a7356e.png", //white
       "https://assets.faltastudio.com/mma/still/8a098823-1373-4caf-8851-63ad2d7edb95.png", //
     ],
   },
@@ -277,9 +273,7 @@ const STYLE_PRESETS = [
     label: "Minimal",
     thumb: "https://assets.faltastudio.com/Website%20Assets/Minimal.jpg",
     hero: [
-      "https://assets.faltastudio.com/mma/still/ba77edf8-4efe-443e-9128-9a810ba1013e.png", //purple
       "https://assets.faltastudio.com/mma/still/e213a6c9-7705-426d-a057-84af20a05e60.png", //red
-      "https://assets.faltastudio.com/mma/still/33adf824-9895-43cf-b1fb-3d2aa414d4fe.png", //beige
       "",
     ],
   },
