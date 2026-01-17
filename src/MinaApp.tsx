@@ -124,6 +124,13 @@ type HistoryResponse = {
       createdAt: string;
     }[];
   };
+  page?: {
+    limit?: number;
+    cursor?: string | null;
+    nextCursor?: string | null;
+    hasMore?: boolean;
+    returned?: number;
+  };
   generations: GenerationRecord[];
   feedbacks: FeedbackRecord[];
 };
@@ -742,9 +749,21 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [historyFeedbacks, setHistoryFeedbacks] = useState<FeedbackRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [visibleHistoryCount, setVisibleHistoryCount] = useState(20);
+  const HISTORY_PAGE_LIMIT = 200;
+  const [historyNextCursor, setHistoryNextCursor] = useState<string | null>(null);
+  const [historyHasMore, setHistoryHasMore] = useState<boolean>(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState<boolean>(false);
 
-  const historyCacheRef = useRef<Record<string, { generations: GenerationRecord[]; feedbacks: FeedbackRecord[] }>>({});
+  const historyCacheRef = useRef<
+    Record<
+      string,
+      {
+        generations: GenerationRecord[];
+        feedbacks: FeedbackRecord[];
+        page?: { nextCursor: string | null; hasMore: boolean; limit: number };
+      }
+    >
+  >({});
   const historyDirtyRef = useRef<boolean>(false);
 
   const creditsCacheRef = useRef<Record<string, CreditsState>>({});
@@ -781,9 +800,6 @@ const MinaApp: React.FC<MinaAppProps> = () => {
     if (typeof window === "undefined") return [];
     return loadCustomStyles();
   });
-
-  // Load-more sentinel (Profile)
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Stable refs
   const uploadsRef = useRef(uploads);
@@ -2024,13 +2040,53 @@ const showControls = uiStage >= 3 || hasEverTyped;
     return null;
   };
 
-  const fetchHistoryForPass = async (pid: string): Promise<HistoryResponse> => {
-    const qs = new URLSearchParams({ limit: "5000" }); // backend may ignore if not supported
+  const fetchHistoryForPass = async (
+    pid: string,
+    opts?: { limit?: number; cursor?: string | null }
+  ): Promise<HistoryResponse> => {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(opts?.limit ?? HISTORY_PAGE_LIMIT));
+    if (opts?.cursor) qs.set("cursor", String(opts.cursor));
+
     const res = await apiFetch(`/history/pass/${encodeURIComponent(pid)}?${qs.toString()}`);
     if (!res.ok) throw new Error(`Status ${res.status}`);
     const json = (await res.json().catch(() => ({}))) as HistoryResponse;
     if (!json.ok) throw new Error("History error");
     return json;
+  };
+
+  const normalizeHistoryGeneration = async (g: GenerationRecord): Promise<GenerationRecord> => {
+    const original = String(g.outputUrl || "").trim();
+    if (!original) return g;
+
+    const stable = stripSignedQuery(original);
+
+    // Replicate: never keep/display it. Store to assets or blank.
+    if (isReplicateUrl(original) || isReplicateUrl(stable)) {
+      try {
+        const kind = isVideoUrl(original) ? "motions" : "generations";
+        const r2 = await storeRemoteToR2(original, kind);
+        const r2Stable = stripSignedQuery(r2);
+        if (r2Stable && isAssetsUrl(r2Stable)) return { ...g, outputUrl: r2Stable };
+        if (r2 && isAssetsUrl(r2)) return { ...g, outputUrl: r2 };
+        return { ...g, outputUrl: "" };
+      } catch {
+        return { ...g, outputUrl: "" };
+      }
+    }
+
+    // Non-replicate: safe to strip signatures for display
+    return stable && stable !== original ? { ...g, outputUrl: stable } : g;
+  };
+
+  const normalizeHistoryGenerations = async (gens: GenerationRecord[]) => {
+    return await Promise.all((gens || []).map(normalizeHistoryGeneration));
+  };
+
+  const mergeAppendUniqueById = <T extends { id: string }>(prev: T[], next: T[]) => {
+    const seen = new Set(prev.map((x) => x.id));
+    const add = (next || []).filter((x) => x?.id && !seen.has(x.id));
+    return [...prev, ...add];
   };
 
   const fetchHistory = async () => {
@@ -2041,13 +2097,16 @@ const showControls = uiStage >= 3 || hasEverTyped;
         const cached = historyCacheRef.current[currentPassId];
         setHistoryGenerations(cached.generations);
         setHistoryFeedbacks(cached.feedbacks);
+        setHistoryNextCursor(cached.page?.nextCursor ?? null);
+        setHistoryHasMore(!!cached.page?.hasMore);
         return;
       }
 
       setHistoryLoading(true);
       setHistoryError(null);
 
-      const history = await fetchHistoryForPass(currentPassId);
+      // ✅ first page
+      const history = await fetchHistoryForPass(currentPassId, { limit: HISTORY_PAGE_LIMIT, cursor: null });
 
       if (history?.credits) {
         setCredits((prev) => ({
@@ -2063,41 +2122,67 @@ const showControls = uiStage >= 3 || hasEverTyped;
       const gens = history?.generations || [];
       const feedbacks = history?.feedbacks || [];
 
-      const updated = await Promise.all(
-        gens.map(async (g) => {
-          const original = String(g.outputUrl || "").trim();
-          if (!original) return g;
+      const updated = await normalizeHistoryGenerations(gens);
 
-          const stable = stripSignedQuery(original);
+      const nextCursor = history?.page?.nextCursor ?? null;
+      const hasMore = !!history?.page?.hasMore;
 
-          // Replicate: never keep/display it. Store to assets or blank.
-          if (isReplicateUrl(original) || isReplicateUrl(stable)) {
-            try {
-              const kind = isVideoUrl(original) ? "motions" : "generations";
-              const r2 = await storeRemoteToR2(original, kind);
-              const r2Stable = stripSignedQuery(r2);
-              if (r2Stable && isAssetsUrl(r2Stable)) return { ...g, outputUrl: r2Stable };
-              if (r2 && isAssetsUrl(r2)) return { ...g, outputUrl: r2 };
-              return { ...g, outputUrl: "" };
-            } catch {
-              return { ...g, outputUrl: "" };
-            }
-          }
-
-          // Non-replicate: safe to strip signatures for display
-          return stable && stable !== original ? { ...g, outputUrl: stable } : g;
-        })
-      );
-
-      historyCacheRef.current[currentPassId] = { generations: updated, feedbacks };
+      historyCacheRef.current[currentPassId] = {
+        generations: updated,
+        feedbacks,
+        page: { nextCursor, hasMore, limit: HISTORY_PAGE_LIMIT },
+      };
       historyDirtyRef.current = false;
 
       setHistoryGenerations(updated);
       setHistoryFeedbacks(feedbacks);
+      setHistoryNextCursor(nextCursor);
+      setHistoryHasMore(hasMore);
     } catch (err: any) {
       setHistoryError(err?.message || "Unable to load history.");
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  const fetchHistoryMore = async () => {
+    if (!API_BASE_URL || !currentPassId) return;
+    if (historyLoading || historyLoadingMore) return;
+    if (!historyHasMore || !historyNextCursor) return;
+
+    try {
+      setHistoryLoadingMore(true);
+
+      const history = await fetchHistoryForPass(currentPassId, {
+        limit: HISTORY_PAGE_LIMIT,
+        cursor: historyNextCursor,
+      });
+
+      const gens = await normalizeHistoryGenerations(history?.generations || []);
+      const feedbacks = history?.feedbacks || [];
+
+      const mergedGens = mergeAppendUniqueById(historyGenerations, gens);
+      const mergedFeedbacks = mergeAppendUniqueById(historyFeedbacks, feedbacks);
+
+      const nextCursor = history?.page?.nextCursor ?? null;
+      const hasMore = !!history?.page?.hasMore;
+
+      setHistoryGenerations(mergedGens);
+      setHistoryFeedbacks(mergedFeedbacks);
+      setHistoryNextCursor(nextCursor);
+      setHistoryHasMore(hasMore);
+
+      historyCacheRef.current[currentPassId] = {
+        generations: mergedGens,
+        feedbacks: mergedFeedbacks,
+        page: { nextCursor, hasMore, limit: HISTORY_PAGE_LIMIT },
+      };
+      historyDirtyRef.current = false;
+    } catch (err: any) {
+      // keep already loaded items
+      setHistoryError(err?.message || "Unable to load more history.");
+    } finally {
+      setHistoryLoadingMore(false);
     }
   };
 
@@ -2106,7 +2191,6 @@ const showControls = uiStage >= 3 || hasEverTyped;
     if (activeTab !== "profile") return;
     if (!currentPassId) return;
 
-    setVisibleHistoryCount(20);
     void fetchCredits();
     void fetchHistory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2132,27 +2216,6 @@ const showControls = uiStage >= 3 || hasEverTyped;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPassId]);
-
-  // Infinite scroll for profile
-  useEffect(() => {
-    if (activeTab !== "profile") return undefined;
-    const target = loadMoreRef.current;
-    if (!target) return undefined;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) {
-          setVisibleHistoryCount((count) =>
-            Math.min(historyGenerations.length, count + Math.max(10, Math.floor(count * 0.2)))
-          );
-        }
-      },
-      { rootMargin: "1200px 0px 1200px 0px" }
-    );
-
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [activeTab, historyGenerations.length]);
 
   // Admin numbering helpers
   const getEditorialNumber = (id: string, index: number) => {
@@ -4701,6 +4764,9 @@ const headerOverlayClass =
             matchaUrl={MATCHA_URL}
             loading={historyLoading || creditsLoading}
             error={historyError}
+            onLoadMore={() => void fetchHistoryMore()}
+            hasMore={historyHasMore}
+            loadingMore={historyLoadingMore}
             onRefresh={() => {
               historyDirtyRef.current = true;
               creditsDirtyRef.current = true;
@@ -4718,9 +4784,11 @@ const headerOverlayClass =
               setHistoryFeedbacks((prev) => prev.filter((f) => f.id !== id));
 
               if (currentPassId && historyCacheRef.current[currentPassId]) {
+                const cached = historyCacheRef.current[currentPassId];
                 historyCacheRef.current[currentPassId] = {
-                  generations: historyCacheRef.current[currentPassId].generations.filter((g) => g.id !== id),
-                  feedbacks: historyCacheRef.current[currentPassId].feedbacks.filter((f) => f.id !== id),
+                  generations: cached.generations.filter((g) => g.id !== id),
+                  feedbacks: cached.feedbacks.filter((f) => f.id !== id),
+                  page: cached.page,
                 };
               }
             }}

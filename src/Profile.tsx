@@ -577,6 +577,10 @@ type ProfileProps = {
 
   onDelete?: (id: string) => Promise<void> | void;
   onRecreate?: (draft: RecreateDraft) => void;
+
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loadingMore?: boolean;
 };
 
 export default function Profile({
@@ -591,6 +595,9 @@ export default function Profile({
   onLogout,
   onDelete,
   onRecreate,
+  onLoadMore,
+  hasMore = false,
+  loadingMore = false,
   matchaUrl = "https://www.faltastudio.com/cart/43328351928403:1",
 }: ProfileProps) {
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
@@ -619,6 +626,7 @@ export default function Profile({
   // Pagination
   const [visibleCount, setVisibleCount] = useState(36);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   // Video refs
   const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -1043,6 +1051,24 @@ export default function Profile({
     obs.observe(el);
     return () => obs.disconnect();
   }, [items.length]);
+
+  useEffect(() => {
+    if (!hasMore) return;
+    if (!onLoadMore) return;
+
+    const el = loadMoreRef.current;
+    if (!el) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { rootMargin: "1200px 0px 1200px 0px" }
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, onLoadMore]);
 
   const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
 
@@ -1668,6 +1694,8 @@ const openPrompt = useCallback((id: string) => {
           })}
 
           <div ref={sentinelRef} className="profile-grid-sentinel" />
+          <div ref={loadMoreRef} style={{ height: 1 }} />
+          {loadingMore ? <div className="muted">Loading…</div> : null}
         </div>
       </div>
     </>
