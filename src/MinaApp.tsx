@@ -3160,13 +3160,9 @@ const styleHeroUrls = (stylePresetKeys || [])
         const sid = await ensureSession();
 
         // ✅ include current UI assets for tweak too (logo especially)
-        const uiProductUrl = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
         const uiLogoUrl = uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
 
-        const uiInspUrls = (uploads.inspiration || [])
-          .map((u) => u.remoteUrl || u.url)
-          .filter((u) => isHttpUrl(u))
-          .slice(0, 4);
+        const selectedMediaUrl = isMotion ? currentMotion?.url : currentStill?.url;
 
         const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
@@ -3182,9 +3178,8 @@ const styleHeroUrls = (stylePresetKeys || [])
           const mmaBody = {
             passId: currentPassId,
             assets: {
-              product_image_url: isHttpUrl(uiProductUrl) ? uiProductUrl : "",
+              image_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
               logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
-              inspiration_image_urls: uiInspUrls,
             },
             inputs: {
               intent: "tweak",
@@ -3277,15 +3272,8 @@ const styleHeroUrls = (stylePresetKeys || [])
           const mmaBody = {
             passId: currentPassId,
             assets: {
-              start_image_url: startFrame,
-              end_image_url: endFrame || "",
-              kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
-
-              // ✅ include logo during motion tweak too (safe if backend ignores)
+              video_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
               logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
-
-              // optional but consistent with still
-              inspiration_image_urls: uiInspUrls,
             },
             inputs: {
               intent: "tweak",
@@ -3380,7 +3368,9 @@ const styleHeroUrls = (stylePresetKeys || [])
       currentPassId,
       activeMediaKind,
       currentMotion?.id,
+      currentMotion?.url,
       currentStill?.id,
+      currentStill?.url,
       stillBrief,
       brief,
       currentAspect.ratio,
