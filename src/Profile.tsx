@@ -42,6 +42,19 @@ function cfThumb(url: string, width = 1200, quality = 75) {
   )}`;
 }
 
+function cfInput1080(url: string, kind: "product" | "logo" | "style" = "product") {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  if (!u.includes("assets.faltastudio.com/")) return u;
+  if (u.includes("/cdn-cgi/image/")) return u;
+
+  // logo may need alpha => keep png, others => jpeg
+  const format = kind === "logo" ? "png" : "jpeg";
+  const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+
+  return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
+}
+
 function tryParseJson<T = any>(v: any): T | null {
   if (!v) return null;
   if (typeof v === "object") return v as T;
@@ -627,6 +640,7 @@ export default function Profile({
   const [visibleCount, setVisibleCount] = useState(36);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const loadingMoreRefFlag = useRef(false);
 
   // Video refs
   const videoElsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -1028,6 +1042,10 @@ export default function Profile({
     setVisibleCount(36);
   }, [items.length]);
 
+  useEffect(() => {
+    loadingMoreRefFlag.current = !!loadingMore;
+  }, [loadingMore]);
+
   // Infinite load
   useEffect(() => {
     const el = sentinelRef.current;
@@ -1061,7 +1079,11 @@ export default function Profile({
 
     const obs = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) onLoadMore();
+        if (!entries[0]?.isIntersecting) return;
+        if (!hasMore) return;
+        if (loadingMoreRefFlag.current) return; // ✅ guard
+        loadingMoreRefFlag.current = true; // ✅ lock until parent flips loadingMore back
+        onLoadMore();
       },
       { rootMargin: "1200px 0px 1200px 0px" }
     );
@@ -1071,6 +1093,8 @@ export default function Profile({
   }, [hasMore, onLoadMore]);
 
   const visibleItems = useMemo(() => items.slice(0, visibleCount), [items, visibleCount]);
+  const showInitialSkeletons = loading && items.length === 0;
+  const skeletonCount = 12;
 
   // Grid video autoplay (muted) + hover audio (desktop)
   useEffect(() => {
@@ -1299,363 +1323,332 @@ const openPrompt = useCallback((id: string) => {
         </div>
 
         <div className="profile-grid">
-          {visibleItems.map((it) => {
-            const expanded = Boolean(expandedPromptIds[it.id]);
-            const showViewMore = (it.prompt || "").length > 90 || it.canRecreate;
-
-            const deleting = Boolean(deletingIds[it.id]);
-            const removing = Boolean(removingIds[it.id]);
-            const deleteErr = deleteErrors[it.id];
-            const confirming = Boolean(confirmDeleteIds[it.id]);
-
-            const inputs = it.inputs || null;
-            const sceneImageUrl = canonicalAssetUrl(it.url);
-            const canScene = !!onRecreate && !it.isMotion && isImageUrl(sceneImageUrl);
-
-
-            const canAnimate = !!it.draft && !it.isMotion && isImageUrl(sceneImageUrl);
-            const canAnimateBtn = !!onRecreate && canAnimate && !!it.draft;
-
-            const canRecreateBtn = !!onRecreate && !!it.draft && it.canRecreate;
-            const showActionsRow = !!inputs && (canScene || canAnimateBtn || canRecreateBtn);
-
-            return (
-              <div
-                  key={it.id}
-                  className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
-                    ghostIds[it.id] ? "is-ghost" : ""
-                  }`}
-                  onPointerEnter={(e) => {
-                    // desktop hover only (ignore touch)
-                    // @ts-ignore
-                    const pt = e?.pointerType;
-                    if (pt && pt !== "mouse") return;
-                
-                    if (showViewMore) openPrompt(it.id);
-                  }}
-                >
-
-                <div className="profile-card-top">
-                  <button
-                    className="profile-card-show"
-                    type="button"
-                    onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
-                    disabled={!it.url}
-                  >
-                    Download
-                  </button>
-
-                  <div className="profile-card-top-right">
-                    {confirming ? (
-                      <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
-                        <button
-                          className="profile-card-confirm-yes"
-                          type="button"
-                          onClick={() => deleteItem(it.id)}
-                          disabled={deleting || !onDelete}
-                        >
-                          delete
-                        </button>
-                        <button
-                          className="profile-card-confirm-no"
-                          type="button"
-                          onClick={() => cancelDelete(it.id)}
-                          disabled={deleting}
-                        >
-                          cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="profile-card-delete"
-                        type="button"
-                        onClick={() => askDelete(it.id)}
-                        disabled={deleting || !onDelete}
-                        title="Delete"
-                        aria-label="Delete"
-                      >
-                        −
-                      </button>
-                    )}
+          {showInitialSkeletons
+            ? Array.from({ length: skeletonCount }).map((_, i) => (
+                <div key={`sk_${i}`} className="profile-card profile-card--tall profile-card--skeleton">
+                  <div className="profile-card-top">
+                    <div className="profile-skel-line" style={{ width: 90 }} />
+                    <div className="profile-skel-line" style={{ width: 24 }} />
+                  </div>
+                  <div className="profile-skel-media" />
+                  <div className="profile-card-promptline">
+                    <div className="profile-skel-line" style={{ width: "70%" }} />
                   </div>
                 </div>
+              ))
+            : visibleItems.map((it) => {
+                const expanded = Boolean(expandedPromptIds[it.id]);
+                const showViewMore = (it.prompt || "").length > 90 || it.canRecreate;
 
-                {deleteErr ? <div className="profile-error profile-card-deleteerr">{deleteErr}</div> : null}
+                const deleting = Boolean(deletingIds[it.id]);
+                const removing = Boolean(removingIds[it.id]);
+                const deleteErr = deleteErrors[it.id];
+                const confirming = Boolean(confirmDeleteIds[it.id]);
 
-                <div
-                  className="profile-card-media"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
-                    if (!it.isMotion) prefetchImage(big);
-                    openLightbox(big, it.isMotion);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
-                      if (!it.isMotion) prefetchImage(big);
-                      openLightbox(big, it.isMotion);
-                    }
-                  }}
-                >
-                  {it.url ? (
-                    it.isMotion ? (
-                      <video
-                        ref={(el) => registerVideoEl(it.id, el)}
-                        src={it.url}
-                        loop
-                        playsInline
-                        preload="auto"
-                        autoPlay
-                        muted
-                        onMouseEnter={() => setVideoHover(it.id, true)}
-                        onMouseLeave={() => setVideoHover(it.id, false)}
-                      />
-                    ) : (
-                      (() => {
-                        const w =
-                          it.sizeClass === "profile-card--hero"
-                            ? 1400
-                            : it.sizeClass === "profile-card--wide"
-                              ? 1200
-                              : it.sizeClass === "profile-card--mini"
-                                ? 700
-                                : 900;
+                const inputs = it.inputs || null;
+                const sceneImageUrl = canonicalAssetUrl(it.url);
+                const canScene = !!onRecreate && !it.isMotion && isImageUrl(sceneImageUrl);
 
-                        const thumb = cfThumb(it.url, w, 70);
+                const canAnimate = !!it.draft && !it.isMotion && isImageUrl(sceneImageUrl);
+                const canAnimateBtn = !!onRecreate && canAnimate && !!it.draft;
 
-                        return (
-                          <img
-                            src={thumb}
-                            alt=""
-                            loading="lazy"
-                            decoding="async"
-                            onError={(e) => {
-                              (e.currentTarget as HTMLImageElement).src = it.url;
-                            }}
+                const canRecreateBtn = !!onRecreate && !!it.draft && it.canRecreate;
+                const showActionsRow = !!inputs && (canScene || canAnimateBtn || canRecreateBtn);
+
+                return (
+                  <div
+                    key={it.id}
+                    className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
+                      ghostIds[it.id] ? "is-ghost" : ""
+                    }`}
+                    onPointerEnter={(e) => {
+                      // desktop hover only (ignore touch)
+                      // @ts-ignore
+                      const pt = e?.pointerType;
+                      if (pt && pt !== "mouse") return;
+
+                      if (showViewMore) openPrompt(it.id);
+                    }}
+                  >
+                    <div className="profile-card-top">
+                      <button
+                        className="profile-card-show"
+                        type="button"
+                        onClick={() => downloadMedia(it.url, it.prompt || "", it.isMotion)}
+                        disabled={!it.url}
+                      >
+                        Download
+                      </button>
+
+                      <div className="profile-card-top-right">
+                        {confirming ? (
+                          <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
+                            <button
+                              className="profile-card-confirm-yes"
+                              type="button"
+                              onClick={() => deleteItem(it.id)}
+                              disabled={deleting || !onDelete}
+                            >
+                              delete
+                            </button>
+                            <button
+                              className="profile-card-confirm-no"
+                              type="button"
+                              onClick={() => cancelDelete(it.id)}
+                              disabled={deleting}
+                            >
+                              cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="profile-card-delete"
+                            type="button"
+                            onClick={() => askDelete(it.id)}
+                            disabled={deleting || !onDelete}
+                            title="Delete"
+                            aria-label="Delete"
+                          >
+                            −
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {deleteErr ? <div className="profile-error profile-card-deleteerr">{deleteErr}</div> : null}
+
+                    <div
+                      className="profile-card-media"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                        if (!it.isMotion) prefetchImage(big);
+                        openLightbox(big, it.isMotion);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                          if (!it.isMotion) prefetchImage(big);
+                          openLightbox(big, it.isMotion);
+                        }
+                      }}
+                    >
+                      {it.url ? (
+                        it.isMotion ? (
+                          <video
+                            ref={(el) => registerVideoEl(it.id, el)}
+                            src={it.url}
+                            loop
+                            playsInline
+                            preload="auto"
+                            autoPlay
+                            muted
+                            onMouseEnter={() => setVideoHover(it.id, true)}
+                            onMouseLeave={() => setVideoHover(it.id, false)}
                           />
-                        );
-                      })()
-                    )
-                  ) : (
-                    <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
-                  )}
-                </div>
+                        ) : (
+                          (() => {
+                            const w =
+                              it.sizeClass === "profile-card--hero"
+                                ? 1400
+                                : it.sizeClass === "profile-card--wide"
+                                  ? 1200
+                                  : it.sizeClass === "profile-card--mini"
+                                    ? 700
+                                    : 900;
 
-                <div className="profile-card-promptline">
-                  <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
-                    {it.prompt || "—"}
+                            const thumb = cfThumb(it.url, w, 70);
 
-                    {expanded && inputs ? (
-                      <div className="profile-card-details">
-                        {/* Actions (right aligned): Scene (still) + Animate (still) + Re-create */}
-                        {showActionsRow ? (
-                          <div className="profile-card-detailrow profile-card-detailrow--actions">
-                            <span className="k">Actions</span>
-                            <span className="v profile-card-actionwrap">
-                              {canScene ? (
-                                <button
-                                  type="button"
-                                  className="profile-card-show profile-card-scene"
-                                  // REPLACE the whole Scene button onClick handler with this:
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                  
-                                    const scene = canonicalAssetUrl(sceneImageUrl);
-                                  
-                                    const draft: RecreateDraft = {
-                                      mode: "still",
-                                      brief: SCENE_PROMPT,
-                                      settings: {
-                                        aspect_ratio: inputs?.aspectRatio || undefined,
-                                        minaVisionEnabled: inputs?.minaVisionEnabled,
-                                        stylePresetKeys: inputs?.stylePresetKeys?.length ? inputs.stylePresetKeys : undefined,
-                                      },
-                                      assets: {
-                                        // ✅ Scene pill (your wiring uses assets.product)
-                                        productImageUrl: scene || undefined,
-                                  
-                                        // ✅ Logo stays in logo slot (never falls into product/elements)
-                                        ...(inputs?.logoImageUrl
-                                          ? { logoImageUrl: canonicalAssetUrl(inputs.logoImageUrl) }
-                                          : {}),
-                                  
-                                        // ✅ Do NOT put anything into inspiration/elements
-                                        styleImageUrls: [],
-                                      },
-                                    };
-                                  
-                                    onRecreate?.(draft);
-                                    onBackToStudio?.();
-                                  }}
-
-                                >
-                                  Scene
-                                </button>
-                              ) : null}
-
-
-                              {canAnimateBtn ? (
-                                <button
-                                  type="button"
-                                  className="profile-card-show profile-card-animate"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const motionDraft: RecreateDraft = {
-                                      ...it.draft!,
-                                      mode: "motion",
-                                      assets: {
-                                        ...it.draft!.assets,
-                                        kling_start_image_url: sceneImageUrl,
-                                      },
-                                    };
-                                    onRecreate?.(motionDraft);
-                                    onBackToStudio?.();
-                                  }}
-                                >
-                                  Animate
-                                </button>
-                              ) : null}
-
-                              {canRecreateBtn ? (
-                                <button
-                                  type="button"
-                                  className="profile-card-show profile-card-recreate"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRecreate?.(it.draft!);
-                                    onBackToStudio?.();
-                                  }}
-                                >
-                                  Re-create
-                                </button>
-                              ) : null}
-                            </span>
-                          </div>
-                        ) : null}
-
-                        {/* Style (movement style / lane / presets) */}
-                        {(() => {
-                          const styleText =
-                            (inputs.styleLabel || "").trim() ||
-                            (inputs.stylePresetKeys?.length ? inputs.stylePresetKeys.join(", ") : "");
-                          return styleText ? (
-                            <div className="profile-card-detailrow">
-                              <span className="k">Style</span>
-                              <span className="v">{styleText}</span>
-                            </div>
-                          ) : null;
-                        })()}
-
-                        {/* Product thumb */}
-                        {inputs.productImageUrl ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Product</span>
-                            <span className="v">
+                            return (
                               <img
-                                className="profile-input-thumb"
-                                src={cfThumb(inputs.productImageUrl, 140, 70)}
+                                src={thumb}
                                 alt=""
                                 loading="lazy"
                                 decoding="async"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (it.draft) {
-                                    onRecreate?.(it.draft);
-                                    onBackToStudio?.();
-                                    return;
-                                  }
-                                  prefetchImage(inputs.productImageUrl);
-                                  openLightbox(inputs.productImageUrl, false);
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).src = it.url;
                                 }}
                               />
-                            </span>
-                          </div>
-                        ) : null}
+                            );
+                          })()
+                        )
+                      ) : (
+                        <div style={{ padding: 10, fontSize: 12, opacity: 0.6 }}>No media</div>
+                      )}
+                    </div>
 
-                        {/* Logo thumb */}
-                        {inputs.logoImageUrl ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Logo</span>
-                            <span className="v">
-                              <img
-                                className="profile-input-thumb"
-                                src={cfThumb(inputs.logoImageUrl, 140, 70)}
-                                alt=""
-                                loading="lazy"
-                                decoding="async"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (it.draft) {
-                                    onRecreate?.(it.draft);
-                                    onBackToStudio?.();
-                                    return;
-                                  }
-                                  prefetchImage(inputs.logoImageUrl);
-                                  openLightbox(inputs.logoImageUrl, false);
-                                }}
-                              />
-                            </span>
-                          </div>
-                        ) : null}
+                    <div className="profile-card-promptline">
+                      <div className={`profile-card-prompt ${expanded ? "expanded" : ""}`}>
+                        {it.prompt || "—"}
 
-                        {/* Inspo thumb (+count) */}
-                        {inputs.styleImageUrls?.length ? (
-                          <div className="profile-card-detailrow">
-                            <span className="k">Inspo</span>
-                            <span className="v">
-                              <span className="profile-thumbstack">
-                                <img
-                                  className="profile-input-thumb"
-                                  src={cfThumb(inputs.styleImageUrls[0], 140, 70)}
-                                  alt=""
-                                  loading="lazy"
-                                  decoding="async"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (it.draft) {
-                                      onRecreate?.(it.draft);
-                                      onBackToStudio?.();
-                                      return;
-                                    }
-                                    prefetchImage(inputs.styleImageUrls[0]);
-                                    openLightbox(inputs.styleImageUrls[0], false);
-                                  }}
-                                />
-                                {inputs.styleImageUrls.length > 1 ? (
-                                  <span className="profile-thumbbadge">+{inputs.styleImageUrls.length - 1}</span>
-                                ) : null}
-                              </span>
-                            </span>
-                          </div>
-                        ) : null}
+                        {expanded && inputs ? (
+                          <div className="profile-card-details">
+                            {/* Actions (right aligned): Scene (still) + Animate (still) + Re-create */}
+                            {showActionsRow ? (
+                              <div className="profile-card-detailrow profile-card-detailrow--actions">
+                                <span className="k">Actions</span>
+                                <span className="v profile-card-actionwrap">
+                                  {canScene ? (
+                                    <button
+                                      type="button"
+                                      className="profile-card-show profile-card-scene"
+                                      // REPLACE the whole Scene button onClick handler with this:
+                                      onClick={(e) => {
+                                        e.stopPropagation();
 
-                        {/* Motion frames (start/end + any kling frames) */}
-                        {(() => {
-                          const frames: string[] = [];
-                          if (inputs.startImageUrl) frames.push(inputs.startImageUrl);
-                          if (inputs.endImageUrl) frames.push(inputs.endImageUrl);
+                                        const scene = canonicalAssetUrl(sceneImageUrl);
 
-                          if (Array.isArray((inputs as any).klingFrameUrls)) {
-                            for (const u of (inputs as any).klingFrameUrls as string[]) {
-                              if (u && !frames.includes(u)) frames.push(u);
-                            }
-                          }
+                                        const draft: RecreateDraft = {
+                                          mode: "still",
+                                          brief: SCENE_PROMPT,
+                                          settings: {
+                                            aspect_ratio: inputs?.aspectRatio || undefined,
+                                            minaVisionEnabled: inputs?.minaVisionEnabled,
+                                            stylePresetKeys: inputs?.stylePresetKeys?.length
+                                              ? inputs.stylePresetKeys
+                                              : undefined,
+                                          },
+                                          assets: {
+                                            // ✅ Scene pill (your wiring uses assets.product)
+                                            productImageUrl: cfInput1080(scene, "product") || undefined,
 
-                          const show = it.isMotion && frames.length;
-                          if (!show) return null;
+                                            // ✅ Logo stays in logo slot (never falls into product/elements)
+                                            ...(inputs?.logoImageUrl
+                                              ? {
+                                                  logoImageUrl: cfInput1080(
+                                                    canonicalAssetUrl(inputs.logoImageUrl),
+                                                    "logo"
+                                                  ),
+                                                }
+                                              : {}),
 
-                          return (
-                            <div className="profile-card-detailrow">
-                              <span className="k">Frames</span>
-                              <span className="v">
-                                <span className="profile-thumbrow">
-                                  {frames.slice(0, 2).map((u) => (
+                                            // ✅ Do NOT put anything into inspiration/elements
+                                            styleImageUrls: [], // still force-clear
+                                          },
+                                        };
+
+                                        onRecreate?.(draft);
+                                        onBackToStudio?.();
+                                      }}
+                                    >
+                                      Scene
+                                    </button>
+                                  ) : null}
+
+                                  {canAnimateBtn ? (
+                                    <button
+                                      type="button"
+                                      className="profile-card-show profile-card-animate"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const motionDraft: RecreateDraft = {
+                                          ...it.draft!,
+                                          mode: "motion",
+                                          assets: {
+                                            ...it.draft!.assets,
+                                            kling_start_image_url: cfInput1080(sceneImageUrl, "product"),
+                                          },
+                                        };
+                                        onRecreate?.(motionDraft);
+                                        onBackToStudio?.();
+                                      }}
+                                    >
+                                      Animate
+                                    </button>
+                                  ) : null}
+
+                                  {canRecreateBtn ? (
+                                    <button
+                                      type="button"
+                                      className="profile-card-show profile-card-recreate"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRecreate?.(it.draft!);
+                                        onBackToStudio?.();
+                                      }}
+                                    >
+                                      Re-create
+                                    </button>
+                                  ) : null}
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {/* Style (movement style / lane / presets) */}
+                            {(() => {
+                              const styleText =
+                                (inputs.styleLabel || "").trim() ||
+                                (inputs.stylePresetKeys?.length ? inputs.stylePresetKeys.join(", ") : "");
+                              return styleText ? (
+                                <div className="profile-card-detailrow">
+                                  <span className="k">Style</span>
+                                  <span className="v">{styleText}</span>
+                                </div>
+                              ) : null;
+                            })()}
+
+                            {/* Product thumb */}
+                            {inputs.productImageUrl ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Product</span>
+                                <span className="v">
+                                  <img
+                                    className="profile-input-thumb"
+                                    src={cfThumb(inputs.productImageUrl, 140, 70)}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (it.draft) {
+                                        onRecreate?.(it.draft);
+                                        onBackToStudio?.();
+                                        return;
+                                      }
+                                      prefetchImage(inputs.productImageUrl);
+                                      openLightbox(inputs.productImageUrl, false);
+                                    }}
+                                  />
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {/* Logo thumb */}
+                            {inputs.logoImageUrl ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Logo</span>
+                                <span className="v">
+                                  <img
+                                    className="profile-input-thumb"
+                                    src={cfThumb(inputs.logoImageUrl, 140, 70)}
+                                    alt=""
+                                    loading="lazy"
+                                    decoding="async"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (it.draft) {
+                                        onRecreate?.(it.draft);
+                                        onBackToStudio?.();
+                                        return;
+                                      }
+                                      prefetchImage(inputs.logoImageUrl);
+                                      openLightbox(inputs.logoImageUrl, false);
+                                    }}
+                                  />
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {/* Inspo thumb (+count) */}
+                            {inputs.styleImageUrls?.length ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Inspo</span>
+                                <span className="v">
+                                  <span className="profile-thumbstack">
                                     <img
-                                      key={u}
                                       className="profile-input-thumb"
-                                      src={cfThumb(u, 140, 70)}
+                                      src={cfThumb(inputs.styleImageUrls[0], 140, 70)}
                                       alt=""
                                       loading="lazy"
                                       decoding="async"
@@ -1666,36 +1659,96 @@ const openPrompt = useCallback((id: string) => {
                                           onBackToStudio?.();
                                           return;
                                         }
-                                        prefetchImage(u);
-                                        openLightbox(u, false);
+                                        prefetchImage(inputs.styleImageUrls[0]);
+                                        openLightbox(inputs.styleImageUrls[0], false);
                                       }}
                                     />
-                                  ))}
-                                  {frames.length > 2 ? (
-                                    <span className="profile-thumbbadge">+{frames.length - 2}</span>
-                                  ) : null}
+                                    {inputs.styleImageUrls.length > 1 ? (
+                                      <span className="profile-thumbbadge">+{inputs.styleImageUrls.length - 1}</span>
+                                    ) : null}
+                                  </span>
                                 </span>
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    ) : null}
-                  </div>
+                              </div>
+                            ) : null}
 
-                  {showViewMore ? (
-                    <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
-                      {expanded ? "less" : "more"}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+                            {/* Motion frames (start/end + any kling frames) */}
+                            {(() => {
+                              const frames: string[] = [];
+                              if (inputs.startImageUrl) frames.push(inputs.startImageUrl);
+                              if (inputs.endImageUrl) frames.push(inputs.endImageUrl);
+
+                              if (Array.isArray((inputs as any).klingFrameUrls)) {
+                                for (const u of (inputs as any).klingFrameUrls as string[]) {
+                                  if (u && !frames.includes(u)) frames.push(u);
+                                }
+                              }
+
+                              const show = it.isMotion && frames.length;
+                              if (!show) return null;
+
+                              return (
+                                <div className="profile-card-detailrow">
+                                  <span className="k">Frames</span>
+                                  <span className="v">
+                                    <span className="profile-thumbrow">
+                                      {frames.slice(0, 2).map((u) => (
+                                        <img
+                                          key={u}
+                                          className="profile-input-thumb"
+                                          src={cfThumb(u, 140, 70)}
+                                          alt=""
+                                          loading="lazy"
+                                          decoding="async"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (it.draft) {
+                                              onRecreate?.(it.draft);
+                                              onBackToStudio?.();
+                                              return;
+                                            }
+                                            prefetchImage(u);
+                                            openLightbox(u, false);
+                                          }}
+                                        />
+                                      ))}
+                                      {frames.length > 2 ? (
+                                        <span className="profile-thumbbadge">+{frames.length - 2}</span>
+                                      ) : null}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {showViewMore ? (
+                        <button className="profile-card-viewmore" type="button" onClick={() => onTogglePrompt(it.id)}>
+                          {expanded ? "less" : "more"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
 
           <div ref={sentinelRef} className="profile-grid-sentinel" />
           <div ref={loadMoreRef} style={{ height: 1 }} />
-          {loadingMore ? <div className="muted">Loading…</div> : null}
+          {loadingMore
+            ? Array.from({ length: 8 }).map((_, i) => (
+                <div key={`sk_more_${i}`} className="profile-card profile-card--tall profile-card--skeleton">
+                  <div className="profile-card-top">
+                    <div className="profile-skel-line" style={{ width: 90 }} />
+                    <div className="profile-skel-line" style={{ width: 24 }} />
+                  </div>
+                  <div className="profile-skel-media" />
+                  <div className="profile-card-promptline">
+                    <div className="profile-skel-line" style={{ width: "60%" }} />
+                  </div>
+                </div>
+              ))
+            : null}
         </div>
       </div>
     </>
