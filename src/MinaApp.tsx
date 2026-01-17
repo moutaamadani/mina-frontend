@@ -1461,11 +1461,17 @@ const showControls = uiStage >= 3 || hasEverTyped;
   ): Promise<{ generationId: string }> => {
     const actionKey = buildMmaActionKey(createPath, body);
 
+    // ✅ if an error happened, stop any queued/batch behavior immediately
+    if (mmaAbortAllRef.current) {
+      return Promise.reject(new Error("Stopped."));
+    }
+
     // ✅ If double-fired, return the same in-flight promise (no second backend call)
     const existing = mmaInFlightRef.current.get(actionKey);
     if (existing) return existing;
 
     const run = (async () => {
+      if (mmaAbortAllRef.current) throw new Error("Stopped.");
       const idem = getIdemForRun(actionKey);
       const bodyWithIdem = attachIdempotencyKey(body || {}, idem);
 
@@ -2478,6 +2484,125 @@ const showControls = uiStage >= 3 || hasEverTyped;
     });
   }
 
+  // ============================================================================
+  // INPUT OPTIMIZATION for MMA (avoid timeout downloading huge PNGs from our CDN)
+  // - If URL is our assets host and NOT already JPG/WEBP, we:
+  //   fetch -> resize -> encode JPG -> upload to R2 -> return new URL
+  // - Cached for the session (same original URL -> same optimized URL)
+  // - Also supports "hard stop" so batch/create buttons stop instantly on error
+  // ============================================================================
+  const mmaAbortAllRef = useRef(false);
+  const inputJpegCacheRef = useRef<Map<string, string>>(new Map());
+
+  const extFromUrl = (url: string) => {
+    const base = String(url || "").split("?")[0].split("#")[0].toLowerCase();
+    const m = base.match(/\.([a-z0-9]+)$/);
+    return m ? m[1] : "";
+  };
+
+  const fetchBlobWithTimeout = async (url: string, timeoutMs = 15000): Promise<Blob> => {
+    const ctrl = new AbortController();
+    const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal, mode: "cors" });
+      if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
+      return await res.blob();
+    } finally {
+      window.clearTimeout(t);
+    }
+  };
+
+  async function ensureJpegInputUrl(rawUrl: string, panelKind: UploadPanelKey): Promise<string> {
+    const clean = stripSignedQuery(String(rawUrl || "").trim());
+    if (!clean || !isHttpUrl(clean)) return "";
+
+    const cached = inputJpegCacheRef.current.get(clean);
+    if (cached) return cached;
+
+    const ext = extFromUrl(clean);
+    if (ext === "jpg" || ext === "jpeg" || ext === "webp") {
+      inputJpegCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    // Only auto-optimize OUR CDN URLs (keeps behavior predictable)
+    if (!isAssetsUrl(clean)) {
+      inputJpegCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    // Fetch -> decode -> resize -> jpg -> upload
+    const blob = await fetchBlobWithTimeout(clean, 15000);
+    const bmp = await decodeToBitmap(blob);
+    if (!bmp) {
+      inputJpegCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    const srcW = (bmp as any).width || 0;
+    const srcH = (bmp as any).height || 0;
+
+    // smaller = faster backend download
+    const MAX_DIM = 2048;
+    const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH));
+    const outW = Math.max(1, Math.round(srcW * scale));
+    const outH = Math.max(1, Math.round(srcH * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: false } as any);
+    if (!ctx) {
+      try {
+        (bmp as any).close?.();
+      } catch {}
+      inputJpegCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    ctx.drawImage(bmp as any, 0, 0, outW, outH);
+    try {
+      (bmp as any).close?.();
+    } catch {}
+
+    const jpegBlob = await canvasToBlob(canvas, "image/jpeg", 0.9);
+    const file = new File([jpegBlob], `mina_input_${Date.now()}.jpg`, { type: "image/jpeg" });
+
+    const optimized = await uploadFileToR2(panelKind, file);
+    const stable = stripSignedQuery(optimized);
+
+    const finalUrl = isHttpUrl(stable) ? stable : clean;
+    inputJpegCacheRef.current.set(clean, finalUrl);
+    return finalUrl;
+  }
+
+  function stopAllMmaUiNow() {
+    mmaAbortAllRef.current = true;
+
+    try {
+      mmaStreamRef.current?.close();
+    } catch {}
+    mmaStreamRef.current = null;
+
+    try {
+      mmaInFlightRef.current.clear();
+    } catch {}
+    try {
+      mmaIdemKeyRef.current.clear();
+    } catch {}
+
+    // release ALL UI locks immediately (covers batch buttons too)
+    setStillGenerating(false);
+    setMotionGenerating(false);
+    setFeedbackSending(false);
+
+    // allow new clicks shortly after (prevents runaway loops)
+    window.setTimeout(() => {
+      mmaAbortAllRef.current = false;
+    }, 300);
+  }
+
   // ========================================================================
   // R2 helpers
   // ========================================================================
@@ -2882,6 +3007,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setActiveMediaKind("still");
       setLastStillPrompt(item.prompt);
     } catch (err: any) {
+      stopAllMmaUiNow();
       setStillError(humanizeMmaError(err));
     } finally {
       setStillGenerating(false);
@@ -3179,6 +3305,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       setActiveMediaKind("motion");
     } catch (err: any) {
+      stopAllMmaUiNow();
       setMotionError(humanizeMmaError(err));
     } finally {
       setMotionGenerating(false);
@@ -3225,6 +3352,12 @@ const styleHeroUrls = (stylePresetKeys || [])
         const selectedMediaUrl = isMotion ? currentMotion?.url : currentStill?.url;
         const uiLogoUrl = isMotion ? "" : uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
 
+        const optimizedImageUrl = isHttpUrl(selectedMediaUrl)
+          ? await ensureJpegInputUrl(selectedMediaUrl, "product")
+          : "";
+
+        const optimizedLogoUrl = isHttpUrl(uiLogoUrl) ? await ensureJpegInputUrl(uiLogoUrl, "logo") : "";
+
         const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
           if (last) setMinaOverrideText(last);
@@ -3239,8 +3372,8 @@ const styleHeroUrls = (stylePresetKeys || [])
           const mmaBody = {
             passId: currentPassId,
             assets: {
-              image_url: isHttpUrl(selectedMediaUrl) ? selectedMediaUrl : "",
-              logo_image_url: isHttpUrl(uiLogoUrl) ? uiLogoUrl : "",
+              image_url: optimizedImageUrl,
+              logo_image_url: optimizedLogoUrl,
             },
             inputs: {
               intent: "tweak",
@@ -3418,6 +3551,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
         setFeedbackText("");
       } catch (err: any) {
+        stopAllMmaUiNow();
         setFeedbackError(humanizeMmaError(err));
       } finally {
         setFeedbackSending(false);
@@ -4081,46 +4215,63 @@ const styleHeroUrls = (stylePresetKeys || [])
 
   // --------------------------------------------------------------------------
   // Set Scene (viewer button)
-  // - Scene pill = uploads.product (assets.product on your wiring)
-  // - NEVER put anything in inspiration (clear it)
+  // - Scene pill = uploads.product
+  // - Optimize the scene URL to JPG before MMA uses it (prevents timeout)
+  // - Clear inspiration by default (per your rule)
   // - Keep logo untouched
   // --------------------------------------------------------------------------
   const handleSetSceneFromViewer = useCallback(
     (args: { url: string; clearInspiration?: boolean }) => {
       const raw = String(args?.url || "").trim();
-      const url = stripSignedQuery(raw);
+      const baseUrl = stripSignedQuery(raw);
 
-      if (!url || !isHttpUrl(url)) return;
+      if (!baseUrl || !isHttpUrl(baseUrl)) return;
 
-      const mkUrlItem = (panel: UploadPanelKey, u: string): UploadItem => ({
-        id: `${panel}_scene_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      const id0 = `product_scene_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+      const mk = (panel: UploadPanelKey, u: string, id?: string): UploadItem => ({
+        id: id || `${panel}_${Date.now()}_${Math.random().toString(16).slice(2)}`,
         kind: "url",
         url: u,
         remoteUrl: u,
-        uploading: false,
+        uploading: true, // ✅ we’ll flip to false once JPG is ready
         error: undefined,
       });
 
-      // ✅ If animateMode is ON, keep existing 2nd frame if present
       setUploads((prev) => {
         const frame1 =
           animateMode ? (prev.product?.[1]?.remoteUrl || prev.product?.[1]?.url || "") : "";
-        const keepFrame1 = animateMode && isHttpUrl(frame1) ? mkUrlItem("product", frame1) : null;
+        const keepFrame1 =
+          animateMode && isHttpUrl(frame1) ? { ...mk("product", frame1), uploading: false } : null;
 
         return {
           ...prev,
           product: animateMode
-            ? [mkUrlItem("product", url), ...(keepFrame1 ? [keepFrame1] : [])].slice(0, 2)
-            : [mkUrlItem("product", url)],
+            ? [mk("product", baseUrl, id0), ...(keepFrame1 ? [keepFrame1] : [])].slice(0, 2)
+            : [mk("product", baseUrl, id0)],
           inspiration: args?.clearInspiration ? [] : prev.inspiration,
-          // logo unchanged on purpose
+          // logo unchanged
         };
       });
 
-      // ✅ open the panel so user sees it immediately
       if (!hasEverTyped) setHasEverTyped(true);
       setActivePanel("product");
       setUiStage((s) => (s < 3 ? 3 : s));
+
+      // ✅ optimize in background and swap it in-place
+      void (async () => {
+        try {
+          const optimized = await ensureJpegInputUrl(baseUrl, "product");
+          patchUploadItem("product", id0, {
+            url: optimized,
+            remoteUrl: optimized,
+            uploading: false,
+            error: undefined,
+          });
+        } catch {
+          patchUploadItem("product", id0, { uploading: false });
+        }
+      })();
     },
     [animateMode, hasEverTyped]
   );
