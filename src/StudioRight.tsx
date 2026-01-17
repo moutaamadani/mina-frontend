@@ -54,27 +54,43 @@ export default function StudioRight(props: StudioRightProps) {
   }, [currentMotion?.url]);
 
   const safeStillUrl = useMemo(() => {
-    const byIndex = stillItems?.[stillIndex]?.url || "";
-    const fromCurrent = currentStill?.url || "";
-    const candidate = (byIndex || fromCurrent || "").trim();
-    if (!candidate) return "";
+    const clean = (u: any) => String(u || "").trim();
 
-    // If something weird gets set as "currentStill" (product/logo/inspo),
-    // prefer a real generated still from the carousel if present.
-    const looksInputAsset = /\/(product|logo|inspiration|style)\//i.test(candidate);
-    const hasRealGen =
-      stillItems?.some((it) => /\/generations\//i.test(String(it?.url || ""))) || false;
+    const isInputAsset = (u: string) => /\/(product|logo|inspiration|style)\//i.test(u);
+    const isReplicateTemp = (u: string) => /replicate\.delivery/i.test(u);
 
-    if (looksInputAsset && hasRealGen) {
-      const best =
-        stillItems.find((it) => /\/generations\//i.test(String(it?.url || "")))?.url ||
-        byIndex ||
-        fromCurrent;
-      return String(best || "").trim();
-    }
+    // ✅ treat YOUR generated outputs as real:
+    // - assets.faltastudio.com/mma/... (still + motion frames)
+    // - or anything under /generations/ if you ever use that too
+    const isGeneratedStill = (u: string) =>
+      !!u &&
+      !isReplicateTemp(u) &&
+      !isInputAsset(u) &&
+      (/\/mma\//i.test(u) || /\/generations\//i.test(u));
 
-    return candidate;
+    const byIndex = clean(stillItems?.[stillIndex]?.url);
+    const fromCurrent = clean(currentStill?.url);
+
+    // If user-selected still is legit, use it
+    if (isGeneratedStill(byIndex)) return byIndex;
+
+    // If currentStill is legit, use it
+    if (isGeneratedStill(fromCurrent)) return fromCurrent;
+
+    // Otherwise, pick the best real generated still in the carousel
+    const best =
+      stillItems?.map((it) => clean(it?.url)).find((u) => isGeneratedStill(u)) ||
+      "";
+
+    if (best) return best;
+
+    // Last resort: show something non-replicate if it exists
+    const fallback = byIndex || fromCurrent;
+    if (fallback && !isReplicateTemp(fallback)) return fallback;
+
+    return "";
   }, [stillItems, stillIndex, currentStill?.url]);
+
 
   const media = useMemo(() => {
     // If we have motion and we either want to show it, OR we have no still to show, display video.
