@@ -2485,95 +2485,80 @@ const showControls = uiStage >= 3 || hasEverTyped;
   }
 
   // ============================================================================
-  // INPUT OPTIMIZATION for MMA (avoid timeout downloading huge PNGs from our CDN)
-  // - If URL is our assets host and NOT already JPG/WEBP, we:
-  //   fetch -> resize -> encode JPG -> upload to R2 -> return new URL
-  // - Cached for the session (same original URL -> same optimized URL)
-  // - Also supports "hard stop" so batch/create buttons stop instantly on error
+  // INPUT OPTIMIZATION for MMA (NO reupload)
+  // - If URL is our assets host, rewrite to Cloudflare /cdn-cgi/image/… (1080px)
+  // - No extra R2 objects; Cloudflare caches the resized variant at the edge
+  // - Fallback: if resizing isn't enabled, we auto-fallback to the original URL
   // ============================================================================
   const mmaAbortAllRef = useRef(false);
-  const inputJpegCacheRef = useRef<Map<string, string>>(new Map());
 
-  const extFromUrl = (url: string) => {
-    const base = String(url || "").split("?")[0].split("#")[0].toLowerCase();
-    const m = base.match(/\.([a-z0-9]+)$/);
-    return m ? m[1] : "";
-  };
+  // cache: original url -> optimized url (or original if resizing unavailable)
+  const inputOptCacheRef = useRef<Map<string, string>>(new Map());
 
-  const fetchBlobWithTimeout = async (url: string, timeoutMs = 15000): Promise<Blob> => {
-    const ctrl = new AbortController();
-    const t = window.setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, { signal: ctrl.signal, mode: "cors" });
-      if (!res.ok) throw new Error(`Fetch failed (${res.status})`);
-      return await res.blob();
-    } finally {
-      window.clearTimeout(t);
-    }
-  };
+  // remember once if /cdn-cgi/image works on this zone
+  const cdnResizeOkRef = useRef<boolean | null>(null);
 
-  async function ensureJpegInputUrl(rawUrl: string, panelKind: UploadPanelKey): Promise<string> {
+  function buildCdn1080Url(rawUrl: string, kind: UploadPanelKey): string {
     const clean = stripSignedQuery(String(rawUrl || "").trim());
     if (!clean || !isHttpUrl(clean)) return "";
 
-    const cached = inputJpegCacheRef.current.get(clean);
+    // only transform OUR CDN host
+    if (!isAssetsUrl(clean)) return clean;
+
+    try {
+      const u = new URL(clean);
+
+      // already transformed
+      if (u.pathname.startsWith("/cdn-cgi/image/")) return u.toString();
+
+      // logos may need alpha → keep png; everything else force jpeg for max compatibility
+      const format = kind === "logo" ? "png" : "jpeg";
+
+      // IMPORTANT: fit=scale-down prevents upscaling; onerror=redirect falls back to origin image
+      const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+
+      // keep query if you rely on cache-busting (?v=…)
+      return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
+    } catch {
+      return clean;
+    }
+  }
+
+  async function ensureOptimizedInputUrl(rawUrl: string, kind: UploadPanelKey): Promise<string> {
+    const clean = stripSignedQuery(String(rawUrl || "").trim());
+    if (!clean || !isHttpUrl(clean)) return "";
+
+    const cached = inputOptCacheRef.current.get(clean);
     if (cached) return cached;
 
-    const ext = extFromUrl(clean);
-    if (ext === "jpg" || ext === "jpeg" || ext === "webp") {
-      inputJpegCacheRef.current.set(clean, clean);
-      return clean;
-    }
-
-    // Only auto-optimize OUR CDN URLs (keeps behavior predictable)
+    // non-assets → no transform
     if (!isAssetsUrl(clean)) {
-      inputJpegCacheRef.current.set(clean, clean);
+      inputOptCacheRef.current.set(clean, clean);
       return clean;
     }
 
-    // Fetch -> decode -> resize -> jpg -> upload
-    const blob = await fetchBlobWithTimeout(clean, 15000);
-    const bmp = await decodeToBitmap(blob);
-    if (!bmp) {
-      inputJpegCacheRef.current.set(clean, clean);
+    const optimized = buildCdn1080Url(clean, kind);
+    if (!optimized || optimized === clean) {
+      inputOptCacheRef.current.set(clean, clean);
       return clean;
     }
 
-    const srcW = (bmp as any).width || 0;
-    const srcH = (bmp as any).height || 0;
-
-    // smaller = faster backend download
-    const MAX_DIM = 2048;
-    const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH));
-    const outW = Math.max(1, Math.round(srcW * scale));
-    const outH = Math.max(1, Math.round(srcH * scale));
-
-    const canvas = document.createElement("canvas");
-    canvas.width = outW;
-    canvas.height = outH;
-
-    const ctx = canvas.getContext("2d", { willReadFrequently: false } as any);
-    if (!ctx) {
-      try {
-        (bmp as any).close?.();
-      } catch {}
-      inputJpegCacheRef.current.set(clean, clean);
+    // if we already know if resizing works, skip probing
+    if (cdnResizeOkRef.current === true) {
+      inputOptCacheRef.current.set(clean, optimized);
+      return optimized;
+    }
+    if (cdnResizeOkRef.current === false) {
+      inputOptCacheRef.current.set(clean, clean);
       return clean;
     }
 
-    ctx.drawImage(bmp as any, 0, 0, outW, outH);
-    try {
-      (bmp as any).close?.();
-    } catch {}
+    // first time: probe once to detect if /cdn-cgi/image is enabled
+    const ok = await probeImageUrl(optimized, 3500);
+    cdnResizeOkRef.current = ok;
 
-    const jpegBlob = await canvasToBlob(canvas, "image/jpeg", 0.9);
-    const file = new File([jpegBlob], `mina_input_${Date.now()}.jpg`, { type: "image/jpeg" });
-
-    const optimized = await uploadFileToR2(panelKind, file);
-    const stable = stripSignedQuery(optimized);
-
-    const finalUrl = isHttpUrl(stable) ? stable : clean;
-    inputJpegCacheRef.current.set(clean, finalUrl);
+    const finalUrl = ok ? optimized : clean;
+    inputOptCacheRef.current.set(clean, finalUrl);
     return finalUrl;
   }
 
@@ -3353,10 +3338,12 @@ const styleHeroUrls = (stylePresetKeys || [])
         const uiLogoUrl = isMotion ? "" : uploads.logo?.[0]?.remoteUrl || uploads.logo?.[0]?.url || "";
 
         const optimizedImageUrl = isHttpUrl(selectedMediaUrl)
-          ? await ensureJpegInputUrl(selectedMediaUrl, "product")
+          ? await ensureOptimizedInputUrl(selectedMediaUrl, "product")
           : "";
 
-        const optimizedLogoUrl = isHttpUrl(uiLogoUrl) ? await ensureJpegInputUrl(uiLogoUrl, "logo") : "";
+        const optimizedLogoUrl = isHttpUrl(uiLogoUrl)
+          ? await ensureOptimizedInputUrl(uiLogoUrl, "logo")
+          : "";
 
         const onProgress = ({ status, scanLines }: { status: string; scanLines: string[] }) => {
           const last = scanLines.slice(-1)[0] || status || "";
@@ -4261,7 +4248,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       // ✅ optimize in background and swap it in-place
       void (async () => {
         try {
-          const optimized = await ensureJpegInputUrl(baseUrl, "product");
+          const optimized = await ensureOptimizedInputUrl(baseUrl, "product");
           patchUploadItem("product", id0, {
             url: optimized,
             remoteUrl: optimized,
