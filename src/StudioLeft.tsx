@@ -33,6 +33,9 @@ export type UploadItem = {
   file?: File;
   uploading?: boolean;
   error?: string;
+  // ✅ NEW: set by MinaApp (and inferred here as fallback)
+  mediaType?: "image" | "video" | "audio";
+  durationSec?: number;
 };
 
 export type StylePreset = {
@@ -133,9 +136,12 @@ type StudioLeftProps = {
 
   // ✅ Motion controls
   motionDurationSec?: 5 | 10;
+  motionCostLabel?: string;
   onToggleMotionDuration?: () => void;
 
   motionAudioEnabled?: boolean; // true = sound on
+  motionAudioLocked?: boolean;
+  effectiveMotionAudioEnabled?: boolean;
   onToggleMotionAudio?: () => void;
 
   motionStyleKeys?: MotionStyleKey[];
@@ -185,6 +191,47 @@ function cfInput1080(url: string, kind: "product" | "logo" = "product") {
   const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
+}
+
+function isVideoUrl(url: string) {
+  const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return u.endsWith(".mp4") || u.endsWith(".mov") || u.endsWith(".webm") || u.endsWith(".m4v");
+}
+
+function isAudioUrl(url: string) {
+  const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return (
+    u.endsWith(".mp3") ||
+    u.endsWith(".wav") ||
+    u.endsWith(".m4a") ||
+    u.endsWith(".aac") ||
+    u.endsWith(".ogg")
+  );
+}
+
+function inferMediaTypeFromItem(it: UploadItem | null | undefined): "image" | "video" | "audio" | null {
+  if (!it) return null;
+
+  const mt = (it as any).mediaType;
+  if (mt === "image" || mt === "video" || mt === "audio") return mt;
+
+  const ft = String(it.file?.type || "").toLowerCase();
+  if (ft.startsWith("video/")) return "video";
+  if (ft.startsWith("audio/")) return "audio";
+  if (ft.startsWith("image/")) return "image";
+
+  const u = String(it.remoteUrl || it.url || "").toLowerCase();
+  if (isVideoUrl(u)) return "video";
+  if (isAudioUrl(u)) return "audio";
+  if (u) return "image";
+
+  return null;
+}
+
+function roundUpTo5(sec: number) {
+  const s = Number(sec || 0);
+  const safe = Number.isFinite(s) && s > 0 ? s : 5;
+  return Math.max(5, Math.ceil(safe / 5) * 5);
 }
 
 // ------------------------------------
@@ -377,9 +424,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     onCreateMotion,
     onTypeForMe,
     motionDurationSec,
+    motionCostLabel: motionCostLabelProp,
     onToggleMotionDuration,
 
     motionAudioEnabled,
+    motionAudioLocked: motionAudioLockedProp,
+    effectiveMotionAudioEnabled: effectiveMotionAudioEnabledProp,
     onToggleMotionAudio,
 
     imageCreditsOk: imageCreditsOkProp,
@@ -521,7 +571,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const hasCreditNumber = Number.isFinite(creditBalance);
 
   const STILL_COST = stillLane === "niche" ? 2 : 1;
-  const MOTION_COST = motionDurationSec === 10 ? 10 : 5;
+  // ✅ MOTION_COST is computed later (dynamic for video/audio refs)
 
   // If credits is not provided yet, fall back to existing props behavior
   const imageCreditsOk = hasCreditNumber ? creditBalance >= STILL_COST : (imageCreditsOkProp ?? true);
@@ -800,32 +850,77 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const isMotion = animateMode;
 
-  // ✅ 2 frames (start + end) => backend forces Kling v2.1 => mute only
-  const motionHasTwoFrames = isMotion && (uploads?.product?.length || 0) >= 2;
-  const motionAudioLocked = motionHasTwoFrames;
+  // ✅ Frame2 can be: image (mute lock), video (sound lock), audio (sound lock)
+  const frame2Item = isMotion ? uploads?.product?.[1] : null;
+  const frame2Kind = inferMediaTypeFromItem(frame2Item); // "image" | "video" | "audio" | null
+  const hasFrame2 = isMotion && !!frame2Item;
 
-  // Effective audio state for UI (locked => always mute)
-  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled !== false;
+  const hasFrame2Image = hasFrame2 && frame2Kind === "image";
+  const hasFrame2Video = hasFrame2 && frame2Kind === "video";
+  const hasFrame2Audio = hasFrame2 && frame2Kind === "audio";
+  const hasRefMedia = hasFrame2Video || hasFrame2Audio;
 
-  // If we become locked while Sound was ON, force it OFF once
-  const forcedMuteRef = useRef(false);
+  // Any second reference locks audio behavior (but lock direction depends on type)
+  const motionAudioLocked = hasFrame2;
+
+  const effectiveMotionAudioEnabled =
+    hasFrame2Image ? false : hasRefMedia ? true : motionAudioEnabled !== false;
+
+  const motionAudioLockHint = hasFrame2Image
+    ? "End frame forces mute"
+    : hasFrame2Video
+    ? "Reference video keeps sound"
+    : hasFrame2Audio
+    ? "Audio drives sound"
+    : "Toggle audio";
+
+  // ✅ Sync the toggle state one-time to match lock direction
+  const forcedAudioSyncRef = useRef(false);
   useEffect(() => {
     if (!motionAudioLocked) {
-      forcedMuteRef.current = false;
+      forcedAudioSyncRef.current = false;
       return;
     }
-    if (forcedMuteRef.current) return;
+    if (forcedAudioSyncRef.current) return;
 
-    if (motionAudioEnabled === false) {
-      forcedMuteRef.current = true;
-      return;
-    }
+    if (typeof onToggleMotionAudio !== "function") return;
 
-    if (typeof onToggleMotionAudio === "function") {
-      forcedMuteRef.current = true;
+    // frame2 image => must be OFF
+    if (hasFrame2Image && motionAudioEnabled !== false) {
+      forcedAudioSyncRef.current = true;
       onToggleMotionAudio();
+      return;
     }
-  }, [motionAudioLocked, motionAudioEnabled, onToggleMotionAudio]);
+
+    // frame2 video/audio => must be ON
+    if (hasRefMedia && motionAudioEnabled === false) {
+      forcedAudioSyncRef.current = true;
+      onToggleMotionAudio();
+      return;
+    }
+
+    forcedAudioSyncRef.current = true;
+  }, [motionAudioLocked, hasFrame2Image, hasRefMedia, motionAudioEnabled, onToggleMotionAudio]);
+
+  // ✅ Motion cost (5s blocks when video/audio is used)
+  const MOTION_COST_BASE = motionDurationSec === 10 ? 10 : 5;
+
+  const frame2DurationSec = Number((frame2Item as any)?.durationSec || 0);
+  const refSeconds = hasFrame2Video
+    ? Math.min(30, frame2DurationSec || 5)
+    : hasFrame2Audio
+    ? Math.min(60, frame2DurationSec || 5)
+    : 0;
+
+  const MOTION_COST = hasRefMedia ? roundUpTo5(refSeconds) : MOTION_COST_BASE;
+
+  const computedMotionCostLabel = hasFrame2Video
+    ? `${Math.ceil((refSeconds || 5) / 5)}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`
+    : hasFrame2Audio
+    ? `${Math.ceil((refSeconds || 5) / 5)}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`
+    : `${motionDurationSec === 10 ? "10s" : "5s"} = ${MOTION_COST} matchas`;
+
+  const motionCostLabel = motionCostLabelProp ?? computedMotionCostLabel;
 
   const briefLen = brief.trim().length;
 
@@ -977,11 +1072,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const motionSuggesting = !!props.motionSuggesting;
   const motionHasImage = !!props.motionHasImage;
-  const canCreateMotion = props.canCreateMotion ?? briefLen >= 1;
+  const canCreateMotion = props.canCreateMotion ?? (hasRefMedia ? true : briefLen >= 1);
   const motionCreditsOk = hasCreditNumber ? creditBalance >= MOTION_COST : (props.motionCreditsOk ?? true);
 
   const motionBlockReason =
-    !motionCreditsOk ? "Get more matchas to animate." : (props.motionBlockReason || null);
+    !motionCreditsOk ? `I need more matchas to animate. (${motionCostLabel})` : (props.motionBlockReason || null);
 
   const typeForMeLabel = motionSuggesting ? "Typing…" : "Type for me";
 
@@ -1029,7 +1124,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       ? "Add frame"
       : createState === "describe_more"
       ? wantsMatcha
-        ? "Get more matchas"
+        ? isMotion
+          ? "I need more matchas"
+          : "Get more matchas"
         : "Describe more"
       : isMotion
       ? "Animate"
@@ -1398,43 +1495,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 </>
               ) : (
                 <>
-                  {/* Type for me */}
-                  {(() => {
-                    const typeForMeDisabled = motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk;
-
-                    const typeForMeTitle = !hasMotionImage
-                      ? "Upload at least 1 frame first"
-                      : !motionCreditsOk
-                      ? "Not enough Matcha"
-                      : motionGenerating
-                      ? "Animating…"
-                      : motionSuggesting
-                      ? "Typing…"
-                      : "Type for me";
-
-                    return (
-                      <button
-                        type="button"
-                        className={classNames(
-                          "studio-pill",
-                          motionSuggesting && "active",
-                          typeForMeDisabled && "studio-pill--ghost"
-                        )}
-                        style={pillBaseStyle(0)}
-                        onClick={() => {
-                          if (typeForMeDisabled) return;
-                          onTypeForMe?.();
-                        }}
-                        disabled={typeForMeDisabled}
-                        aria-disabled={typeForMeDisabled}
-                        title={typeForMeTitle}
-                      >
-                        {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
-                        <span className="studio-pill-main">{typeForMeLabel}</span>
-                      </button>
-                    );
-                  })()}
-
                   {/* Frames */}
                   <button
                     type="button"
@@ -1443,7 +1503,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       effectivePanel === "product" && "active",
                       !productThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(1)}
+                    style={pillBaseStyle(0)}
                     onClick={() => {
                       if (!productThumb) triggerPick("product");
                       else openPanel("product");
@@ -1462,7 +1522,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       effectivePanel === "style" && "active",
                       !motionStyleThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(2)}
+                    style={pillBaseStyle(1)}
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
@@ -1470,7 +1530,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">{motionStyleLabel}</span>
                   </button>
 
-                  {/* ✅ Sound / Mute */}
+                  {/* ✅ Sound / Mute (now always visible) */}
                   <button
                     type="button"
                     className={classNames(
@@ -1479,31 +1539,39 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       effectiveMotionAudioEnabled ? "is-sound" : "is-mute",
                       motionAudioLocked && "studio-pill--ghost"
                     )}
-                    style={pillBaseStyle(3)}
+                    style={pillBaseStyle(2)}
                     onClick={() => {
                       if (motionAudioLocked) return;
                       onToggleMotionAudio?.();
                     }}
                     disabled={motionAudioLocked || !onToggleMotionAudio}
-                    title={motionAudioLocked ? "End frame forces mute" : "Toggle audio"}
+                    title={motionAudioLockHint}
                   >
                     <span className="studio-pill-main">{effectiveMotionAudioEnabled ? "Sound" : "Mute"}</span>
                   </button>
 
-                  {/* ✅ Duration 5s / 10s */}
+                  {/* ✅ Duration (disabled when video/audio is used) */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", "pill-duration-toggle")}
-                    style={pillBaseStyle(4)}
-                    onClick={() => onToggleMotionDuration?.()}
-                    disabled={!onToggleMotionDuration}
-                    title="Toggle duration"
+                    className={classNames("studio-pill", "pill-duration-toggle", hasRefMedia && "studio-pill--ghost")}
+                    style={pillBaseStyle(3)}
+                    onClick={() => {
+                      if (hasRefMedia) return;
+                      onToggleMotionDuration?.();
+                    }}
+                    disabled={!onToggleMotionDuration || hasRefMedia}
+                    title={hasRefMedia ? motionCostLabel : "Toggle duration"}
                   >
-                    <span className="studio-pill-main">{motionDurationSec === 10 ? "10s" : "5s"}</span>
+                    <span className="studio-pill-main">{hasRefMedia ? "Auto" : motionDurationSec === 10 ? "10s" : "5s"}</span>
                   </button>
 
-                  {/* ✅ Ratio (fixed label fallback) */}
-                  <button type="button" className={classNames("studio-pill", "studio-pill--aspect")} style={pillBaseStyle(5)} disabled>
+                  {/* ✅ Ratio (fixed) */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", "studio-pill--aspect")}
+                    style={pillBaseStyle(4)}
+                    disabled
+                  >
                     <span className="studio-pill-icon">
                       <img
                         src={animateAspectIconUrl || currentAspectIconUrl}
@@ -1514,10 +1582,54 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">{motionAspectLabel}</span>
                     <span className="studio-pill-sub">{motionAspectSubtitle}</span>
                   </button>
+
+                  {/* Type for me (✅ moved to the right after Ratio) */}
+                  {(() => {
+                    const typeForMeDisabled =
+                      motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk || hasRefMedia;
+
+                    const typeForMeTitle = !hasMotionImage
+                      ? "Upload at least 1 frame first"
+                      : hasRefMedia
+                      ? "Not needed when using video/audio"
+                      : !motionCreditsOk
+                      ? "Not enough Matcha"
+                      : motionGenerating
+                      ? "Animating…"
+                      : motionSuggesting
+                      ? "Typing…"
+                      : "Type for me";
+
+                    return (
+                      <button
+                        type="button"
+                        className={classNames(
+                          "studio-pill",
+                          motionSuggesting && "active",
+                          typeForMeDisabled && "studio-pill--ghost"
+                        )}
+                        style={pillBaseStyle(5)}
+                        onClick={() => {
+                          if (typeForMeDisabled) return;
+                          onTypeForMe?.();
+                        }}
+                        disabled={typeForMeDisabled}
+                        aria-disabled={typeForMeDisabled}
+                        title={typeForMeTitle}
+                      >
+                        {renderPillIcon(TYPE_FOR_ME_ICON, "✎", false, { plain: true })}
+                        <span className="studio-pill-main">{typeForMeLabel}</span>
+                      </button>
+                    );
+                  })()}
                 </>
               )}
             </div>
           </div>
+
+          {isMotion && motionCostLabel ? (
+            <div className="studio-motion-cost-label">{motionCostLabel}</div>
+          ) : null}
 
           {/* Textarea */}
           <div className="studio-brief-block">
@@ -1536,7 +1648,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   const text = e.clipboardData?.getData("text/plain") || "";
                   if (!text) return;
                   const url = text.match(/https?:\/\/[^\s)]+/i)?.[0];
-                  if (url && /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) {
+                  if (!url) return;
+
+                  const okStill = /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url);
+                  const okMotion =
+                    okStill || /\.(mp4|mov|webm|m4v|mp3|wav|m4a|aac|ogg)(\?.*)?$/i.test(url);
+
+                  if ((isMotion && okMotion) || (!isMotion && okStill)) {
                     onImageUrlPasted?.(url);
                   }
                 }}
@@ -1722,7 +1840,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             <>
               <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                 <div className="studio-panel">
-                  <div className="studio-panel-title">Add frames</div>
+                  <div className="studio-panel-title">Add frames, video or sound</div>
+                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+                    Frame 1: image • Frame 2 (optional): image (mute) or video ≤30s or audio ≤60s
+                    <div style={{ marginTop: 6, fontWeight: 700 }}>{motionCostLabel}</div>
+                  </div>
 
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("product")}>
@@ -1750,7 +1872,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           type="button"
                           className="studio-plusbox studio-plusbox--inline"
                           onClick={() => triggerPick("product")}
-                          title={uploads.product.length === 0 ? "Add start frame" : "Add end frame (optional)"}
+                            title={
+                              uploads.product.length === 0
+                                ? "Add start frame (image)"
+                                : "Add frame 2 (image / video / audio)"
+                            }
                         >
                           <span aria-hidden="true">+</span>
                         </button>
@@ -1893,7 +2019,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         <input
           ref={productInputRef}
           type="file"
-          accept="image/*"
+          accept={isMotion ? "image/*,video/*,audio/*" : "image/*"}
           multiple={isMotion}
           style={{ display: "none" }}
           onChange={(e) => handleFileInput("product", e)}

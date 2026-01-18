@@ -74,6 +74,11 @@ function isVideoUrl(url: string) {
   return u.endsWith(".mp4") || u.endsWith(".webm") || u.endsWith(".mov") || u.endsWith(".m4v");
 }
 
+function isAudioUrl(url: string) {
+  const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
+  return u.endsWith(".mp3") || u.endsWith(".wav") || u.endsWith(".m4a") || u.endsWith(".aac") || u.endsWith(".ogg");
+}
+
 function isImageUrl(url: string) {
   const u = (url || "").split("?")[0].split("#")[0].toLowerCase();
   return u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".gif") || u.endsWith(".webp");
@@ -503,6 +508,49 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     ? klingFramesRaw.map(String).filter((u) => /^https?:\/\//i.test(String(u)))
     : [];
 
+  // ✅ Reference video/audio (Frame 2 types)
+  const referenceVideoUrlRaw =
+    varsAssets?.reference_video_url ||
+    varsAssets?.referenceVideoUrl ||
+    varsAssets?.ref_video_url ||
+    varsAssets?.refVideoUrl ||
+    varsAssets?.kling_reference_video_url ||
+    varsAssets?.klingReferenceVideoUrl ||
+    varsInputs?.reference_video_url ||
+    varsInputs?.referenceVideoUrl ||
+    varsInputs?.ref_video_url ||
+    varsInputs?.refVideoUrl ||
+    varsInputs?.video_url ||
+    varsInputs?.videoUrl ||
+    varsInputs?.video ||
+    vars?.reference_video_url ||
+    vars?.referenceVideoUrl ||
+    vars?.ref_video_url ||
+    vars?.refVideoUrl ||
+    "";
+
+  const referenceAudioUrlRaw =
+    varsAssets?.audio_url ||
+    varsAssets?.audioUrl ||
+    varsAssets?.ref_audio_url ||
+    varsAssets?.refAudioUrl ||
+    varsInputs?.audio_url ||
+    varsInputs?.audioUrl ||
+    varsInputs?.audio ||
+    vars?.audio_url ||
+    vars?.audioUrl ||
+    "";
+
+  const referenceVideoUrl = String(referenceVideoUrlRaw || "").trim();
+  const referenceAudioUrl = String(referenceAudioUrlRaw || "").trim();
+
+  const refVideo =
+    /^https?:\/\//i.test(referenceVideoUrl) && isVideoUrl(referenceVideoUrl) ? referenceVideoUrl : "";
+  const refAudio =
+    /^https?:\/\//i.test(referenceAudioUrl) && (isAudioUrl(referenceAudioUrl) || !isVideoUrl(referenceAudioUrl))
+      ? referenceAudioUrl
+      : "";
+
   const stillLane = String(
     varsInputs?.still_lane ||
       varsInputs?.stillLane ||
@@ -581,6 +629,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     platform,
     motionDurationSec,
     generateAudio,
+    referenceVideoUrl: refVideo,
+    referenceAudioUrl: refAudio,
   };
 }
 
@@ -1719,48 +1769,112 @@ const openPrompt = useCallback((id: string) => {
                               </div>
                             ) : null}
 
-                            {/* Motion frames (start/end + any kling frames) */}
+                            {/* Motion frames (start/end + kling frames + ref video/audio if present) */}
                             {(() => {
-                              const frames: string[] = [];
-                              if (inputs.startImageUrl) frames.push(inputs.startImageUrl);
-                              if (inputs.endImageUrl) frames.push(inputs.endImageUrl);
+                              const items: Array<{ kind: "image" | "video" | "audio"; url: string }> = [];
+
+                              if (inputs.startImageUrl) items.push({ kind: "image", url: inputs.startImageUrl });
+                              if (inputs.endImageUrl) items.push({ kind: "image", url: inputs.endImageUrl });
 
                               if (Array.isArray((inputs as any).klingFrameUrls)) {
                                 for (const u of (inputs as any).klingFrameUrls as string[]) {
-                                  if (u && !frames.includes(u)) frames.push(u);
+                                  if (u && !items.some((x) => x.url === u)) items.push({ kind: "image", url: u });
                                 }
                               }
 
-                              const show = it.isMotion && frames.length;
+                              const refVideo = String((inputs as any).referenceVideoUrl || "").trim();
+                              const refAudio = String((inputs as any).referenceAudioUrl || "").trim();
+
+                              if (refVideo) items.push({ kind: "video", url: refVideo });
+                              if (refAudio) items.push({ kind: "audio", url: refAudio });
+
+                              const show = it.isMotion && items.length;
                               if (!show) return null;
+
+                              const visible = items.slice(0, 3);
 
                               return (
                                 <div className="profile-card-detailrow">
                                   <span className="k">Frames</span>
                                   <span className="v">
                                     <span className="profile-thumbrow">
-                                      {frames.slice(0, 2).map((u) => (
-                                        <img
-                                          key={u}
-                                          className="profile-input-thumb"
-                                          src={cfThumb(u, 140, 70)}
-                                          alt=""
-                                          loading="lazy"
-                                          decoding="async"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (it.draft) {
-                                              onRecreate?.(it.draft);
-                                              onBackToStudio?.();
-                                              return;
-                                            }
-                                            prefetchImage(u);
-                                            openLightbox(u, false);
-                                          }}
-                                        />
-                                      ))}
-                                      {frames.length > 2 ? (
-                                        <span className="profile-thumbbadge">+{frames.length - 2}</span>
+                                      {visible.map((m) => {
+                                        if (m.kind === "video") {
+                                          return (
+                                            <video
+                                              key={m.url}
+                                              className="profile-input-thumb profile-input-thumb--video"
+                                              src={m.url}
+                                              preload="metadata"
+                                              muted
+                                              playsInline
+                                              onLoadedData={(e) => {
+                                                try {
+                                                  const v = e.currentTarget;
+                                                  v.currentTime = 0;
+                                                  v.pause();
+                                                } catch {}
+                                              }}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openLightbox(m.url, true);
+                                              }}
+                                              title="Reference video"
+                                            />
+                                          );
+                                        }
+
+                                        if (m.kind === "audio") {
+                                          return (
+                                            <button
+                                              key={m.url}
+                                              type="button"
+                                              className="profile-input-thumb profile-input-thumb--audio"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.open(m.url, "_blank", "noopener,noreferrer");
+                                              }}
+                                              title="Reference audio"
+                                            >
+                                              {/* simple wave icon */}
+                                              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path
+                                                  d="M4 10v4M7 7v10M10 4v16M13 7v10M16 10v4M19 8v8"
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  strokeWidth="2"
+                                                  strokeLinecap="round"
+                                                />
+                                              </svg>
+                                            </button>
+                                          );
+                                        }
+
+                                        // image
+                                        return (
+                                          <img
+                                            key={m.url}
+                                            className="profile-input-thumb"
+                                            src={cfThumb(m.url, 140, 70)}
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (it.draft) {
+                                                onRecreate?.(it.draft);
+                                                onBackToStudio?.();
+                                                return;
+                                              }
+                                              prefetchImage(m.url);
+                                              openLightbox(m.url, false);
+                                            }}
+                                          />
+                                        );
+                                      })}
+
+                                      {items.length > visible.length ? (
+                                        <span className="profile-thumbbadge">+{items.length - visible.length}</span>
                                       ) : null}
                                     </span>
                                   </span>

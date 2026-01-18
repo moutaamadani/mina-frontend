@@ -210,6 +210,10 @@ type UploadItem = {
   file?: File;
   uploading?: boolean;
   error?: string;
+
+  // ✅ NEW: media type + duration (used for frame-2 video/audio pricing)
+  mediaType?: "image" | "video" | "audio";
+  durationSec?: number; // for video/audio (seconds)
 };
 
 type UploadPanelKey = "product" | "logo" | "inspiration";
@@ -1044,15 +1048,29 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
   const motionReferenceImageUrl = animateImageHttp || currentStill?.url || latestStill?.url || "";
 
-  // ✅ If 2 frames are present, backend forces v2.1 mute → lock sound OFF
-  const uiFrame1 = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
-  const motionHasTwoFrames = animateMode && isHttpUrl(uiFrame1);
-  const motionAudioLocked = motionHasTwoFrames;
-  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled;
+  const frame2Item = uploads.product?.[1] || null;
+  const frame2Url = frame2Item?.remoteUrl || frame2Item?.url || "";
+  const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || null;
+
+  const hasFrame2Image = animateMode && frame2Kind === "image" && isHttpUrl(frame2Url);
+  const hasFrame2Video = animateMode && frame2Kind === "video" && isHttpUrl(frame2Url);
+  const hasFrame2Audio = animateMode && frame2Kind === "audio" && isHttpUrl(frame2Url);
+
+  // v2.1 two-image frames => forced mute
+  // ref-video => forced keep original sound
+  // ref-audio => forced sound on (audio drives the video)
+  const motionAudioLocked = hasFrame2Image || hasFrame2Video || hasFrame2Audio;
+
+  const effectiveMotionAudioEnabled =
+    hasFrame2Image ? false : (hasFrame2Video || hasFrame2Audio) ? true : motionAudioEnabled;
 
   useEffect(() => {
-    if (motionAudioLocked && motionAudioEnabled) setMotionAudioEnabled(false);
-  }, [motionAudioLocked, motionAudioEnabled]);
+    // if forced mute
+    if (hasFrame2Image && motionAudioEnabled) setMotionAudioEnabled(false);
+
+    // if forced on
+    if ((hasFrame2Video || hasFrame2Audio) && !motionAudioEnabled) setMotionAudioEnabled(true);
+  }, [hasFrame2Image, hasFrame2Video, hasFrame2Audio, motionAudioEnabled]);
 
   const personalityThinking = useMemo(
   () => (adminConfig.ai?.personality?.thinking?.length ? adminConfig.ai.personality.thinking : []),
@@ -1072,7 +1090,34 @@ const showControls = uiStage >= 3 || hasEverTyped;
   // - Motion:         5s => 5, 10s => 10
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
-  const motionCost = motionDurationSec === 10 ? 10 : 5;
+  const roundUpTo5 = (sec: number) => Math.max(5, Math.ceil(sec / 5) * 5);
+
+  const frame2Duration = Number(frame2Item?.durationSec || 0);
+
+  const videoSec = hasFrame2Video ? Math.min(30, Math.max(0, frame2Duration || 0)) : 0;
+  const audioSec = hasFrame2Audio ? Math.min(60, Math.max(0, frame2Duration || 0)) : 0;
+
+  const videoCost = hasFrame2Video ? roundUpTo5(videoSec || 5) : 0;
+  const audioCost = hasFrame2Audio ? roundUpTo5(audioSec || 5) : 0;
+
+  const motionCost =
+    hasFrame2Video ? videoCost : hasFrame2Audio ? audioCost : motionDurationSec === 10 ? 10 : 5;
+
+  const motionCostLabel = (() => {
+    if (hasFrame2Video) {
+      const blocks = Math.ceil((videoSec || 5) / 5);
+      const cost = blocks * 5;
+      const shownSec = Math.round(videoSec || 5);
+      return `${blocks}×5s = ${cost} matchas (${shownSec}s video)`;
+    }
+    if (hasFrame2Audio) {
+      const blocks = Math.ceil((audioSec || 5) / 5);
+      const cost = blocks * 5;
+      const shownSec = Math.round(audioSec || 5);
+      return `${blocks}×5s = ${cost} matchas (${shownSec}s audio)`;
+    }
+    return `${motionDurationSec}s = ${motionCost} matchas`;
+  })();
 
   const creditBalance = credits?.balance;
   const hasCreditNumber = typeof creditBalance === "number" && Number.isFinite(creditBalance);
@@ -1196,7 +1241,10 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
   const motionTextTrimmed = motionDescription.trim();
   const canCreateMotion =
-    !!motionReferenceImageUrl && motionTextTrimmed.length > 0 && !motionSuggestTyping && !motionSuggesting;
+    !!motionReferenceImageUrl &&
+    (motionTextTrimmed.length > 0 || hasFrame2Video || hasFrame2Audio) &&
+    !motionSuggestTyping &&
+    !motionSuggesting;
 
   const minaBusy =
     stillGenerating ||
@@ -2464,35 +2512,98 @@ const showControls = uiStage >= 3 || hasEverTyped;
     return { file: newFile, previewUrl, changed: true };
   }
 
-  function probeImageUrl(url: string, timeoutMs = 8000): Promise<boolean> {
+  function probeMediaUrl(url: string, kind: "image" | "video" | "audio", timeoutMs = 8000): Promise<boolean> {
     return new Promise((resolve) => {
-      if (!url || !isHttpUrl(url)) return resolve(false);
-
-      const img = new Image();
-      (img as any).decoding = "async";
+      if (!url || (!isHttpUrl(url) && !url.startsWith("blob:"))) return resolve(false);
 
       let done = false;
       const finish = (ok: boolean) => {
         if (done) return;
         done = true;
-        try {
-          img.src = "";
-        } catch {}
         resolve(ok);
       };
 
       const t = window.setTimeout(() => finish(false), timeoutMs);
 
-      img.onload = () => {
+      if (kind === "image") {
+        const img = new Image();
+        (img as any).decoding = "async";
+        img.onload = () => {
+          window.clearTimeout(t);
+          finish(true);
+        };
+        img.onerror = () => {
+          window.clearTimeout(t);
+          finish(false);
+        };
+        img.src = url;
+        return;
+      }
+
+      const el = document.createElement(kind === "video" ? "video" : "audio");
+      (el as any).preload = "metadata";
+      (el as any).muted = true;
+
+      const cleanup = () => {
+        try {
+          el.pause();
+        } catch {}
+        try {
+          el.removeAttribute("src");
+          el.load();
+        } catch {}
+      };
+
+      el.onloadedmetadata = () => {
         window.clearTimeout(t);
+        cleanup();
         finish(true);
       };
-      img.onerror = () => {
+      el.onerror = () => {
         window.clearTimeout(t);
+        cleanup();
         finish(false);
       };
 
-      img.src = url;
+      el.src = url;
+    });
+  }
+
+  function getMediaDurationSec(url: string, kind: "video" | "audio", timeoutMs = 8000): Promise<number | null> {
+    return new Promise((resolve) => {
+      if (!url || (!isHttpUrl(url) && !url.startsWith("blob:"))) return resolve(null);
+
+      const el = document.createElement(kind === "video" ? "video" : "audio");
+      (el as any).preload = "metadata";
+      (el as any).muted = true;
+
+      let done = false;
+      const finish = (val: number | null) => {
+        if (done) return;
+        done = true;
+        try {
+          el.pause();
+        } catch {}
+        try {
+          el.removeAttribute("src");
+          el.load();
+        } catch {}
+        resolve(val);
+      };
+
+      const t = window.setTimeout(() => finish(null), timeoutMs);
+
+      el.onloadedmetadata = () => {
+        window.clearTimeout(t);
+        const d = Number((el as any).duration);
+        finish(Number.isFinite(d) && d > 0 ? d : null);
+      };
+      el.onerror = () => {
+        window.clearTimeout(t);
+        finish(null);
+      };
+
+      el.src = url;
     });
   }
 
@@ -2566,7 +2677,7 @@ const showControls = uiStage >= 3 || hasEverTyped;
     }
 
     // first time: probe once to detect if /cdn-cgi/image is enabled
-    const ok = await probeImageUrl(optimized, 3500);
+    const ok = await probeMediaUrl(optimized, "image", 3500);
     cdnResizeOkRef.current = ok;
 
     const finalUrl = ok ? optimized : clean;
@@ -2689,6 +2800,34 @@ const showControls = uiStage >= 3 || hasEverTyped;
     return base.endsWith(".mp4") || base.endsWith(".webm") || base.endsWith(".mov") || base.endsWith(".m4v");
   }
 
+  function isAudioUrl(url: string) {
+    const base = (url || "").split("?")[0].split("#")[0].toLowerCase();
+    return (
+      base.endsWith(".mp3") ||
+      base.endsWith(".wav") ||
+      base.endsWith(".m4a") ||
+      base.endsWith(".aac") ||
+      base.endsWith(".ogg")
+    );
+  }
+
+  function inferMediaTypeFromFile(file: File): "image" | "video" | "audio" | null {
+    const t = String(file?.type || "").toLowerCase();
+    if (t.startsWith("image/")) return "image";
+    if (t.startsWith("video/")) return "video";
+    if (t.startsWith("audio/")) return "audio";
+    return null;
+  }
+
+  function inferMediaTypeFromUrl(url: string): "image" | "video" | "audio" | null {
+    const u = String(url || "").toLowerCase();
+    if (!/^https?:\/\//i.test(u) && !u.startsWith("blob:")) return null;
+    if (isVideoUrl(u)) return "video";
+    if (isAudioUrl(u)) return "audio";
+    // default “image” for http(s) that isn’t video/audio (matches your current behavior)
+    return "image";
+  }
+
   async function storeRemoteToR2(url: string, kind: string): Promise<string> {
     const res = await apiFetch("/api/r2/store-remote-signed", {
       method: "POST",
@@ -2749,9 +2888,40 @@ const showControls = uiStage >= 3 || hasEverTyped;
     }));
   }
 
-  async function startUploadForFileItem(panel: UploadPanelKey, id: string, file: File) {
+  async function startUploadForFileItem(
+    panel: UploadPanelKey,
+    id: string,
+    file: File,
+    previewUrl: string,
+    mediaType: "image" | "video" | "audio"
+  ) {
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
+
+      // ✅ Animate rule: video/audio ONLY allowed as product frame #2 (index 1)
+      if (panel === "product" && animateMode && (mediaType === "video" || mediaType === "audio")) {
+        const cur = uploadsRef.current?.product || [];
+        const hasFrame0 = !!cur?.[0];
+        const frame0Type =
+          cur?.[0]?.mediaType || inferMediaTypeFromUrl(cur?.[0]?.remoteUrl || cur?.[0]?.url || "") || "image";
+
+        if (!hasFrame0 || frame0Type !== "image") {
+          setMinaOverrideText("first frame must be an image");
+          showUploadNotice("product", "First frame must be an image. Add video/audio only as frame 2.");
+          removeUploadItem("product", id);
+          return;
+        }
+
+        // validate duration early from blob preview
+        const maxSec = mediaType === "video" ? 30 : 60;
+        const d = await getMediaDurationSec(previewUrl, mediaType === "video" ? "video" : "audio");
+        if (typeof d === "number" && d > maxSec) {
+          setMinaOverrideText(mediaType === "video" ? "videos max 30s please" : "audios max 60s please");
+          showUploadNotice("product", mediaType === "video" ? "Videos max 30s please." : "Audios max 60s please.");
+          removeUploadItem("product", id);
+          return;
+        }
+      }
 
       // 1) Validate / normalize (auto convert + resize if needed)
       const ext = getFileExt(file.name);
@@ -2766,57 +2936,74 @@ const showControls = uiStage >= 3 || hasEverTyped;
       let normalized = file;
       let newPreviewUrl: string | undefined;
 
-      try {
-        const norm = await normalizeImageForUpload(file);
-        normalized = norm.file;
-        newPreviewUrl = norm.previewUrl;
+      if (mediaType === "image") {
+        try {
+          const norm = await normalizeImageForUpload(file);
+          normalized = norm.file;
+          newPreviewUrl = norm.previewUrl;
 
-        // If we generated a new preview, swap it in (feels automatic)
-        if (norm.changed && newPreviewUrl) {
-          setUploads((prev) => {
-            const item = prev[panel].find((x) => x.id === id);
-            if (item?.kind === "file" && item.url?.startsWith("blob:")) {
-              try {
-                URL.revokeObjectURL(item.url);
-              } catch {}
-            }
-            return {
-              ...prev,
-              [panel]: prev[panel].map((it) =>
-                it.id === id ? { ...it, file: normalized, url: newPreviewUrl } : it
-              ),
-            };
-          });
+          // If we generated a new preview, swap it in (feels automatic)
+          if (norm.changed && newPreviewUrl) {
+            setUploads((prev) => {
+              const item = prev[panel].find((x) => x.id === id);
+              if (item?.kind === "file" && item.url?.startsWith("blob:")) {
+                try {
+                  URL.revokeObjectURL(item.url);
+                } catch {}
+              }
+              return {
+                ...prev,
+                [panel]: prev[panel].map((it) =>
+                  it.id === id ? { ...it, file: normalized, url: newPreviewUrl } : it
+                ),
+              };
+            });
+          }
+        } catch (e: any) {
+          const code = String(e?.message || "");
+          const reason =
+            code === "TOO_BIG" || file.size > MAX_UPLOAD_BYTES
+              ? "too_big"
+              : !isAllowed || code === "UNSUPPORTED"
+                ? "unsupported"
+                : "broken";
+
+          const msg = friendlyUploadError(reason as any);
+          showUploadNotice(panel, msg);
+
+          // Remove bad item immediately so user can upload again right away
+          removeUploadItem(panel, id);
+          return;
         }
-      } catch (e: any) {
-        const code = String(e?.message || "");
-        const reason =
-          code === "TOO_BIG" || file.size > MAX_UPLOAD_BYTES
-            ? "too_big"
-            : !isAllowed || code === "UNSUPPORTED"
-              ? "unsupported"
-              : "broken";
-
-        const msg = friendlyUploadError(reason as any);
-        showUploadNotice(panel, msg);
-
-        // Remove bad item immediately so user can upload again right away
-        removeUploadItem(panel, id);
-        return;
       }
 
       // 2) Upload to R2
       const remoteUrl = await uploadFileToR2(panel, normalized);
 
-      // 3) Verify the uploaded URL actually loads as an image (catches “broken upload”)
-      const ok = await probeImageUrl(remoteUrl, 8000);
+      // 3) Verify the uploaded URL actually loads as media (catches “broken upload”)
+      const ok = await probeMediaUrl(remoteUrl, mediaType, 8000);
       if (!ok) {
         showUploadNotice(panel, friendlyUploadError("broken"));
         removeUploadItem(panel, id);
         return;
       }
 
-      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined });
+      let durationSec: number | undefined = undefined;
+
+      if (panel === "product" && animateMode && (mediaType === "video" || mediaType === "audio")) {
+        const d = await getMediaDurationSec(remoteUrl, mediaType === "video" ? "video" : "audio");
+        if (typeof d === "number" && d > 0) durationSec = d;
+
+        const maxSec = mediaType === "video" ? 30 : 60;
+        if (typeof d === "number" && d > maxSec) {
+          setMinaOverrideText(mediaType === "video" ? "videos max 30s please" : "audios max 60s please");
+          showUploadNotice(panel, mediaType === "video" ? "Videos max 30s please." : "Audios max 60s please.");
+          removeUploadItem(panel, id);
+          return;
+        }
+      }
+
+      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined, durationSec, mediaType });
     } catch {
       showUploadNotice(panel, "Upload failed. Please try again.");
       removeUploadItem(panel, id);
@@ -2827,8 +3014,9 @@ const showControls = uiStage >= 3 || hasEverTyped;
     try {
       patchUploadItem(panel, id, { uploading: true, error: undefined });
 
-      // quick sanity: does the link load as an image?
-      const ok = await probeImageUrl(url, 7000);
+      // quick sanity: does the link load as media?
+      const kind = inferMediaTypeFromUrl(url) || "image";
+      const ok = await probeMediaUrl(url, kind, 7000);
       if (!ok) {
         showUploadNotice(panel, friendlyUploadError("link_broken"));
         removeUploadItem(panel, id);
@@ -2838,14 +3026,30 @@ const showControls = uiStage >= 3 || hasEverTyped;
       const remoteUrl = await storeRemoteToR2(url, panel);
 
       // verify stored URL too
-      const ok2 = await probeImageUrl(remoteUrl, 8000);
+      const kind2 = inferMediaTypeFromUrl(remoteUrl) || kind;
+      const ok2 = await probeMediaUrl(remoteUrl, kind2, 8000);
       if (!ok2) {
         showUploadNotice(panel, friendlyUploadError("broken"));
         removeUploadItem(panel, id);
         return;
       }
 
-      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined });
+      let durationSec: number | undefined = undefined;
+
+      if (panel === "product" && animateMode && (kind2 === "video" || kind2 === "audio")) {
+        const maxSec = kind2 === "video" ? 30 : 60;
+        const d = await getMediaDurationSec(remoteUrl, kind2 === "video" ? "video" : "audio");
+        if (typeof d === "number" && d > 0) durationSec = d;
+
+        if (typeof d === "number" && d > maxSec) {
+          setMinaOverrideText(kind2 === "video" ? "videos max 30s please" : "audios max 60s please");
+          showUploadNotice(panel, kind2 === "video" ? "Videos max 30s please." : "Audios max 60s please.");
+          removeUploadItem(panel, id);
+          return;
+        }
+      }
+
+      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined, mediaType: kind2, durationSec });
     } catch {
       showUploadNotice(panel, "Upload failed. Please try again.");
       removeUploadItem(panel, id);
@@ -3051,6 +3255,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   };
 
   const onTypeForMe = useCallback(async () => {
+    if (hasFrame2Video || hasFrame2Audio) return;
     if (motionSuggesting) return;
 
     const frame0 = uploads.product?.[0]?.remoteUrl || uploads.product?.[0]?.url || "";
@@ -3144,6 +3349,8 @@ const styleHeroUrls = (stylePresetKeys || [])
     }
   }, [
     motionSuggesting,
+    hasFrame2Video,
+    hasFrame2Audio,
     uploads.product,
     motionReferenceImageUrl,
     API_BASE_URL,
@@ -3164,7 +3371,8 @@ const styleHeroUrls = (stylePresetKeys || [])
   ]);
 
   const handleGenerateMotion = async () => {
-    if (!API_BASE_URL || !motionReferenceImageUrl || !motionTextTrimmed) return;
+    if (!API_BASE_URL || !motionReferenceImageUrl) return;
+    if (!motionTextTrimmed && !hasFrame2Video && !hasFrame2Audio) return;
 
     if (!currentPassId) {
       setMotionError("Missing Pass ID for MEGA session.");
@@ -3183,6 +3391,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
       const endFrame = isHttpUrl(frame1) ? frame1 : "";
+      const frame2Http = isHttpUrl(frame2Url) ? frame2Url : "";
 
       // ✅ include selected style preset hero urls + custom style heroUrls + user inspiration uploads (cap 4)
       const styleHeroUrls = (stylePresetKeys || [])
@@ -3213,38 +3422,115 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
 
-      const mmaBody = {
-        passId: currentPassId,
-        assets: {
-          start_image_url: startFrame,
-          end_image_url: endFrame || "",
-          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
-          inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
-        },
-        inputs: {
-          motionDescription: usedMotionPrompt,
-          prompt: usedMotionPrompt, // ✅ helps history/profile store it
-          prompt_override: usedMotionPrompt,
-          use_prompt_override: !!usedMotionPrompt,
-          tone,
-          platform: animateAspectOption.platformKey,
-          aspect_ratio: animateAspectOption.ratio,
-          duration: motionDurationSec,
-          generate_audio: effectiveMotionAudioEnabled,
+      let mmaBody: any = null;
 
-          stylePresetKeys: stylePresetKeysForApi,
-          stylePresetKey: primaryStyleKeyForApi,
+      // ✅ Case A: Frame2 is a reference VIDEO (image + video model)
+      if (hasFrame2Video && frame2Http) {
+        mmaBody = {
+          passId: currentPassId,
+          assets: {
+            image: startFrame,
+            video: frame2Http,
+          },
+          inputs: {
+            // enforce model defaults
+            mode: "pro",
+            character_orientation: "video",
+            keep_original_sound: true,
 
-          minaVisionEnabled,
-        },
-        settings: {},
-        history: {
-          sessionId: sid || sessionId || null,
-          sessionTitle: sessionTitle || null,
-        },
-        feedback: {},
-        prompts: {},
-      };
+            // required fields (send redundantly)
+            image: startFrame,
+            video: frame2Http,
+
+            // prompt is optional here
+            prompt: usedMotionPrompt || "",
+
+            // billing hints (frontend-aligned)
+            duration_sec: Math.min(30, Math.max(3, Math.round(videoSec || 5))),
+            billing_blocks_5s: Math.ceil((videoSec || 5) / 5),
+            billing_cost_matchas: motionCost,
+
+            stylePresetKeys: stylePresetKeysForApi,
+            stylePresetKey: primaryStyleKeyForApi,
+            minaVisionEnabled,
+          },
+          settings: {},
+          history: {
+            sessionId: sid || sessionId || null,
+            sessionTitle: sessionTitle || null,
+          },
+          feedback: {},
+          prompts: {},
+        };
+      }
+
+      // ✅ Case B: Frame2 is AUDIO (image + audio model)
+      else if (hasFrame2Audio && frame2Http) {
+        mmaBody = {
+          passId: currentPassId,
+          assets: {
+            image: startFrame,
+            audio: frame2Http,
+          },
+          inputs: {
+            image: startFrame,
+            audio: frame2Http,
+            resolution: "720p",
+            prompt: usedMotionPrompt || "",
+
+            duration_sec: Math.min(60, Math.max(3, Math.round(audioSec || 5))),
+            billing_blocks_5s: Math.ceil((audioSec || 5) / 5),
+            billing_cost_matchas: motionCost,
+
+            stylePresetKeys: stylePresetKeysForApi,
+            stylePresetKey: primaryStyleKeyForApi,
+            minaVisionEnabled,
+          },
+          settings: {},
+          history: {
+            sessionId: sid || sessionId || null,
+            sessionTitle: sessionTitle || null,
+          },
+          feedback: {},
+          prompts: {},
+        };
+      }
+
+      // ✅ Case C: existing behavior (1 image => v2.6 / 2 images => v2.1)
+      else {
+        mmaBody = {
+          passId: currentPassId,
+          assets: {
+            start_image_url: startFrame,
+            end_image_url: endFrame || "",
+            kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+            inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
+          },
+          inputs: {
+            motionDescription: usedMotionPrompt,
+            prompt: usedMotionPrompt, // ✅ helps history/profile store it
+            prompt_override: usedMotionPrompt,
+            use_prompt_override: !!usedMotionPrompt,
+            tone,
+            platform: animateAspectOption.platformKey,
+            aspect_ratio: animateAspectOption.ratio,
+            duration: motionDurationSec,
+            generate_audio: effectiveMotionAudioEnabled,
+
+            stylePresetKeys: stylePresetKeysForApi,
+            stylePresetKey: primaryStyleKeyForApi,
+
+            minaVisionEnabled,
+          },
+          settings: {},
+          history: {
+            sessionId: sid || sessionId || null,
+            sessionTitle: sessionTitle || null,
+          },
+          feedback: {},
+          prompts: {},
+        };
+      }
 
      const { generationId } = await mmaCreateAndWait(
         "/mma/video/animate",
@@ -3709,6 +3995,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               url: latestStill.url,
               remoteUrl: latestStill.url,
               uploading: false,
+              mediaType: "image",
             },
           ],
         }));
@@ -3750,9 +4037,20 @@ const styleHeroUrls = (stylePresetKeys || [])
   const addFilesToPanel = (panel: UploadPanelKey, files: FileList) => {
     const max = capForPanel(panel);
 
-    const incoming = Array.from(files || []).filter(
-      (f) => f && typeof f.type === "string" && f.type.startsWith("image/")
-    );
+    const incoming = Array.from(files || []).filter((f) => {
+      if (!f || typeof f.type !== "string") return false;
+
+      const mt = inferMediaTypeFromFile(f);
+      if (panel !== "product") return mt === "image";
+
+      // product:
+      if (!animateMode) return mt === "image";
+
+      // animateMode product: allow image always; allow video/audio ONLY as frame #2
+      if (mt === "image") return true;
+      if (mt === "video" || mt === "audio") return true;
+      return false;
+    });
     if (!incoming.length) return;
 
     // inspiration append; product in animate also append
@@ -3770,6 +4068,8 @@ const styleHeroUrls = (stylePresetKeys || [])
       const id = `${panel}_${now}_${i}_${Math.random().toString(16).slice(2)}`;
       const previewUrl = URL.createObjectURL(file);
 
+      const mediaType = inferMediaTypeFromFile(file) || "image";
+
       const item: UploadItem = {
         id,
         kind: "file",
@@ -3778,6 +4078,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         file,
         uploading: true,
         error: undefined,
+        mediaType,
       };
 
       return { id, file, previewUrl, item };
@@ -3813,8 +4114,8 @@ const styleHeroUrls = (stylePresetKeys || [])
       return { ...prev, [panel]: next };
     });
 
-    created.forEach(({ id, file }) => {
-      void startUploadForFileItem(panel, id, file);
+    created.forEach(({ id, file, previewUrl }) => {
+      void startUploadForFileItem(panel, id, file, previewUrl, inferMediaTypeFromFile(file) || "image");
     });
   };
 
@@ -3833,6 +4134,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         url,
         remoteUrl: undefined,
         uploading: true,
+        mediaType: inferMediaTypeFromUrl(url) || "image",
       };
 
       return { ...prev, [panel]: [...base, next].slice(0, max) };
@@ -3867,8 +4169,33 @@ const styleHeroUrls = (stylePresetKeys || [])
     setUploads((prev) => {
       const arr = [...prev[panel]];
       if (from < 0 || to < 0 || from >= arr.length || to >= arr.length) return prev;
+
       const [moved] = arr.splice(from, 1);
       arr.splice(to, 0, moved);
+
+      // ✅ Animate constraint:
+      // - frame0 must be image
+      // - if a video/audio exists, it MUST be frame2 (index 1)
+      if (panel === "product" && animateMode && arr.length >= 2) {
+        const a0 = arr[0];
+        const a1 = arr[1];
+
+        const t0 = a0?.mediaType || inferMediaTypeFromUrl(a0?.remoteUrl || a0?.url || "") || "image";
+        const t1 = a1?.mediaType || inferMediaTypeFromUrl(a1?.remoteUrl || a1?.url || "") || "image";
+
+        const isVA = (t: string) => t === "video" || t === "audio";
+
+        // if video/audio is in slot 0 -> swap back
+        if (isVA(t0) && !isVA(t1)) {
+          return { ...prev, [panel]: [a1, a0, ...arr.slice(2)] };
+        }
+
+        // if slot0 isn’t image, force swap if slot1 is image
+        if (t0 !== "image" && t1 === "image") {
+          return { ...prev, [panel]: [a1, a0, ...arr.slice(2)] };
+        }
+      }
+
       return { ...prev, [panel]: arr };
     });
   };
@@ -4054,7 +4381,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setHasEverTyped(true);
     }
 
-    if (trimmedLength > 0 && trimmedLength < 20) {
+    if (!hasFrame2Video && !hasFrame2Audio && trimmedLength > 0 && trimmedLength < 20) {
       describeMoreTimeoutRef.current = window.setTimeout(() => setShowDescribeMore(true), 1200);
     }
   };
@@ -4110,6 +4437,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       url,
       remoteUrl: url,
       uploading: false,
+      mediaType: inferMediaTypeFromUrl(url) || "image",
     });
 
     applyingRecreateDraftRef.current = true;
@@ -4237,6 +4565,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         remoteUrl: u,
         uploading: true, // ✅ we’ll flip to false once JPG is ready
         error: undefined,
+        mediaType: inferMediaTypeFromUrl(u) || "image",
       });
 
       setUploads((prev) => {
@@ -4886,8 +5215,11 @@ const headerOverlayClass =
               onCreateMotion={handleGenerateMotion}
               onTypeForMe={onTypeForMe}
               motionAudioEnabled={motionAudioEnabled}
+              motionAudioLocked={motionAudioLocked}
+              effectiveMotionAudioEnabled={effectiveMotionAudioEnabled}
               onToggleMotionAudio={() => setMotionAudioEnabled((v) => !v)}
               motionDurationSec={motionDurationSec}
+              motionCostLabel={motionCostLabel}
               onToggleMotionDuration={() => setMotionDurationSec((v) => (v === 5 ? 10 : 5))}
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
