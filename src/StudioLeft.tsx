@@ -131,6 +131,13 @@ type StudioLeftProps = {
   animateMode?: boolean;
   onToggleAnimateMode?: (next: boolean) => void;
 
+  // ✅ Motion controls
+  motionDurationSec?: 5 | 10;
+  onToggleMotionDuration?: () => void;
+
+  motionAudioEnabled?: boolean; // true = sound on
+  onToggleMotionAudio?: () => void;
+
   motionStyleKeys?: MotionStyleKey[];
   setMotionStyleKeys?: (k: MotionStyleKey[]) => void;
 
@@ -369,6 +376,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     motionError,
     onCreateMotion,
     onTypeForMe,
+    motionDurationSec,
+    onToggleMotionDuration,
+
+    motionAudioEnabled,
+    onToggleMotionAudio,
 
     imageCreditsOk: imageCreditsOkProp,
     credits: creditsProp,
@@ -466,6 +478,10 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     return aspectLandscape && base && !isSquareRatio(base) ? "rotate(90deg)" : undefined;
   }, [aspectLandscape, currentAspect?.label, currentAspect?.ratio]);
 
+  const motionAspect = (animateAspect ?? currentAspect) as AspectOptionLike;
+  const motionAspectLabel = String(motionAspect?.label || motionAspect?.ratio || "").trim() || "Auto";
+  const motionAspectSubtitle = String(motionAspect?.subtitle || "").trim();
+
   const clearAspectHold = () => {
     if (aspectHoldTimerRef.current !== null) {
       window.clearTimeout(aspectHoldTimerRef.current);
@@ -505,7 +521,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const hasCreditNumber = Number.isFinite(creditBalance);
 
   const STILL_COST = stillLane === "niche" ? 2 : 1;
-  const MOTION_COST = 10;
+  const MOTION_COST = ((motionDurationSec ?? 5) === 10 ? 10 : 5);
 
   // If credits is not provided yet, fall back to existing props behavior
   const imageCreditsOk = hasCreditNumber ? creditBalance >= STILL_COST : (imageCreditsOkProp ?? true);
@@ -783,6 +799,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   }, [animateMode, brief, onBriefChange, openPanel]);
 
   const isMotion = animateMode;
+
+  // ✅ If there are 2 frames, backend forces Kling v2.1 → audio not supported → mute only
+  const hasEndFrame = isMotion && !!(uploads?.product?.[1]?.remoteUrl || uploads?.product?.[1]?.url);
+  const motionAudioLocked = hasEndFrame;
+  const effectiveMotionAudioEnabled = motionAudioLocked ? false : !!motionAudioEnabled;
+
+  useEffect(() => {
+    if (motionAudioLocked && motionAudioEnabled) {
+      onToggleMotionAudio?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [motionAudioLocked]);
 
   const briefLen = brief.trim().length;
 
@@ -1422,8 +1450,38 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">{motionStyleLabel}</span>
                   </button>
 
-                  {/* Ratio */}
-                  <button type="button" className={classNames("studio-pill", "studio-pill--aspect")} style={pillBaseStyle(3)} disabled>
+                  {/* ✅ Sound / Mute */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      "pill-audio-toggle",
+                      effectiveMotionAudioEnabled ? "is-sound" : "is-mute"
+                    )}
+                    style={pillBaseStyle(3)}
+                    onClick={() => onToggleMotionAudio?.()}
+                    disabled={motionAudioLocked}
+                    title={motionAudioLocked ? "End frame forces mute" : "Toggle sound"}
+                  >
+                    <span className="studio-pill-main">
+                      {effectiveMotionAudioEnabled ? "Sound" : "Mute"}
+                    </span>
+                  </button>
+
+                  {/* ✅ Duration 5s / 10s */}
+                  <button
+                    type="button"
+                    className={classNames("studio-pill", "pill-duration-toggle")}
+                    style={pillBaseStyle(4)}
+                    onClick={() => onToggleMotionDuration?.()}
+                    disabled={!onToggleMotionDuration}
+                    title="Toggle duration"
+                  >
+                    <span className="studio-pill-main">{motionDurationSec === 10 ? "10s" : "5s"}</span>
+                  </button>
+
+                  {/* ✅ Ratio (fixed label fallback) */}
+                  <button type="button" className={classNames("studio-pill", "studio-pill--aspect")} style={pillBaseStyle(5)} disabled>
                     <span className="studio-pill-icon">
                       <img
                         src={animateAspectIconUrl || currentAspectIconUrl}
@@ -1431,8 +1489,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         style={{ transform: animateAspectIconRotated ? "rotate(90deg)" : undefined }}
                       />
                     </span>
-                    <span className="studio-pill-main">{(animateAspect ?? currentAspect).label}</span>
-                    <span className="studio-pill-sub">{(animateAspect ?? currentAspect).subtitle}</span>
+                    <span className="studio-pill-main">{motionAspectLabel}</span>
+                    <span className="studio-pill-sub">{motionAspectSubtitle}</span>
                   </button>
                 </>
               )}
