@@ -1048,10 +1048,11 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const uiFrame1 = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
   const motionHasTwoFrames = animateMode && isHttpUrl(uiFrame1);
   const motionAudioLocked = motionHasTwoFrames;
+  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled;
 
   useEffect(() => {
-    if (motionAudioLocked) setMotionAudioEnabled(false);
-  }, [motionAudioLocked]);
+    if (motionAudioLocked && motionAudioEnabled) setMotionAudioEnabled(false);
+  }, [motionAudioLocked, motionAudioEnabled]);
 
   const personalityThinking = useMemo(
   () => (adminConfig.ai?.personality?.thinking?.length ? adminConfig.ai.personality.thinking : []),
@@ -1072,16 +1073,6 @@ const showControls = uiStage >= 3 || hasEverTyped;
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
   const motionCost = motionDurationSec === 10 ? 10 : 5;
-
-  // ✅ 2 frames (start + end) => forced v2.1 => mute only (user can't change)
-  const motionHasTwoFrames = animateMode && (uploads?.product?.length || 0) >= 2;
-  const motionAudioLocked = motionHasTwoFrames;
-  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled;
-
-  // If it becomes locked, force state OFF once
-  useEffect(() => {
-    if (motionAudioLocked && motionAudioEnabled) setMotionAudioEnabled(false);
-  }, [motionAudioLocked, motionAudioEnabled]);
 
   const creditBalance = credits?.balance;
   const hasCreditNumber = typeof creditBalance === "number" && Number.isFinite(creditBalance);
