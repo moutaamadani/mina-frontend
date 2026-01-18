@@ -461,8 +461,8 @@ background-color 0s ease 0s,
   width: 72px;
   height: 72px;
   border-radius: 0;
-  border: 1px dashed rgba(8, 10, 0, 0.25);
-  background: rgba(255, 255, 255, 0);
+  border: 0px dashed rgba(8, 10, 0, 0.25);
+  background: rgba(247, 245, 239, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
