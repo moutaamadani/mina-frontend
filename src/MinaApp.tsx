@@ -3534,6 +3534,10 @@ const styleHeroUrls = (stylePresetKeys || [])
       };
 
       // ✅ Now override the body ONLY when frame2 is video/audio
+      // ✅ FIX: define frame2Http in the SAME scope as handleGenerateMotion
+      const __frame2Item = uploads.product?.[1] || null;
+      const __frame2Url = String(__frame2Item?.remoteUrl || __frame2Item?.url || "").trim();
+      const frame2Http = isHttpUrl(__frame2Url) ? __frame2Url : "";
       const mmaBody = (() => {
         // Frame2 VIDEO => kwaivgi/kling-v2.6-motion-control (FULL = pro)
         if (hasFrame2Video && frame2Http) {
