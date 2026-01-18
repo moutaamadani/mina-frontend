@@ -1595,7 +1595,7 @@ const openPrompt = useCallback((id: string) => {
                                           mode: "motion",
                                           assets: {
                                             ...it.draft!.assets,
-                                            kling_start_image_url: cfInput1080(sceneImageUrl, "product"),
+                                          kling_start_image_url: sceneImageUrl,
                                           },
                                         };
                                         onRecreate?.(motionDraft);
