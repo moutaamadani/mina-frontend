@@ -1114,7 +1114,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCreditsOk = hasCreditNumber ? creditBalance >= MOTION_COST : (props.motionCreditsOk ?? true);
 
   const motionBlockReason =
-    !motionCreditsOk ? `I need more matchas to animate. (${motionCostLabel})` : (props.motionBlockReason || null);
+    !motionCreditsOk ? "I need more matchas to animate." : (props.motionBlockReason || null);
 
   const typeForMeLabel = motionSuggesting ? "Typing…" : "Type for me";
 
@@ -1598,9 +1598,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       onToggleMotionDuration?.();
                     }}
                     disabled={!onToggleMotionDuration || hasRefMedia}
-                    title={hasRefMedia ? motionCostLabel : "Toggle duration"}
+                    title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Toggle duration"}
                   >
-                    <span className="studio-pill-main">{hasRefMedia ? "Auto" : motionDurationSec === 10 ? "10s" : "5s"}</span>
+                    <span className="studio-pill-main">
+                      {hasRefMedia ? `${MOTION_COST}s` : motionDurationSec === 10 ? "10s" : "5s"}
+                    </span>
                   </button>
 
                   {/* ✅ Ratio (fixed) */}
@@ -1665,8 +1667,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             </div>
           </div>
 
-          {isMotion && motionCostLabel ? (
-          ) : null}
+          {/* no extra cost UI here (duration pill is the only indicator) */}
 
           {/* Textarea */}
           <div className="studio-brief-block">
