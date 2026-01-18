@@ -168,6 +168,19 @@ function classNames(...parts: Array<string | false | null | undefined>): string 
   return parts.filter(Boolean).join(" ");
 }
 
+function cfInput1080(url: string, kind: "product" | "logo" | "style" = "product") {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  if (!u.includes("assets.faltastudio.com/")) return u;
+  if (u.includes("/cdn-cgi/image/")) return u;
+
+  // logo may need alpha => keep png, others => jpeg
+  const format = kind === "logo" ? "png" : "jpeg";
+  const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+
+  return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
+}
+
 // ------------------------------------
 // Stable Collapse (keeps children mounted)
 // ------------------------------------
@@ -1203,8 +1216,21 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         open={sceneLibraryOpen}
         onClose={() => setSceneLibraryOpen(false)}
         onSetScene={(sceneUrl) => {
+          // ✅ match Profile "Scene" behavior: set the scene + inject the scene prompt
+          const SCENE_PROMPT =
+            "Replace my product in the scene, keep my scene setup the same, composition tone, aesthetic, highlights and vibe style.";
+
           openPanel("product");
-          onImageUrlPasted?.(sceneUrl);
+
+          // ✅ force the brief (this is what you meant by “add prompt like Profile”)
+          onBriefChange(SCENE_PROMPT);
+
+          // ✅ IMPORTANT: pass a small optimized jpeg input so Mina can actually read it
+          const optimized = cfInput1080(sceneUrl, "product") || sceneUrl;
+          onImageUrlPasted?.(optimized);
+
+          // optional: close modal immediately
+          setSceneLibraryOpen(false);
         }}
       />
 
