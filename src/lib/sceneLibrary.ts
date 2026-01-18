@@ -1,3 +1,5 @@
+// FILE: src/lib/sceneLibrary.ts
+
 export type SceneLibraryItem = {
   id: string;
   title: string;
@@ -5,12 +7,23 @@ export type SceneLibraryItem = {
   keywords: string[];
 };
 
+// ✅ Hard fallback (used only if env is missing/empty)
+export const FALLBACK_SCENE_LIBRARY_RAW =
+  "1,Fostered glass bottle,https://assets.faltastudio.com/mma/still/12656216-f4ae-44a2-8416-e9b98875f024.png,editorial;balck;gradient;luxury;blur;soft|" +
+  "2,Perfume bottle 1,https://assets.faltastudio.com/mma/still/88a1569d-0e9f-486e-b664-ac4d3cc8dce0.png,editorial;warm;beige;muted tone;luxury;calm;perfume;soft";
+
 function clean(s: any) {
-  return String(s || "")
-    .trim()
-    .replace(/^"(.*)"$/, "$1")
-    .replace(/^'(.*)'$/, "$1")
-    .trim();
+  let t = String(s ?? "").trim();
+
+  // Strip nested quotes repeatedly:  '"... "'  or  "'...'"
+  while (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'"))
+  ) {
+    t = t.slice(1, -1).trim();
+  }
+
+  return t;
 }
 
 function tryJson(raw: string) {
@@ -76,4 +89,13 @@ export function parseSceneLibraryEnv(raw: any): SceneLibraryItem[] {
   }
 
   return out;
+}
+
+/**
+ * ✅ Single helper: returns env if present, otherwise fallback.
+ */
+export function getSceneLibraryRawFromViteEnv(): string {
+  const raw = (import.meta as any)?.env?.VITE_SCENE_LIBRARY_JSON;
+  const cleaned = clean(raw);
+  return cleaned ? cleaned : FALLBACK_SCENE_LIBRARY_RAW;
 }
