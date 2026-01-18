@@ -1071,7 +1071,17 @@ const showControls = uiStage >= 3 || hasEverTyped;
   // - Motion:         5s => 5, 10s => 10
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
-  const motionCost = motionDurationSec === 5 ? 5 : 10; // ✅ was always 10
+  const motionCost = motionDurationSec === 10 ? 10 : 5;
+
+  // ✅ 2 frames (start + end) => forced v2.1 => mute only (user can't change)
+  const motionHasTwoFrames = animateMode && (uploads?.product?.length || 0) >= 2;
+  const motionAudioLocked = motionHasTwoFrames;
+  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled;
+
+  // If it becomes locked, force state OFF once
+  useEffect(() => {
+    if (motionAudioLocked && motionAudioEnabled) setMotionAudioEnabled(false);
+  }, [motionAudioLocked, motionAudioEnabled]);
 
   const creditBalance = credits?.balance;
   const hasCreditNumber = typeof creditBalance === "number" && Number.isFinite(creditBalance);
@@ -3229,7 +3239,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           platform: animateAspectOption.platformKey,
           aspect_ratio: animateAspectOption.ratio,
           duration: motionDurationSec,
-          generate_audio: motionAudioLocked ? false : motionAudioEnabled,
+          generate_audio: effectiveMotionAudioEnabled,
 
           stylePresetKeys: stylePresetKeysForApi,
           stylePresetKey: primaryStyleKeyForApi,
