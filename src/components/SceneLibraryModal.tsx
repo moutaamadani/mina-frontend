@@ -6,7 +6,24 @@ function cfThumb(url: string, width = 700, quality = 75) {
   if (!url) return url;
   if (!url.includes("assets.faltastudio.com/")) return url;
   if (url.includes("/cdn-cgi/image/")) return url;
-  return `https://assets.faltastudio.com/cdn-cgi/image/width=${width},quality=${quality},format=auto/${url.replace(
+
+  // ✅ Force jpeg so we never get AVIF from format=auto
+  const opts = `width=${width},fit=cover,quality=${quality},format=jpeg,onerror=redirect`;
+
+  return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${url.replace(
+    "https://assets.faltastudio.com/",
+    ""
+  )}`;
+}
+
+function cfInput1080(url: string) {
+  if (!url) return url;
+  if (!url.includes("assets.faltastudio.com/")) return url;
+  if (url.includes("/cdn-cgi/image/")) return url;
+
+  const opts = `width=1080,fit=scale-down,quality=85,format=jpeg,onerror=redirect`;
+
+  return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${url.replace(
     "https://assets.faltastudio.com/",
     ""
   )}`;
@@ -89,7 +106,7 @@ export default function SceneLibraryModal({
                     <div
                       className="scene-lib-thumb"
                       onClick={() => {
-                        onSetScene(it.url);
+                        onSetScene(cfInput1080(it.url));
                         onClose();
                       }}
                     >
@@ -97,14 +114,12 @@ export default function SceneLibraryModal({
                     </div>
 
                     <div className="scene-lib-meta">
-                      <div className="scene-lib-name" title={it.title}>
-                        {it.title}
-                      </div>
                       <button
                         className="scene-lib-set"
                         type="button"
+                        title={it.title}
                         onClick={() => {
-                          onSetScene(it.url);
+                          onSetScene(cfInput1080(it.url));
                           onClose();
                         }}
                       >
@@ -124,10 +139,16 @@ export default function SceneLibraryModal({
           {/* 30% */}
           <div className="scene-lib-right">
             {active ? (
-              <div className="scene-lib-preview">
-                <img src={cfThumb(active.url, 1400, 85)} alt="" draggable={false} />
-                <div className="scene-lib-preview-title">{active.title}</div>
-              </div>
+              <img
+                className="scene-lib-preview-img"
+                src={cfThumb(active.url, 2600, 85)}
+                alt=""
+                draggable={false}
+                onClick={() => {
+                  onSetScene(cfInput1080(active.url));
+                  onClose();
+                }}
+              />
             ) : (
               <div className="scene-lib-empty">No preview</div>
             )}

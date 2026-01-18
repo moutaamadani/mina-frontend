@@ -168,14 +168,13 @@ function classNames(...parts: Array<string | false | null | undefined>): string 
   return parts.filter(Boolean).join(" ");
 }
 
-function cfInput1080(url: string, kind: "product" | "logo" | "style" = "product") {
+function cfInput1080(url: string, kind: "product" | "logo" = "product") {
   const u = String(url || "").trim();
   if (!u) return "";
   if (!u.includes("assets.faltastudio.com/")) return u;
   if (u.includes("/cdn-cgi/image/")) return u;
 
-  // logo may need alpha => keep png, others => jpeg
-  const format = kind === "logo" ? "png" : "jpeg";
+  const format = kind === "logo" ? "png" : "jpeg"; // logo keep alpha, scenes/product => jpeg
   const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
@@ -1226,8 +1225,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           onBriefChange(SCENE_PROMPT);
 
           // ✅ IMPORTANT: pass a small optimized jpeg input so Mina can actually read it
-          const optimized = cfInput1080(sceneUrl, "product") || sceneUrl;
-          onImageUrlPasted?.(optimized);
+          onImageUrlPasted?.(cfInput1080(sceneUrl, "product"));
 
           // optional: close modal immediately
           setSceneLibraryOpen(false);
