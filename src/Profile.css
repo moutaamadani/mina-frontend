@@ -874,22 +874,3 @@
   position: relative;
   overflow: hidden;
 }
-
-.profile-skel-media::after,
-.profile-skel-line::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-60%);
-  background: linear-gradient(90deg, rgba(230, 230, 230, 0), rgba(255, 255, 255, 0.6), rgba(230, 230, 230, 0));
-  animation: mina-skel 1.2s infinite;
-}
-
-@keyframes mina-skel {
-  0% {
-    transform: translateX(-60%);
-  }
-  100% {
-    transform: translateX(60%);
-  }
-}

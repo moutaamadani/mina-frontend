@@ -890,6 +890,13 @@ export default function Profile({
     return s;
   }, [feedbacks]);
 
+  const sizeClassForIndex = useCallback((idx: number) => {
+    if (idx % 13 === 0) return "profile-card--hero";
+    if (idx % 9 === 0) return "profile-card--wide";
+    if (idx % 7 === 0) return "profile-card--mini";
+    return "profile-card--tall";
+  }, []);
+
   const { items, activeCount } = useMemo(() => {
     // liked generation ids from feedback events
     const likedGenIdSet = new Set<string>();
@@ -1026,20 +1033,17 @@ export default function Profile({
       return matchesMotion && matchesAspect;
     });
 
-    const out = filtered.map((it, idx) => {
-      let sizeClass = "profile-card--tall";
-      if (idx % 13 === 0) sizeClass = "profile-card--hero";
-      else if (idx % 9 === 0) sizeClass = "profile-card--wide";
-      else if (idx % 7 === 0) sizeClass = "profile-card--mini";
-      return { ...it, sizeClass };
-    });
+    const out = filtered.map((it, idx) => ({ ...it, sizeClass: sizeClassForIndex(idx) }));
 
     return { items: out, activeCount: out.length };
-  }, [generations, feedbacks, likedUrlSet, motion, activeAspectFilter, onRecreate, removedIds]);
+  }, [generations, feedbacks, likedUrlSet, motion, activeAspectFilter, onRecreate, removedIds, sizeClassForIndex]);
 
-  // Reset paging when list changes
   useEffect(() => {
     setVisibleCount(36);
+  }, [motion, activeAspectFilter]);
+
+  useEffect(() => {
+    setVisibleCount((current) => Math.min(current, items.length));
   }, [items.length]);
 
   useEffect(() => {
@@ -1325,7 +1329,7 @@ const openPrompt = useCallback((id: string) => {
         <div className="profile-grid">
           {showInitialSkeletons
             ? Array.from({ length: skeletonCount }).map((_, i) => (
-                <div key={`sk_${i}`} className="profile-card profile-card--tall profile-card--skeleton">
+                <div key={`sk_${i}`} className={`profile-card ${sizeClassForIndex(i)} profile-card--skeleton`}>
                   <div className="profile-card-top">
                     <div className="profile-skel-line" style={{ width: 90 }} />
                     <div className="profile-skel-line" style={{ width: 24 }} />
@@ -1361,14 +1365,6 @@ const openPrompt = useCallback((id: string) => {
                     className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
                       ghostIds[it.id] ? "is-ghost" : ""
                     }`}
-                    onPointerEnter={(e) => {
-                      // desktop hover only (ignore touch)
-                      // @ts-ignore
-                      const pt = e?.pointerType;
-                      if (pt && pt !== "mouse") return;
-
-                      if (showViewMore) openPrompt(it.id);
-                    }}
                   >
                     <div className="profile-card-top">
                       <button
@@ -1737,7 +1733,10 @@ const openPrompt = useCallback((id: string) => {
           <div ref={loadMoreRef} style={{ height: 1 }} />
           {loadingMore
             ? Array.from({ length: 8 }).map((_, i) => (
-                <div key={`sk_more_${i}`} className="profile-card profile-card--tall profile-card--skeleton">
+                <div
+                  key={`sk_more_${i}`}
+                  className={`profile-card ${sizeClassForIndex(visibleItems.length + i)} profile-card--skeleton`}
+                >
                   <div className="profile-card-top">
                     <div className="profile-skel-line" style={{ width: 90 }} />
                     <div className="profile-skel-line" style={{ width: 24 }} />
