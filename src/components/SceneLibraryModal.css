@@ -1,0 +1,186 @@
+/* src/components/SceneLibraryModal.css */
+/* Profile-ish look: soft off-white, thin borders, big spacing */
+
+.scene-lib-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(10, 10, 10, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4vh 4vw;
+}
+
+.scene-lib-modal {
+  width: min(1400px, 92vw);
+  height: 92vh;
+  background: #f6f3ee;
+  color: #111;
+  border-radius: 18px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.scene-lib-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.scene-lib-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.scene-lib-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 0;
+}
+
+.scene-lib-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.scene-lib-left {
+  flex: 0 0 70%;
+  min-width: 0;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.scene-lib-right {
+  flex: 0 0 30%;
+  min-width: 0;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scene-lib-gridScroll {
+  height: 100%;
+  overflow: auto;
+  padding: 18px;
+}
+
+.scene-lib-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 1100px) {
+  .scene-lib-body {
+    flex-direction: column;
+  }
+  .scene-lib-left {
+    flex: 1 1 auto;
+    border-right: none;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .scene-lib-right {
+    flex: 1 1 auto;
+  }
+  .scene-lib-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.scene-lib-card {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.scene-lib-thumbBtn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.scene-lib-thumb {
+  width: 100%;
+  aspect-ratio: 3 / 4; /* vertical-ish; change if you want */
+  object-fit: cover;
+  display: block;
+}
+
+.scene-lib-cardMeta {
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scene-lib-cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.92;
+  line-height: 1.25;
+  min-height: 32px;
+}
+
+.scene-lib-setBtn,
+.scene-lib-previewSet {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  padding: 10px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.scene-lib-setBtn:hover,
+.scene-lib-previewSet:hover,
+.scene-lib-close:hover {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.scene-lib-previewTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.scene-lib-previewFrame {
+  flex: 1;
+  min-height: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.scene-lib-previewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.scene-lib-sentinel {
+  height: 1px;
+}
+
+.scene-lib-empty {
+  padding: 14px;
+  opacity: 0.7;
+  font-size: 13px;
+}

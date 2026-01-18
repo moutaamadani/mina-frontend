@@ -14,6 +14,7 @@
 // [PART 1] Imports
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MatchaQtyModal from "./components/MatchaQtyModal";
+import SceneLibraryModal from "./components/SceneLibraryModal";
 import "./StudioLeft.css";
 
 // ------------------------------------
@@ -512,6 +513,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [tutorialMobile, setTutorialMobile] = useState(false);
+  const [sceneLibOpen, setSceneLibOpen] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 900px)");
@@ -1197,6 +1199,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
         min={1}
         max={10}
       />
+      <SceneLibraryModal
+        open={sceneLibOpen}
+        onClose={() => setSceneLibOpen(false)}
+        onPickScene={(sceneUrl) => {
+          openPanel("product");
+          onImageUrlPasted?.(sceneUrl);
+        }}
+      />
 
       <div className="studio-left-main">
         {/* Input 1 */}
@@ -1469,9 +1479,24 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       ))}
 
                       {uploads.product.length === 0 && (
-                        <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("product")} title="Add image">
-                          <span aria-hidden="true">+</span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="studio-plusbox studio-plusbox--inline"
+                            onClick={() => triggerPick("product")}
+                            title="Add image"
+                          >
+                            <span aria-hidden="true">+</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="studio-uploadbox studio-uploadbox--library"
+                            onClick={() => setSceneLibOpen(true)}
+                          >
+                            <div className="studio-uploadbox-plus">📚</div>
+                            <div className="studio-uploadbox-label">Library</div>
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>

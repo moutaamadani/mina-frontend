@@ -457,6 +457,34 @@ background-color 0s ease 0s,
   opacity: 0.85;
 }
 
+.studio-uploadbox--library {
+  border: 1px dashed rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 16px;
+  padding: 14px;
+  min-height: 74px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.studio-uploadbox--library:hover {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.studio-uploadbox-plus {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.studio-uploadbox-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* uploaded photo — NO border, NO round */
 .studio-thumb {
   position: relative; /* ✅ needed for spinner overlay */
