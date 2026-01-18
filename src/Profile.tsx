@@ -510,14 +510,30 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     ? klingFramesRaw.map(String).filter((u) => /^https?:\/\//i.test(String(u)))
     : [];
 
-  // ✅ Reference video/audio (Frame 2 types)
+  // ✅ Reference video/audio (Frame 2 types) — NEW AI support (frame2_* + video/audio)
+  const frame2KindRaw =
+    pick(varsInputs, ["frame2_kind", "frame2Kind"], "") ||
+    pick(varsAssets, ["frame2_kind", "frame2Kind"], "") ||
+    pick(vars as any, ["frame2_kind", "frame2Kind"], "");
+
+  const frame2Kind = String(frame2KindRaw || "").toLowerCase();
+
   const referenceVideoUrlRaw =
+    // new keys
+    varsAssets?.frame2_video_url ||
+    varsAssets?.frame2VideoUrl ||
     varsAssets?.reference_video_url ||
     varsAssets?.referenceVideoUrl ||
     varsAssets?.ref_video_url ||
     varsAssets?.refVideoUrl ||
     varsAssets?.kling_reference_video_url ||
     varsAssets?.klingReferenceVideoUrl ||
+    varsAssets?.video_url ||
+    varsAssets?.videoUrl ||
+    varsAssets?.video ||
+    // inputs fallbacks
+    varsInputs?.frame2_video_url ||
+    varsInputs?.frame2VideoUrl ||
     varsInputs?.reference_video_url ||
     varsInputs?.referenceVideoUrl ||
     varsInputs?.ref_video_url ||
@@ -525,31 +541,64 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     varsInputs?.video_url ||
     varsInputs?.videoUrl ||
     varsInputs?.video ||
-    vars?.reference_video_url ||
-    vars?.referenceVideoUrl ||
-    vars?.ref_video_url ||
-    vars?.refVideoUrl ||
+    // last resort
+    (vars as any)?.frame2_video_url ||
+    (vars as any)?.frame2VideoUrl ||
+    (vars as any)?.reference_video_url ||
+    (vars as any)?.referenceVideoUrl ||
+    (vars as any)?.ref_video_url ||
+    (vars as any)?.refVideoUrl ||
+    (vars as any)?.video_url ||
+    (vars as any)?.videoUrl ||
+    (vars as any)?.video ||
     "";
 
   const referenceAudioUrlRaw =
-    varsAssets?.audio_url ||
-    varsAssets?.audioUrl ||
+    // new keys
+    varsAssets?.frame2_audio_url ||
+    varsAssets?.frame2AudioUrl ||
+    varsAssets?.reference_audio_url ||
+    varsAssets?.referenceAudioUrl ||
     varsAssets?.ref_audio_url ||
     varsAssets?.refAudioUrl ||
+    varsAssets?.audio_url ||
+    varsAssets?.audioUrl ||
+    varsAssets?.audio ||
+    // inputs fallbacks
+    varsInputs?.frame2_audio_url ||
+    varsInputs?.frame2AudioUrl ||
+    varsInputs?.reference_audio_url ||
+    varsInputs?.referenceAudioUrl ||
+    varsInputs?.ref_audio_url ||
+    varsInputs?.refAudioUrl ||
     varsInputs?.audio_url ||
     varsInputs?.audioUrl ||
     varsInputs?.audio ||
-    vars?.audio_url ||
-    vars?.audioUrl ||
+    // last resort
+    (vars as any)?.frame2_audio_url ||
+    (vars as any)?.frame2AudioUrl ||
+    (vars as any)?.reference_audio_url ||
+    (vars as any)?.referenceAudioUrl ||
+    (vars as any)?.ref_audio_url ||
+    (vars as any)?.refAudioUrl ||
+    (vars as any)?.audio_url ||
+    (vars as any)?.audioUrl ||
+    (vars as any)?.audio ||
     "";
 
   const referenceVideoUrl = String(referenceVideoUrlRaw || "").trim();
   const referenceAudioUrl = String(referenceAudioUrlRaw || "").trim();
 
+  // ✅ accept URLs even if they don't end with .mp4/.mp3 (some R2/public links won't)
   const refVideo =
-    /^https?:\/\//i.test(referenceVideoUrl) && isVideoUrl(referenceVideoUrl) ? referenceVideoUrl : "";
+    /^https?:\/\//i.test(referenceVideoUrl) &&
+    (isVideoUrl(referenceVideoUrl) || frame2Kind.includes("video"))
+      ? referenceVideoUrl
+      : "";
+
   const refAudio =
-    /^https?:\/\//i.test(referenceAudioUrl) && (isAudioUrl(referenceAudioUrl) || !isVideoUrl(referenceAudioUrl))
+    /^https?:\/\//i.test(referenceAudioUrl) &&
+    (isAudioUrl(referenceAudioUrl) || frame2Kind.includes("audio") || !isVideoUrl(referenceAudioUrl))
       ? referenceAudioUrl
       : "";
 
