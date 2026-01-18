@@ -945,7 +945,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionStyleThumb = selectedMotionCards[0]?.thumb || "";
   const motionStyleLabel =
     selectedMotionCards.length === 0
-      ? "Movement styles"
+      ? "Styles"
       : selectedMotionCards.length === 1
       ? selectedMotionCards[0].label
       : `${selectedMotionCards.length} styles`;
