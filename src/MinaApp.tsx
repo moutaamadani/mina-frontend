@@ -1044,6 +1044,15 @@ const showControls = uiStage >= 3 || hasEverTyped;
 
   const motionReferenceImageUrl = animateImageHttp || currentStill?.url || latestStill?.url || "";
 
+  // ✅ If 2 frames are present, backend forces v2.1 mute → lock sound OFF
+  const uiFrame1 = uploads.product?.[1]?.remoteUrl || uploads.product?.[1]?.url || "";
+  const motionHasTwoFrames = animateMode && isHttpUrl(uiFrame1);
+  const motionAudioLocked = motionHasTwoFrames;
+
+  useEffect(() => {
+    if (motionAudioLocked) setMotionAudioEnabled(false);
+  }, [motionAudioLocked]);
+
   const personalityThinking = useMemo(
   () => (adminConfig.ai?.personality?.thinking?.length ? adminConfig.ai.personality.thinking : []),
   [adminConfig.ai?.personality?.thinking]
@@ -1056,13 +1065,13 @@ const showControls = uiStage >= 3 || hasEverTyped;
 );
 
   // ==========================
-  // FIXED matcha rules (your exact ask)
-  // - Animate/motion: need >= 10
-  // - Still niche:    need >= 2
-  // - Still main:     need >= 1
+  // Matcha rules
+  // - Still niche:    2
+  // - Still main:     1
+  // - Motion:         5s => 5, 10s => 10
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
-  const motionCost = 10;
+  const motionCost = motionDurationSec === 5 ? 5 : 10; // ✅ was always 10
 
   const creditBalance = credits?.balance;
   const hasCreditNumber = typeof creditBalance === "number" && Number.isFinite(creditBalance);
@@ -3220,7 +3229,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           platform: animateAspectOption.platformKey,
           aspect_ratio: animateAspectOption.ratio,
           duration: motionDurationSec,
-          generate_audio: motionAudioEnabled,
+          generate_audio: motionAudioLocked ? false : motionAudioEnabled,
 
           stylePresetKeys: stylePresetKeysForApi,
           stylePresetKey: primaryStyleKeyForApi,

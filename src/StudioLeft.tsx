@@ -512,16 +512,16 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   // ==========================
-  // Fixed matcha rules (your exact ask)
-  // - Animate/motion: need >= 10
-  // - Still niche:    need >= 2
-  // - Still main:     need >= 1
+  // Matcha rules
+  // - Still niche:    2
+  // - Still main:     1
+  // - Motion:         5s => 5, 10s => 10
   // ==========================
   const creditBalance = Number(creditsProp);
   const hasCreditNumber = Number.isFinite(creditBalance);
 
   const STILL_COST = stillLane === "niche" ? 2 : 1;
-  const MOTION_COST = 10;
+  const MOTION_COST = motionDurationSec === 10 ? 10 : 5;
 
   // If credits is not provided yet, fall back to existing props behavior
   const imageCreditsOk = hasCreditNumber ? creditBalance >= STILL_COST : (imageCreditsOkProp ?? true);
@@ -799,6 +799,33 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   }, [animateMode, brief, onBriefChange, openPanel]);
 
   const isMotion = animateMode;
+
+  // ✅ 2 frames (start + end) => backend forces Kling v2.1 => mute only
+  const motionHasTwoFrames = isMotion && (uploads?.product?.length || 0) >= 2;
+  const motionAudioLocked = motionHasTwoFrames;
+
+  // Effective audio state for UI (locked => always mute)
+  const effectiveMotionAudioEnabled = motionAudioLocked ? false : motionAudioEnabled !== false;
+
+  // If we become locked while Sound was ON, force it OFF once
+  const forcedMuteRef = useRef(false);
+  useEffect(() => {
+    if (!motionAudioLocked) {
+      forcedMuteRef.current = false;
+      return;
+    }
+    if (forcedMuteRef.current) return;
+
+    if (motionAudioEnabled === false) {
+      forcedMuteRef.current = true;
+      return;
+    }
+
+    if (typeof onToggleMotionAudio === "function") {
+      forcedMuteRef.current = true;
+      onToggleMotionAudio();
+    }
+  }, [motionAudioLocked, motionAudioEnabled, onToggleMotionAudio]);
 
   const briefLen = brief.trim().length;
 
@@ -1444,16 +1471,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     className={classNames(
                       "studio-pill",
                       "pill-audio-toggle",
-                      motionAudioEnabled === false ? "is-mute" : "is-sound"
+                      effectiveMotionAudioEnabled ? "is-sound" : "is-mute",
+                      motionAudioLocked && "studio-pill--ghost"
                     )}
                     style={pillBaseStyle(3)}
-                    onClick={() => onToggleMotionAudio?.()}
-                    disabled={!onToggleMotionAudio}
-                    title="Toggle audio"
+                    onClick={() => {
+                      if (motionAudioLocked) return;
+                      onToggleMotionAudio?.();
+                    }}
+                    disabled={motionAudioLocked || !onToggleMotionAudio}
+                    title={motionAudioLocked ? "End frame forces mute" : "Toggle audio"}
                   >
-                    <span className="studio-pill-main">
-                      {motionAudioEnabled === false ? "Mute" : "Sound"}
-                    </span>
+                    <span className="studio-pill-main">{effectiveMotionAudioEnabled ? "Sound" : "Mute"}</span>
                   </button>
 
                   {/* ✅ Duration 5s / 10s */}
