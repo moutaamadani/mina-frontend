@@ -1049,8 +1049,13 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const motionReferenceImageUrl = animateImageHttp || currentStill?.url || latestStill?.url || "";
 
   const frame2Item = uploads.product?.[1] || null;
-  const frame2Url = frame2Item?.remoteUrl || frame2Item?.url || "";
-  const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || null;
+const frame2Url = frame2Item?.remoteUrl || frame2Item?.url || "";
+
+// ✅ FIX: make sure frame2Http exists (used later in handleGenerateMotion)
+const frame2Http = isHttpUrl(frame2Url) ? frame2Url : "";
+
+const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || null;
+
 
   const hasFrame2Image = animateMode && frame2Kind === "image" && isHttpUrl(frame2Url);
   const hasFrame2Video = animateMode && frame2Kind === "video" && isHttpUrl(frame2Url);
