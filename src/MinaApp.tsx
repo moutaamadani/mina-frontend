@@ -1108,12 +1108,14 @@ const showControls = uiStage >= 3 || hasEverTyped;
       const blocks = Math.ceil((videoSec || 5) / 5);
       const cost = blocks * 5;
       const shownSec = Math.round(videoSec || 5);
+      if (blocks <= 1) return `5s = 5 matchas (${shownSec}s video)`;
       return `${blocks}×5s = ${cost} matchas (${shownSec}s video)`;
     }
     if (hasFrame2Audio) {
       const blocks = Math.ceil((audioSec || 5) / 5);
       const cost = blocks * 5;
       const shownSec = Math.round(audioSec || 5);
+      if (blocks <= 1) return `5s = 5 matchas (${shownSec}s audio)`;
       return `${blocks}×5s = ${cost} matchas (${shownSec}s audio)`;
     }
     return `${motionDurationSec}s = ${motionCost} matchas`;

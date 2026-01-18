@@ -90,6 +90,8 @@ function normalizeMediaUrl(url: string) {
   return base || url;
 }
 
+const AUDIO_THUMB_URL = "https://assets.faltastudio.com/Website%20Assets/audio-mina-icon.gif";
+
 // Make likes match even if one URL is Cloudflare transformed and the other is raw.
 function canonicalAssetUrl(url: string) {
   const s = normalizeMediaUrl(url);
@@ -753,6 +755,35 @@ export default function Profile({
       el.muted = !hovering;
       el.volume = 1;
       if (hovering) el.play().catch(() => {});
+    } catch {}
+  }, []);
+
+  const hoverAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  const setAudioHover = useCallback((url: string, hovering: boolean) => {
+    if (!url) return;
+    const cache = hoverAudioRef.current;
+    let audio = cache.get(url);
+    if (!audio) {
+      audio = new Audio(url);
+      audio.loop = true;
+      cache.set(url, audio);
+    }
+
+    if (hovering) {
+      try {
+        audio.currentTime = 0;
+      } catch {}
+      const p = audio.play();
+      if (p && typeof (p as Promise<void>).catch === "function") {
+        (p as Promise<void>).catch(() => {});
+      }
+      return;
+    }
+
+    audio.pause();
+    try {
+      audio.currentTime = 0;
     } catch {}
   }, []);
 
@@ -1806,7 +1837,6 @@ const openPrompt = useCallback((id: string) => {
                                               className="profile-input-thumb profile-input-thumb--video"
                                               src={m.url}
                                               preload="metadata"
-                                              muted
                                               playsInline
                                               onLoadedData={(e) => {
                                                 try {
@@ -1815,8 +1845,32 @@ const openPrompt = useCallback((id: string) => {
                                                   v.pause();
                                                 } catch {}
                                               }}
+                                              onMouseEnter={(e) => {
+                                                const v = e.currentTarget;
+                                                try {
+                                                  v.muted = false;
+                                                  v.volume = 1;
+                                                  v.currentTime = 0;
+                                                } catch {}
+                                                const p = v.play();
+                                                if (p && typeof (p as Promise<void>).catch === "function") {
+                                                  (p as Promise<void>).catch(() => {});
+                                                }
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                const v = e.currentTarget;
+                                                v.pause();
+                                                try {
+                                                  v.currentTime = 0;
+                                                } catch {}
+                                              }}
                                               onClick={(e) => {
                                                 e.stopPropagation();
+                                                if (it.draft) {
+                                                  onRecreate?.(it.draft);
+                                                  onBackToStudio?.();
+                                                  return;
+                                                }
                                                 openLightbox(m.url, true);
                                               }}
                                               title="Reference video"
@@ -1830,22 +1884,20 @@ const openPrompt = useCallback((id: string) => {
                                               key={m.url}
                                               type="button"
                                               className="profile-input-thumb profile-input-thumb--audio"
+                                              onMouseEnter={() => setAudioHover(m.url, true)}
+                                              onMouseLeave={() => setAudioHover(m.url, false)}
                                               onClick={(e) => {
                                                 e.stopPropagation();
+                                                if (it.draft) {
+                                                  onRecreate?.(it.draft);
+                                                  onBackToStudio?.();
+                                                  return;
+                                                }
                                                 window.open(m.url, "_blank", "noopener,noreferrer");
                                               }}
                                               title="Reference audio"
                                             >
-                                              {/* simple wave icon */}
-                                              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                                                <path
-                                                  d="M4 10v4M7 7v10M10 4v16M13 7v10M16 10v4M19 8v8"
-                                                  fill="none"
-                                                  stroke="currentColor"
-                                                  strokeWidth="2"
-                                                  strokeLinecap="round"
-                                                />
-                                              </svg>
+                                              <img src={AUDIO_THUMB_URL} alt="" />
                                             </button>
                                           );
                                         }

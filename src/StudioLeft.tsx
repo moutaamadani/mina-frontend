@@ -234,6 +234,8 @@ function roundUpTo5(sec: number) {
   return Math.max(5, Math.ceil(safe / 5) * 5);
 }
 
+const AUDIO_THUMB_URL = "https://assets.faltastudio.com/Website%20Assets/audio-mina-icon.gif";
+
 // ------------------------------------
 // Stable Collapse (keeps children mounted)
 // ------------------------------------
@@ -914,15 +916,51 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const MOTION_COST = hasRefMedia ? roundUpTo5(refSeconds) : MOTION_COST_BASE;
 
-  const computedMotionCostLabel = hasFrame2Video
-    ? `${Math.ceil((refSeconds || 5) / 5)}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`
-    : hasFrame2Audio
-    ? `${Math.ceil((refSeconds || 5) / 5)}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`
-    : `${motionDurationSec === 10 ? "10s" : "5s"} = ${MOTION_COST} matchas`;
+  const computedMotionCostLabel = (() => {
+    const blocks = Math.ceil((refSeconds || 5) / 5);
+    if (hasFrame2Video) {
+      if (blocks <= 1) return `5s = 5 matchas (${Math.round(refSeconds || 5)}s video)`;
+      return `${blocks}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
+    }
+    if (hasFrame2Audio) {
+      if (blocks <= 1) return `5s = 5 matchas (${Math.round(refSeconds || 5)}s audio)`;
+      return `${blocks}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
+    }
+    return `${motionDurationSec === 10 ? "10s" : "5s"} = ${MOTION_COST} matchas`;
+  })();
 
   const motionCostLabel = motionCostLabelProp ?? computedMotionCostLabel;
 
   const briefLen = brief.trim().length;
+
+  const hoverAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  const playHoverAudio = (url: string) => {
+    if (!url) return;
+    const cache = hoverAudioRef.current;
+    let audio = cache.get(url);
+    if (!audio) {
+      audio = new Audio(url);
+      audio.loop = true;
+      cache.set(url, audio);
+    }
+    try {
+      audio.currentTime = 0;
+    } catch {}
+    const p = audio.play();
+    if (p && typeof (p as Promise<void>).catch === "function") {
+      (p as Promise<void>).catch(() => {});
+    }
+  };
+
+  const stopHoverAudio = (url: string) => {
+    const audio = hoverAudioRef.current.get(url);
+    if (!audio) return;
+    audio.pause();
+    try {
+      audio.currentTime = 0;
+    } catch {}
+  };
 
   // pills delay style
   const pillBaseStyle = (index: number): React.CSSProperties => ({
@@ -1841,10 +1879,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <Collapse open={showPanels && (effectivePanel === "product" || activePanel === null)} delayMs={panelRevealDelayMs}>
                 <div className="studio-panel">
                   <div className="studio-panel-title">Add frames, video or sound</div>
-                  <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-                    Frame 1: image • Frame 2 (optional): image (mute) or video ≤30s or audio ≤60s
-                    <div style={{ marginTop: 6, fontWeight: 700 }}>{motionCostLabel}</div>
-                  </div>
 
                   <div className="studio-panel-row">
                     <div className="studio-thumbs studio-thumbs--inline" onDragOver={handleDragOver} onDrop={handleDropOnPanel("product")}>
@@ -1863,7 +1897,65 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                           onClick={() => handleThumbClick("product", it.id)}
                           title="Drag to reorder • Click to delete"
                         >
-                          {getDisplayUrl(it) ? <img src={getDisplayUrl(it)} alt="" draggable={false} /> : it.uploading ? <span className="studio-thumb-spinner" aria-hidden="true" /> : null}
+                          {(() => {
+                            const previewUrl = it.remoteUrl || it.url || "";
+                            const kind = inferMediaTypeFromItem(it) || "image";
+
+                            if (kind === "video" && previewUrl) {
+                              return (
+                                <video
+                                  src={previewUrl}
+                                  preload="metadata"
+                                  playsInline
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onLoadedData={(e) => {
+                                    try {
+                                      const v = e.currentTarget;
+                                      v.currentTime = 0;
+                                      v.pause();
+                                    } catch {}
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    const v = e.currentTarget;
+                                    try {
+                                      v.muted = false;
+                                      v.currentTime = 0;
+                                    } catch {}
+                                    const p = v.play();
+                                    if (p && typeof (p as Promise<void>).catch === "function") {
+                                      (p as Promise<void>).catch(() => {});
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    const v = e.currentTarget;
+                                    v.pause();
+                                    try {
+                                      v.currentTime = 0;
+                                    } catch {}
+                                  }}
+                                />
+                              );
+                            }
+
+                            if (kind === "audio" && previewUrl) {
+                              return (
+                                <img
+                                  src={AUDIO_THUMB_URL}
+                                  alt=""
+                                  draggable={false}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onMouseEnter={() => playHoverAudio(previewUrl)}
+                                  onMouseLeave={() => stopHoverAudio(previewUrl)}
+                                />
+                              );
+                            }
+
+                            return getDisplayUrl(it) ? (
+                              <img src={getDisplayUrl(it)} alt="" draggable={false} />
+                            ) : it.uploading ? (
+                              <span className="studio-thumb-spinner" aria-hidden="true" />
+                            ) : null;
+                          })()}
                         </button>
                       ))}
 
