@@ -45,8 +45,14 @@ export default function SceneLibraryModal({
   const envRaw = (import.meta as any)?.env?.VITE_SCENE_LIBRARY_JSON;
 
   const FALLBACK =
-    "1,Fostered glass bottle,https://assets.faltastudio.com/mma/still/12656216-f4ae-44a2-8416-e9b98875f024.png,editorial;balck;gradient;luxury;blur;soft|" +
-    "2,Perfume bottle 1,https://assets.faltastudio.com/mma/still/88a1569d-0e9f-486e-b664-ac4d3cc8dce0.png,editorial;warm;beige;muted tone;luxury;calm;perfume;soft";
+  "1,Frosted glass vessel with amber liquid,https://assets.faltastudio.com/mma/still/12656216-f4ae-44a2-8416-e9b98875f024.png,editorial;frosted glass;glass sculpture;amber liquid;macro;still life;luxury;soft light;minimal;industry perfumery;industry luxury;background black;gradient|" +
+  "2,Amouage perfume with red anthurium,https://assets.faltastudio.com/mma/still/88a1569d-0e9f-486e-b664-ac4d3cc8dce0.png,editorial;perfume;amouage;jubilation 40;anthurium;red flower;still life;luxury;warm light;muted tone;industry perfumery;industry beauty;background beige|" +
+  "3,Ceramic bow cuff bracelet still life,https://assets.faltastudio.com/mma/still/53005a7d-7e05-41e5-9bab-bae2498a3af7.png,editorial;ceramic;bow;bracelet;cuff;jewelry;sculpture;still life;minimal;handmade;industry fashion;industry accessories;background blue|" +
+  "4,Hermes leather mushroom pouch,https://assets.faltastudio.com/mma/still/6ba951cb-457f-4276-832f-b3f9e58e39ef.png,editorial;hermes;leather;pouch;zipper;accessories;luxury;product shot;industry fashion;industry luxury;background blue;dark gradient|" +
+  "5,Influencer lifestyle bedroom iPhone photo,https://assets.faltastudio.com/mma/still/268f50ef-5633-4a08-b325-9d1c80d07d91.png,lifestyle;influencer;iphone photo;bedroom;woman;dog;home interior;natural light;ugc;social media;industry lifestyle;industry fashion;background beige|" +
+  "6,Perfume bottle wrapped by green snake,https://assets.faltastudio.com/mma/still/22f2c4b7-60dd-4e9b-a622-6f3530d16af1.png,editorial;perfume;fragrance;snake;green snake;still life;glass bottle;dark luxury;surreal;industry perfumery;industry beauty;background red|" +
+  "7,Red loafers with eggplants and glazed donut,https://assets.faltastudio.com/mma/still/da8e364c-950c-47fb-87ea-9ffe191c8699.png,fashion;still life;shoes;loafers;red shoes;eggplant;aubergine;donut;food styling;editorial;industry fashion;industry luxury;background beige|" +
+  "8,Blonde model wearing gold jewelry,https://assets.faltastudio.com/mma/still/22d25022-90b5-4584-8b20-76d1af650691.png,portrait;model;blonde;gold jewelry;gold earrings;gold necklace;beauty;fashion;luxury;industry fashion;industry beauty;background olive green";
 
   const raw = String(envRaw || "").trim() || FALLBACK;
   return parseSceneLibraryEnv(raw);
