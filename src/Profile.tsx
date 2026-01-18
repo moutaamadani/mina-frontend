@@ -634,7 +634,7 @@ export default function Profile({
   const [expandedPromptIds, setExpandedPromptIds] = useState<Record<string, boolean>>({});
 
   const SCENE_PROMPT =
-    "Replace my product in the scene, keep my scene setup the same, composition tone, aesthetic, highlights and vibe style.";
+    "Replace my product in the scene, keep my scene, composition, tone, aesthetic, highlights, and vibe style exactly the same";
 
   // Pagination
   const [visibleCount, setVisibleCount] = useState(36);
