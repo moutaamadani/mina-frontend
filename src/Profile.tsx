@@ -519,6 +519,36 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
       ""
   ).trim();
 
+  const motionDurationSec = (() => {
+    const raw =
+      varsInputs?.motion_duration_sec ||
+      varsInputs?.motionDurationSec ||
+      varsInputs?.duration_sec ||
+      varsInputs?.durationSec ||
+      varsMeta?.motion_duration_sec ||
+      varsMeta?.motionDurationSec ||
+      null;
+
+    const n = Number(raw);
+    if (n === 10) return 10 as const;
+    if (n === 5) return 5 as const;
+    return undefined;
+  })();
+
+  const generateAudio = (() => {
+    const raw =
+      varsInputs?.generate_audio ??
+      varsInputs?.generateAudio ??
+      varsMeta?.generate_audio ??
+      varsMeta?.generateAudio ??
+      null;
+
+    if (typeof raw === "boolean") return raw;
+    if (raw === 1 || raw === "1" || raw === "true") return true;
+    if (raw === 0 || raw === "0" || raw === "false") return false;
+    return undefined;
+  })();
+
   const styleLabel = (movementStyle || stillLane || "").trim();
 
   const tone = String(
@@ -549,6 +579,8 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
     styleLabel,
     tone,
     platform,
+    motionDurationSec,
+    generateAudio,
   };
 }
 
@@ -559,6 +591,8 @@ type RecreateDraft = {
     aspect_ratio?: string;
     minaVisionEnabled?: boolean;
     stylePresetKeys?: string[];
+    motion_duration_sec?: 5 | 10;
+    generate_audio?: boolean;
   };
   assets: {
     productImageUrl?: string;
@@ -974,6 +1008,18 @@ export default function Profile({
                 aspect_ratio: inputs.aspectRatio || undefined,
                 minaVisionEnabled: inputs.minaVisionEnabled,
                 stylePresetKeys: inputs.stylePresetKeys.length ? inputs.stylePresetKeys : undefined,
+                ...(isMotion && inputs.motionDurationSec
+                  ? { motion_duration_sec: inputs.motionDurationSec }
+                  : {}),
+                ...(isMotion
+                  ? {
+                      generate_audio: inputs.endImageUrl
+                        ? false
+                        : typeof inputs.generateAudio === "boolean"
+                        ? inputs.generateAudio
+                        : undefined,
+                    }
+                  : {}),
               },
               assets: {
                 productImageUrl: inputs.productImageUrl || undefined,
