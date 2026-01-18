@@ -110,7 +110,7 @@ export default function SceneLibraryModal({
               </div>
             ) : (
               <div className="scene-lib-empty">
-                No scenes yet. Add items in <b>VITE_SCENE_LIBRARY_JSON</b>.
+                No scenes yet.
               </div>
             )}
           </div>
