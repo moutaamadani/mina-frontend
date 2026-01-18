@@ -3483,7 +3483,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
 
-      const baseBody = buildMmaMotionBody({
+      const klingBaseBody = buildMmaMotionBody({
         brief: usedMotionPrompt,
         uploadsProduct: uploads.product,
         motionDurationSec,
@@ -3491,18 +3491,19 @@ const styleHeroUrls = (stylePresetKeys || [])
         motionStyleKeys,
       });
 
-      const startFrame = String((baseBody.assets as any)?.kling_start_image_url || "").trim();
-      const endFrame = String((baseBody.assets as any)?.kling_end_image_url || "").trim();
+      const startFrame = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
+      const endFrame = String((klingBaseBody.assets as any)?.kling_end_image_url || "").trim();
 
-      const mmaBody = {
+      // ✅ Build your normal/default motion body first (your existing kling frames logic)
+      const baseBody = {
         passId: currentPassId,
-        mode: baseBody.mode,
         assets: {
-          ...baseBody.assets,
+          start_image_url: startFrame,
+          end_image_url: endFrame || "",
+          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
           inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
         },
         inputs: {
-          ...baseBody.inputs,
           motionDescription: usedMotionPrompt,
           prompt: usedMotionPrompt, // ✅ helps history/profile store it
           prompt_override: usedMotionPrompt,
@@ -3511,116 +3512,88 @@ const styleHeroUrls = (stylePresetKeys || [])
           platform: animateAspectOption.platformKey,
           aspect_ratio: animateAspectOption.ratio,
           duration: motionDurationSec,
+          generate_audio: effectiveMotionAudioEnabled,
 
-      // ✅ Case A: Frame2 is a reference VIDEO (image + video model)
-      if (hasFrame2Video && frame2Http) {
-        mmaBody = {
-          passId: currentPassId,
-          assets: {
-            image: startFrame,
-            video: frame2Http,
-          },
-          inputs: {
-            // enforce model defaults
-            mode: "pro",
-            character_orientation: "video",
-            keep_original_sound: true,
+          stylePresetKeys: stylePresetKeysForApi,
+          stylePresetKey: primaryStyleKeyForApi,
 
-            // required fields (send redundantly)
-            image: startFrame,
-            video: frame2Http,
+          minaVisionEnabled,
+        },
+        settings: {},
+        history: {
+          sessionId: sid || sessionId || null,
+          sessionTitle: sessionTitle || null,
+        },
+        feedback: {},
+        prompts: {},
+      };
 
-            // prompt is optional here
-            prompt: usedMotionPrompt || "",
+      // ✅ Now override the body ONLY when frame2 is video/audio
+      const mmaBody = (() => {
+        // Frame2 VIDEO => kwaivgi/kling-v2.6-motion-control (FULL = pro)
+        if (hasFrame2Video && frame2Http) {
+          return {
+            ...baseBody,
+            mode: "video",
+            assets: {
+              ...(baseBody as any).assets,
+              image: startFrame,
+              video: frame2Http,
+            },
+            inputs: {
+              ...(baseBody as any).inputs,
 
-            // billing hints (frontend-aligned)
-            duration_sec: Math.min(30, Math.max(3, Math.round(videoSec || 5))),
-            billing_blocks_5s: Math.ceil((videoSec || 5) / 5),
-            billing_cost_matchas: motionCost,
+              // routing keys (backend can pick any)
+              provider_model: "kwaivgi/kling-v2.6-motion-control",
+              model: "kwaivgi/kling-v2.6-motion-control",
+              replicate_model: "kwaivgi/kling-v2.6-motion-control",
 
-            stylePresetKeys: stylePresetKeysForApi,
-            stylePresetKey: primaryStyleKeyForApi,
-            minaVisionEnabled,
-          },
-          settings: {},
-          history: {
-            sessionId: sid || sessionId || null,
-            sessionTitle: sessionTitle || null,
-          },
-          feedback: {},
-          prompts: {},
-        };
-      }
+              // required by schema
+              image: startFrame,
+              video: frame2Http,
 
-      // ✅ Case B: Frame2 is AUDIO (image + audio model)
-      else if (hasFrame2Audio && frame2Http) {
-        mmaBody = {
-          passId: currentPassId,
-          assets: {
-            image: startFrame,
-            audio: frame2Http,
-          },
-          inputs: {
-            image: startFrame,
-            audio: frame2Http,
-            resolution: "720p",
-            prompt: usedMotionPrompt || "",
+              // FULL
+              mode: "pro",
+              character_orientation: "video",
+              keep_original_sound: true,
 
-            duration_sec: Math.min(60, Math.max(3, Math.round(audioSec || 5))),
-            billing_blocks_5s: Math.ceil((audioSec || 5) / 5),
-            billing_cost_matchas: motionCost,
+              // prompt optional
+              prompt: usedMotionPrompt || "",
+            },
+          };
+        }
 
-            stylePresetKeys: stylePresetKeysForApi,
-            stylePresetKey: primaryStyleKeyForApi,
-            minaVisionEnabled,
-          },
-          settings: {},
-          history: {
-            sessionId: sid || sessionId || null,
-            sessionTitle: sessionTitle || null,
-          },
-          feedback: {},
-          prompts: {},
-        };
-      }
+        // Frame2 AUDIO => veed/fabric-1.0
+        if (hasFrame2Audio && frame2Http) {
+          return {
+            ...baseBody,
+            mode: "video",
+            assets: {
+              ...(baseBody as any).assets,
+              image: startFrame,
+              audio: frame2Http,
+            },
+            inputs: {
+              ...(baseBody as any).inputs,
 
-      // ✅ Case C: existing behavior (1 image => v2.6 / 2 images => v2.1)
-      else {
-        mmaBody = {
-          passId: currentPassId,
-          assets: {
-            start_image_url: startFrame,
-            end_image_url: endFrame || "",
-            kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
-            inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
-          },
-          inputs: {
-            motionDescription: usedMotionPrompt,
-            prompt: usedMotionPrompt, // ✅ helps history/profile store it
-            prompt_override: usedMotionPrompt,
-            use_prompt_override: !!usedMotionPrompt,
-            tone,
-            platform: animateAspectOption.platformKey,
-            aspect_ratio: animateAspectOption.ratio,
-            duration: motionDurationSec,
-            generate_audio: effectiveMotionAudioEnabled,
+              provider_model: "veed/fabric-1.0",
+              model: "veed/fabric-1.0",
+              replicate_model: "veed/fabric-1.0",
 
-            stylePresetKeys: stylePresetKeysForApi,
-            stylePresetKey: primaryStyleKeyForApi,
+              image: startFrame,
+              audio: frame2Http,
 
-            minaVisionEnabled,
-          },
-          settings: {},
-          history: {
-            sessionId: sid || sessionId || null,
-            sessionTitle: sessionTitle || null,
-          },
-          feedback: {},
-          prompts: {},
-        };
-      }
+              resolution: "720p",
+              prompt: usedMotionPrompt || "",
+            },
+          };
+        }
 
-     const { generationId } = await mmaCreateAndWait(
+        // Default path (your existing kling 1img/2img behavior)
+        return baseBody;
+      })();
+
+      const { generationId } = await mmaCreateAndWait(
         "/mma/video/animate",
         mmaBody,
         ({ status, scanLines }) => {
