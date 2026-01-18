@@ -1666,7 +1666,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
           </div>
 
           {isMotion && motionCostLabel ? (
-            <div className="studio-motion-cost-label">{motionCostLabel}</div>
           ) : null}
 
           {/* Textarea */}
