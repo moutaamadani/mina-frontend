@@ -1346,7 +1346,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   {/* Style */}
                   <button
                     type="button"
-                    className={classNames("studio-pill", activePanel === "style" && "active", !styleThumb && "studio-pill--solo-plus")}
+                    className={classNames(
+                      "studio-pill",
+                      "studio-pill--moodboard",
+                      activePanel === "style" && "active",
+                      !styleThumb && "studio-pill--solo-plus"
+                    )}
                     style={pillBaseStyle(3)}
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
