@@ -1118,7 +1118,7 @@ const showControls = uiStage >= 3 || hasEverTyped;
       if (blocks <= 1) return `${cost} matchas (${shownSec}s audio)`;
       return `${blocks}×5s = ${cost} matchas (${shownSec}s audio)`;
     }
-    return `${motionDurationSec}s = ${motionCost} matchas`;
+    return `${motionCost} matchas (${motionDurationSec}s)`;
   })();
 
   const creditBalance = credits?.balance;
@@ -2830,6 +2830,72 @@ const showControls = uiStage >= 3 || hasEverTyped;
     return "image";
   }
 
+  function buildMmaMotionBody({
+    brief,
+    uploadsProduct,
+    motionDurationSec,
+    motionAudioEnabled,
+    motionStyleKeys,
+  }: {
+    brief: string;
+    uploadsProduct: Array<{
+      remoteUrl?: string;
+      url: string;
+      mediaType?: "image" | "video" | "audio";
+      durationSec?: number;
+    }>;
+    motionDurationSec: 5 | 10;
+    motionAudioEnabled: boolean;
+    motionStyleKeys?: string[];
+  }) {
+    const frame1 = uploadsProduct?.[0];
+    const frame2 = uploadsProduct?.[1];
+
+    const startUrl = String(frame1?.remoteUrl || "").trim();
+    if (!startUrl) throw new Error("Missing frame 1 image");
+
+    const frame2Url = String(frame2?.remoteUrl || "").trim();
+    const frame2Kind = (frame2?.mediaType || "image") as "image" | "video" | "audio";
+    const frame2DurationSec = Number(frame2?.durationSec || 0) || 0;
+
+    const inputs: any = {
+      // keep your existing brief key if different — but keep ONE user brief field
+      motion_user_brief: brief,
+
+      // keep existing motion controls for normal kling
+      motion_duration_sec: motionDurationSec,
+      generate_audio: motionAudioEnabled !== false,
+
+      // ✅ NEW canonical frame2 contract
+      frame2_kind: frame2 ? frame2Kind : null,
+      frame2_url: frame2 ? frame2Url : "",
+      frame2_duration_sec: frame2 ? frame2DurationSec : 0,
+
+      // optional
+      motion_style_keys: Array.isArray(motionStyleKeys) ? motionStyleKeys : [],
+    };
+
+    const assets: any = {
+      // ✅ always
+      kling_start_image_url: startUrl,
+    };
+
+    // Frame2 logic:
+    if (frame2 && frame2Kind === "image") {
+      assets.kling_end_image_url = frame2Url;
+      inputs.generate_audio = false; // mute lock for end frame
+    } else {
+      // video/audio => DO NOT set end image
+      delete assets.kling_end_image_url;
+    }
+
+    return {
+      mode: "video",
+      inputs,
+      assets,
+    };
+  }
+
   async function storeRemoteToR2(url: string, kind: string): Promise<string> {
     const res = await apiFetch("/api/r2/store-remote-signed", {
       method: "POST",
@@ -3388,13 +3454,6 @@ const styleHeroUrls = (stylePresetKeys || [])
       const sid = await ensureSession();
       const usedMotionPrompt = (motionFinalPrompt || motionTextTrimmed).trim();
 
-      const frame0 = uploads.product[0]?.remoteUrl || uploads.product[0]?.url || "";
-      const frame1 = uploads.product[1]?.remoteUrl || uploads.product[1]?.url || "";
-
-      const startFrame = isHttpUrl(frame0) ? frame0 : motionReferenceImageUrl;
-      const endFrame = isHttpUrl(frame1) ? frame1 : "";
-      const frame2Http = isHttpUrl(frame2Url) ? frame2Url : "";
-
       // ✅ include selected style preset hero urls + custom style heroUrls + user inspiration uploads (cap 4)
       const styleHeroUrls = (stylePresetKeys || [])
         .flatMap((k) => {
@@ -3424,7 +3483,34 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
 
-      let mmaBody: any = null;
+      const baseBody = buildMmaMotionBody({
+        brief: usedMotionPrompt,
+        uploadsProduct: uploads.product,
+        motionDurationSec,
+        motionAudioEnabled: effectiveMotionAudioEnabled,
+        motionStyleKeys,
+      });
+
+      const startFrame = String((baseBody.assets as any)?.kling_start_image_url || "").trim();
+      const endFrame = String((baseBody.assets as any)?.kling_end_image_url || "").trim();
+
+      const mmaBody = {
+        passId: currentPassId,
+        mode: baseBody.mode,
+        assets: {
+          ...baseBody.assets,
+          inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
+        },
+        inputs: {
+          ...baseBody.inputs,
+          motionDescription: usedMotionPrompt,
+          prompt: usedMotionPrompt, // ✅ helps history/profile store it
+          prompt_override: usedMotionPrompt,
+          use_prompt_override: !!usedMotionPrompt,
+          tone,
+          platform: animateAspectOption.platformKey,
+          aspect_ratio: animateAspectOption.ratio,
+          duration: motionDurationSec,
 
       // ✅ Case A: Frame2 is a reference VIDEO (image + video model)
       if (hasFrame2Video && frame2Http) {

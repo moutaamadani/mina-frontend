@@ -926,7 +926,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
       return `${blocks}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
     }
-    return `${motionDurationSec === 10 ? "10s" : "5s"} = ${MOTION_COST} matchas`;
+    return `${MOTION_COST} matchas (${motionDurationSec === 10 ? "10s" : "5s"})`;
   })();
 
   const motionCostLabel = motionCostLabelProp ?? computedMotionCostLabel;
