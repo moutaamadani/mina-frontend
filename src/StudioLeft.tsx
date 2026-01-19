@@ -902,15 +902,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     }
   }, [animateMode, uploads.product, moveUploadItem]);
 
-  // Any reference video/audio locks audio behavior (forced on)
-  const motionAudioLocked = hasRefMedia;
+  // Allow toggling audio; only mute when user selects Muted
+  const motionAudioLocked = false;
 
-  const effectiveMotionAudioEnabled = hasRefMedia ? true : motionAudioEnabled !== false;
+  const effectiveMotionAudioEnabled = motionAudioEnabled !== false;
 
-  const motionAudioLockHint = hasFrame2Video
-    ? "Reference video keeps sound"
-    : hasFrame2Audio
-    ? "Audio drives sound"
+  const motionAudioLockHint = hasFrame2Audio
+    ? "Toggle audio for reference audio"
+    : hasFrame2Video
+    ? "Toggle audio for reference video"
     : "Toggle audio";
 
   // ✅ Sync the toggle state one-time to match lock direction
@@ -924,15 +924,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     if (typeof onToggleMotionAudio !== "function") return;
 
-    // frame2 video/audio => must be ON
-    if (hasRefMedia && motionAudioEnabled === false) {
-      forcedAudioSyncRef.current = true;
-      onToggleMotionAudio();
-      return;
-    }
-
     forcedAudioSyncRef.current = true;
-  }, [motionAudioLocked, hasRefMedia, motionAudioEnabled, onToggleMotionAudio]);
+  }, [motionAudioLocked, onToggleMotionAudio]);
 
   // ✅ Motion cost (5s blocks when video/audio is used)
   const MOTION_COST_BASE = motionDurationSec === 10 ? 10 : 5;
