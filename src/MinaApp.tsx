@@ -3544,7 +3544,12 @@ const styleHeroUrls = (stylePresetKeys || [])
       const earlyErr = extractMmaErrorTextFromResult(result);
       if (earlyErr) throw result;
 
-      if (isTimeoutLikeStatus(status) || status === "queued" || status === "processing") {
+      if (
+        isTimeoutLikeStatus(status) ||
+        status === "queued" ||
+        status === "prompting" ||
+        status === "processing"
+      ) {
         showMinaInfo("Still generating in the background — open Profile and refresh in a minute.");
         stopAllMmaUiNow();
         return;
@@ -3552,7 +3557,19 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const rawUrl = pickMmaImageUrl(result);
       const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
-      if (!url) throw new Error("That was too complicated for niche mode, try main.");
+      if (!url) {
+        if (
+          status === "prompting" ||
+          status === "generating" ||
+          status === "queued" ||
+          status === "processing"
+        ) {
+          showMinaInfo("Still generating in the background — open Profile and refresh in a minute.");
+          stopAllMmaUiNow();
+          return;
+        }
+        throw new Error("That was too complicated for niche mode, try main.");
+      }
 
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
