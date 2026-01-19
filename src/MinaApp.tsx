@@ -3161,6 +3161,10 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
         const maxSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MAX_SEC : FABRIC_AUDIO_MAX_SEC;
         const minSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MIN_SEC : FABRIC_AUDIO_MIN_SEC;
         const d = await getMediaDurationSec(previewUrl, mediaType === "video" ? "video" : "audio");
+        // ✅ store duration immediately (used for pricing + sending)
+        if (typeof d === "number" && d > 0) {
+          patchUploadItem(panel, id, { durationSec: d, mediaType });
+        }
         if (typeof d === "number" && (d > maxSec || d < minSec)) {
           setMinaOverrideText(
             mediaType === "video" ? UI_ERROR_MESSAGES.videoTooLong : UI_ERROR_MESSAGES.audioTooLong
@@ -3265,7 +3269,19 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
         }
       }
 
-      patchUploadItem(panel, id, { remoteUrl, uploading: false, error: undefined, durationSec, mediaType });
+      const patch: Partial<UploadItem> = {
+        remoteUrl,
+        uploading: false,
+        error: undefined,
+        mediaType,
+      };
+
+      // ✅ IMPORTANT: don't erase an already-known duration with undefined
+      if (typeof durationSec === "number" && durationSec > 0) {
+        patch.durationSec = durationSec;
+      }
+
+      patchUploadItem(panel, id, patch);
     } catch {
       showUploadNotice(panel, UI_ERROR_MESSAGES.uploadFailed);
       removeUploadItem(panel, id);
@@ -3782,6 +3798,9 @@ const styleHeroUrls = (stylePresetKeys || [])
               replicate_model: "kwaivgi/kling-v2.6-motion-control",
 
               // required by schema
+              frame2_kind: "video",
+              frame2_url: frame2Http,
+              frame2_duration_sec: Math.round(videoSec || 0),
               image: startFrameForModel,
               video: frame2Http,
 
@@ -3789,7 +3808,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               mode: "pro",
               character_orientation: "video",
               // ✅ match the ref-video length (3–30s)
-              duration: Math.min(30, Math.max(3, Math.round(videoSec || 5))),
+              duration: Math.min(30, Math.max(3, roundUpTo5(videoSec || 5))),
 
               // ✅ keep ref video sound, don't generate new
               generate_audio: false,
