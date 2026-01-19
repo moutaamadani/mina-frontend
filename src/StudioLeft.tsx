@@ -745,6 +745,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     (e: React.PointerEvent<HTMLButtonElement>) => {
       if (e.button !== 0) return; // left click only
       if ((uploads[panel]?.length || 0) < 2) return;
+      // ✅ Animate mode: allow reorder ONLY for image+image (block if video/audio exists)
+      if (animateMode && panel === "product") {
+        const list = uploads.product || [];
+        const hasRef = list.some((it) => {
+          const k = inferMediaTypeFromItem(it);
+          return k === "video" || k === "audio";
+        });
+        if (hasRef) return;
+      }
 
       suppressClickRef.current = false;
 
@@ -768,6 +777,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const onThumbPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     const st = reorderRef.current;
     if (!st || st.pointerId !== e.pointerId) return;
+    // ✅ Animate mode: block reorder moves if video/audio is present
+    if (animateMode && st.panel === "product") {
+      const list = uploads.product || [];
+      const hasRef = list.some((it) => {
+        const k = inferMediaTypeFromItem(it);
+        return k === "video" || k === "audio";
+      });
+      if (hasRef) return;
+    }
 
     const dx = e.clientX - st.startX;
     const dy = e.clientY - st.startY;
@@ -869,6 +887,23 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const hasFrame2Video = hasFrame2 && frame2Kind === "video";
   const hasFrame2Audio = hasFrame2 && frame2Kind === "audio";
   const hasRefMedia = hasFrame2Video || hasFrame2Audio;
+
+  // ✅ Auto-fix ordering in Animate mode:
+  // If user uploads video/audio first, move image to Frame 1 automatically.
+  useEffect(() => {
+    if (!animateMode) return;
+
+    const list = uploads.product || [];
+    if (list.length !== 2) return;
+
+    const k0 = inferMediaTypeFromItem(list[0]);
+    const k1 = inferMediaTypeFromItem(list[1]);
+
+    // If first is video/audio and second is image -> swap so image becomes Frame 1
+    if ((k0 === "video" || k0 === "audio") && k1 === "image") {
+      moveUploadItem("product", 1, 0);
+    }
+  }, [animateMode, uploads.product, moveUploadItem]);
 
   // Any second reference locks audio behavior (but lock direction depends on type)
   const motionAudioLocked = hasFrame2;
@@ -1556,7 +1591,44 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     }}
                     onMouseEnter={() => openPanel("product")}
                   >
-                    {renderPillIcon(productThumb, "+", true)}
+                    {(() => {
+                      // ✅ If Frame 1 was deleted and only Frame 2 remains:
+                      // - audio => show GIF thumbnail
+                      // - video => show autoplay mini-video thumbnail
+                      const list = uploads.product || [];
+
+                      if (isMotion && list.length === 1) {
+                        const it = list[0];
+                        const kind = inferMediaTypeFromItem(it);
+                        const u = String(it.remoteUrl || it.url || "").trim();
+
+                        if (kind === "audio") {
+                          return renderPillIcon(AUDIO_THUMB_URL, "+", true);
+                        }
+
+                        if (kind === "video" && u) {
+                          return (
+                            <span
+                              className={classNames("studio-pill-icon", "studio-pill-icon-thumb")}
+                              aria-hidden="true"
+                            >
+                              <video
+                                src={u}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                preload="metadata"
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                              />
+                            </span>
+                          );
+                        }
+                      }
+
+                      // Default: normal image thumbnail or plus
+                      return renderPillIcon(productThumb, "+", true);
+                    })()}
                     <span className="studio-pill-main">Frames</span>
                   </button>
 
