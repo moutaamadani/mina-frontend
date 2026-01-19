@@ -3727,9 +3727,9 @@ const styleHeroUrls = (stylePresetKeys || [])
       const baseBody = {
         passId: currentPassId,
         assets: {
-          start_image_url: startFrame,
+          start_image_url: startFrameForModel,
           end_image_url: endFrame || "",
-          kling_image_urls: endFrame ? [startFrame, endFrame] : [startFrame],
+          kling_image_urls: endFrame ? [startFrameForModel, endFrame] : [startFrameForModel],
           inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
         },
         inputs: {
@@ -3770,7 +3770,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             mode: "video",
             assets: {
               ...(baseBody as any).assets,
-              image: startFrame,
+              image: startFrameForModel,
               video: frame2Http,
             },
             inputs: {
@@ -3782,7 +3782,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               replicate_model: "kwaivgi/kling-v2.6-motion-control",
 
               // required by schema
-              image: startFrame,
+              image: startFrameForModel,
               video: frame2Http,
 
               // FULL
@@ -3811,7 +3811,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             mode: "video",
             assets: {
               ...(baseBody as any).assets,
-              image: startFrame,
+              image: startFrameForModel,
               audio: frame2Http,
             },
             inputs: {
@@ -3821,8 +3821,9 @@ const styleHeroUrls = (stylePresetKeys || [])
               model: "veed/fabric-1.0",
               replicate_model: "veed/fabric-1.0",
 
-              image: startFrame,
+              image: startFrameForModel,
               audio: frame2Http,
+              generate_audio: false,
 
               duration: Math.min(FABRIC_AUDIO_MAX_SEC, Math.max(1, Math.round(audioSec || 5))),
               resolution: "720p",
@@ -3885,7 +3886,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           brief: usedMotionPrompt, // ✅ Re-create uses this
           used_prompt: String(result?.prompt || "").trim() || undefined, // optional debug
           assets: {
-            start_image_url: startFrame,
+            start_image_url: startFrameForModel,
             end_image_url: endFrame || "",
             inspiration_image_urls: inspirationUrls,
           },
