@@ -2681,7 +2681,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const format = kind === "logo" ? "png" : "jpeg";
 
       // IMPORTANT: fit=scale-down prevents upscaling; onerror=redirect falls back to origin image
-      const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+      const opts = `width=1080,fit=scale-down,quality=80,format=${format},onerror=redirect`;
 
       // keep query if you rely on cache-busting (?v=…)
       return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
@@ -2890,6 +2890,18 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     try {
       const h = new URL(url).hostname.toLowerCase();
       return h === ASSETS_HOST || h.endsWith(`.${ASSETS_HOST}`);
+    } catch {
+      return false;
+    }
+  }
+
+  function isMinaGeneratedAssetsUrl(url: string) {
+    try {
+      const u = new URL(stripSignedQuery(String(url || "")));
+      if (!isAssetsUrl(u.toString())) return false;
+      // Mina-generated outputs live under /mma/...
+      if (u.pathname.includes("/mma/")) return true;
+      return false;
     } catch {
       return false;
     }
@@ -3294,14 +3306,25 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       // quick sanity: does the link load as media?
       const kind = inferMediaTypeFromUrl(url) || "image";
-      const ok = await probeMediaUrl(url, kind, 7000);
+
+      // ✅ default behavior: store 1080/80 for assets urls (faster + smaller R2)
+      // ✅ exception: Animate mode + product panel + Mina-generated (/mma/...) => keep FULL
+      const shouldKeepFull =
+        animateMode && panel === "product" && kind === "image" && isMinaGeneratedAssetsUrl(url);
+
+      const urlForStore =
+        !shouldKeepFull && kind === "image" && isAssetsUrl(url)
+          ? await ensureOptimizedInputUrl(url, panel)
+          : url;
+
+      const ok = await probeMediaUrl(urlForStore, kind, 7000);
       if (!ok) {
         showUploadNotice(panel, humanizeUploadError("link_broken"));
         removeUploadItem(panel, id);
         return;
       }
 
-      const remoteUrl = await storeRemoteToR2(url, panel);
+      const remoteUrl = await storeRemoteToR2(urlForStore, panel);
 
       // verify stored URL too
       const kind2 = inferMediaTypeFromUrl(remoteUrl) || kind;
@@ -3371,10 +3394,16 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const sid = await ensureSession();
 
       const productItem = uploads.product[0];
-      const productUrl = productItem?.remoteUrl || productItem?.url || "";
+      const productUrlRaw = productItem?.remoteUrl || productItem?.url || "";
 
       const logoItem = uploads.logo[0];
-      const logoUrl = logoItem?.remoteUrl || logoItem?.url || "";
+      const logoUrlRaw = logoItem?.remoteUrl || logoItem?.url || "";
+
+      // ✅ normal still rule: send optimized 1080/80 when possible
+      const productUrl = isHttpUrl(productUrlRaw)
+        ? await ensureOptimizedInputUrl(productUrlRaw, "product")
+        : "";
+      const logoUrl = isHttpUrl(logoUrlRaw) ? await ensureOptimizedInputUrl(logoUrlRaw, "logo") : "";
 
         // ✅ include selected style preset hero urls + custom style heroUrls + user inspiration uploads
 const styleHeroUrls = (stylePresetKeys || [])
@@ -3409,13 +3438,19 @@ const styleHeroUrls = (stylePresetKeys || [])
       // final list sent to backend (cap to 4)
       const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
 
+      const inspirationUrlsOptimized = await Promise.all(
+        inspirationUrls.map((u) =>
+          isHttpUrl(u) ? ensureOptimizedInputUrl(u, "inspiration") : Promise.resolve(u)
+        )
+      );
+
 
       const mmaBody = {
         passId: currentPassId,
         assets: {
           product_image_url: isHttpUrl(productUrl) ? productUrl : "",
           logo_image_url: isHttpUrl(logoUrl) ? logoUrl : "",
-          inspiration_image_urls: inspirationUrls,
+          inspiration_image_urls: inspirationUrlsOptimized,
         },
         inputs: {
           brief: trimmed,
@@ -3734,18 +3769,33 @@ const styleHeroUrls = (stylePresetKeys || [])
       const startFrameRaw = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
       const endFrame = String((klingBaseBody.assets as any)?.kling_end_image_url || "").trim();
 
-      // ✅ When using reference VIDEO/AUDIO, enforce Frame1 "reference image" spec
-      const startFrameForModel =
-        (hasFrame2Video || hasFrame2Audio) ? await ensureMotionFrame1SpecUrl(startFrameRaw) : startFrameRaw;
+      const startIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(startFrameRaw);
+      const endIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(endFrame);
 
+      let startFrameForModel = startFrameRaw;
+
+      // ✅ Animate rule: if Mina-generated => FULL (no resize)
+      if (!startIsMinaGenerated) {
+        // ✅ ref video/audio needs motion spec (2048)
+        if (hasFrame2Video || hasFrame2Audio) {
+          startFrameForModel = await ensureMotionFrame1SpecUrl(startFrameRaw);
+        } else {
+          // ✅ normal motion rule: 1080/80 for speed
+          startFrameForModel = await ensureOptimizedInputUrl(startFrameRaw, "product");
+        }
+      }
+
+      // Optional: if you want end frame optimized too (2-image motion) unless Mina-generated:
+      const endFrameForModel =
+        endFrame && !endIsMinaGenerated ? await ensureOptimizedInputUrl(endFrame, "product") : endFrame;
 
       // ✅ Build your normal/default motion body first (your existing kling frames logic)
       const baseBody = {
         passId: currentPassId,
         assets: {
           start_image_url: startFrameForModel,
-          end_image_url: endFrame || "",
-          kling_image_urls: endFrame ? [startFrameForModel, endFrame] : [startFrameForModel],
+          end_image_url: endFrameForModel || "",
+          kling_image_urls: endFrameForModel ? [startFrameForModel, endFrameForModel] : [startFrameForModel],
           inspiration_image_urls: inspirationUrls, // ✅ keeps recreate consistent
         },
         inputs: {
