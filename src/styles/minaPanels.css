@@ -275,12 +275,7 @@
 
 .studio-header-overlay.header-on-light .studio-header-cta {
   color: var(--mina-ink) !important;
-  text-shadow: 0 0px 0 rgba(252, 250, 244, 0.55) !important;
-}
-
-.studio-header-overlay.header-on-dark .studio-header-cta {
-  color: var(--mina-paper) !important;
-  text-shadow: 0 0px 0 rgba(8, 10, 0, 0.35) !important;
+  text-shadow: none !important;
 }
 
 .studio-header-cta:hover { opacity: 0.92 !important; }
@@ -568,4 +563,3 @@
 .mina-matcha-modal .mina-matcha-close {
   text-decoration: none !important;
 }
-
