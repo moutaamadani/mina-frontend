@@ -3780,21 +3780,14 @@ const styleHeroUrls = (stylePresetKeys || [])
       const startFrameRaw = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
       const endFrame = String((klingBaseBody.assets as any)?.kling_end_image_url || "").trim();
 
-      const startIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(startFrameRaw);
       const endIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(endFrame);
 
-      let startFrameForModel = startFrameRaw;
-
-      // ✅ Animate rule: if Mina-generated => FULL (no resize)
-      if (!startIsMinaGenerated) {
-        // ✅ ref video/audio needs motion spec (2048)
-        if (hasFrame2Video || hasFrame2Audio) {
-          startFrameForModel = await ensureMotionFrame1SpecUrl(startFrameRaw);
-        } else {
-          // ✅ normal motion rule: 1080/80 for speed
-          startFrameForModel = await ensureOptimizedInputUrl(startFrameRaw, "product");
-        }
-      }
+      // ✅ Rule:
+      // - ONLY video ref uses optimized (1080px, q=85)
+      // - 1img / 2img / audio ref => FULL
+      const startFrameForModel = hasFrame2Video
+        ? await ensureOptimizedInputUrl(startFrameRaw, "product")
+        : startFrameRaw;
 
       // Optional: if you want end frame optimized too (2-image motion) unless Mina-generated:
       const endFrameForModel =
