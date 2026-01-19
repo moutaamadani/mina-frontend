@@ -2754,6 +2754,63 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     }, 300);
   }
 
+  // ============================================================================
+  // Motion Frame 1 "Reference image" pre-send normalization (NO reupload)
+  // Spec target: jpg/jpeg/png, <=10MB, 340px–3850px, aspect 1:2.5..2.5:1
+  // We enforce: JPEG + scale-down width (safe) via Cloudflare image resizing.
+  // ============================================================================
+  const MOTION_FRAME1_SEND_WIDTH = 2048; // good quality, safely under 10MB usually
+  const motionFrame1OptCacheRef = useRef<Map<string, string>>(new Map());
+
+  function buildCdnMotionFrame1Url(rawUrl: string): string {
+    const clean = stripSignedQuery(String(rawUrl || "").trim());
+    if (!clean || !isHttpUrl(clean)) return "";
+
+    // only transform OUR CDN host
+    if (!isAssetsUrl(clean)) return clean;
+
+    try {
+      const u = new URL(clean);
+
+      // already transformed
+      if (u.pathname.startsWith("/cdn-cgi/image/")) return u.toString();
+
+      // force jpeg for max compatibility with motion models
+      const opts = `width=${MOTION_FRAME1_SEND_WIDTH},fit=scale-down,quality=85,format=jpeg,onerror=redirect`;
+
+      return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
+    } catch {
+      return clean;
+    }
+  }
+
+  async function ensureMotionFrame1SpecUrl(rawUrl: string): Promise<string> {
+    const clean = stripSignedQuery(String(rawUrl || "").trim());
+    if (!clean || !isHttpUrl(clean)) return "";
+
+    const cached = motionFrame1OptCacheRef.current.get(clean);
+    if (cached) return cached;
+
+    // non-assets → no transform
+    if (!isAssetsUrl(clean)) {
+      motionFrame1OptCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    const optimized = buildCdnMotionFrame1Url(clean);
+    if (!optimized || optimized === clean) {
+      motionFrame1OptCacheRef.current.set(clean, clean);
+      return clean;
+    }
+
+    // probe once (fast) to ensure CF resize works
+    const ok = await probeMediaUrl(optimized, "image", 3500);
+    const finalUrl = ok ? optimized : clean;
+
+    motionFrame1OptCacheRef.current.set(clean, finalUrl);
+    return finalUrl;
+  }
+
   // ========================================================================
   // R2 helpers
   // ========================================================================
@@ -3658,8 +3715,13 @@ const styleHeroUrls = (stylePresetKeys || [])
         motionStyleKeys,
       });
 
-      const startFrame = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
+      const startFrameRaw = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
       const endFrame = String((klingBaseBody.assets as any)?.kling_end_image_url || "").trim();
+
+      // ✅ When using reference VIDEO/AUDIO, enforce Frame1 "reference image" spec
+      const startFrameForModel =
+        (hasFrame2Video || hasFrame2Audio) ? await ensureMotionFrame1SpecUrl(startFrameRaw) : startFrameRaw;
+
 
       // ✅ Build your normal/default motion body first (your existing kling frames logic)
       const baseBody = {
