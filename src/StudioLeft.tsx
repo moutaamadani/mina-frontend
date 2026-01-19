@@ -1189,6 +1189,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const createState: CreateState = isMotion ? motionCreateState : imageCreateState;
   const canCreateStill = imageCreateState === "ready";
+  const isCtaReady = createState === "ready";
 
   const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
 
