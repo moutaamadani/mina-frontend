@@ -21,6 +21,7 @@ export const UI_ERROR_MESSAGES = {
   audioTooLong: "audios max 60s please",
   videoTooLongNotice: "Videos max 30s please.",
   audioTooLongNotice: "Audios max 60s please.",
+  sensitiveFlagged: "That request was flagged as sensitive. Please change your input and try again.",
 } as const;
 
 export type UploadErrorReason = "unsupported" | "too_big" | "broken" | "link_broken";
@@ -127,6 +128,11 @@ export function humanizeMmaError(err: MmaErrorLike): string {
   if (!raw) return "I couldn't make it. Please try again.";
 
   const s = raw.toLowerCase();
+
+  // Safety / policy blocks (E005)
+  if (s.includes("e005") || s.includes("flagged as sensitive")) {
+    return UI_ERROR_MESSAGES.sensitiveFlagged;
+  }
 
   // Credits
   if (s.includes("insufficient_credits")) return "I need more matchas to do that.";
