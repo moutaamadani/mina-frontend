@@ -1585,6 +1585,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       await new Promise<void>((resolve) => {
         let finished = false;
+        let pollTimer: number | null = null;
 
         const isFinalStatus = (s: any) => {
           const st = String(s || "").toLowerCase().trim();
@@ -1612,12 +1613,32 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
           if (finished) return;
           finished = true;
           window.clearTimeout(hardTimeout);
+          if (pollTimer) window.clearTimeout(pollTimer);
           cleanup();
           resolve();
         };
 
         // ✅ Safety: never block forever waiting for SSE
         const hardTimeout = window.setTimeout(finish, 45_000);
+
+        const pollOnce = async () => {
+          if (finished) return;
+          try {
+            const snap = await mmaFetchResult(String(generationId));
+            const nextStatus = String(snap?.status || "").trim();
+            if (nextStatus) status = nextStatus;
+            onProgress?.({ status, scanLines: [...scanLines] });
+            if (isFinalStatus(status)) {
+              finish();
+              return;
+            }
+          } catch {}
+
+          if (!finished) pollTimer = window.setTimeout(pollOnce, 1500);
+        };
+
+        // ✅ Backstop: poll status so we don't hang on a silent SSE stream
+        pollTimer = window.setTimeout(pollOnce, 1200);
 
         es.onmessage = (ev: MessageEvent) => {
           try {
@@ -1691,6 +1712,9 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
           // ✅ don’t block forever if SSE drops
           window.setTimeout(finish, 900);
         };
+
+        // ✅ If initial status is already terminal, resolve immediately.
+        if (isFinalStatus(status)) finish();
       });
 
       return { generationId: String(generationId) };
