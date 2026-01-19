@@ -1070,16 +1070,11 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   const hasFrame2Video = animateMode && frame2Kind === "video" && isHttpUrl(frame2Url);
   const hasFrame2Audio = animateMode && frame2Kind === "audio" && isHttpUrl(frame2Url);
 
-  // v2.1 ref-video => forced keep original sound
-  // ref-audio => forced sound on (audio drives the video)
-  const motionAudioLocked = hasFrame2Video || hasFrame2Audio;
+  // allow toggling audio; only mute when user selects Muted
+  const motionAudioLocked = false;
 
-  const effectiveMotionAudioEnabled = motionAudioLocked ? true : motionAudioEnabled;
+  const effectiveMotionAudioEnabled = motionAudioEnabled !== false;
 
-  useEffect(() => {
-    // if forced on
-    if ((hasFrame2Video || hasFrame2Audio) && !motionAudioEnabled) setMotionAudioEnabled(true);
-  }, [hasFrame2Video, hasFrame2Audio, motionAudioEnabled]);
 
   const personalityThinking = useMemo(
   () => (adminConfig.ai?.personality?.thinking?.length ? adminConfig.ai.personality.thinking : []),
@@ -3909,8 +3904,8 @@ const styleHeroUrls = (stylePresetKeys || [])
               // ✅ match the ref-video length (3–30s)
               duration: Math.min(30, Math.max(3, roundUpTo5(videoSec || 5))),
 
-              // ✅ keep ref video sound, don't generate new
-              generate_audio: false,
+              // ✅ generate audio unless user muted; always keep original ref sound
+              generate_audio: effectiveMotionAudioEnabled,
               keep_original_sound: true,
 
               motion_control: true,
