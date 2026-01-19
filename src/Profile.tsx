@@ -1799,7 +1799,7 @@ const openPrompt = useCallback((id: string) => {
                                     </button>
                                   ) : null}
 
-                                  {canRecreateBtn ? (
+                                   {canRecreateBtn ? (
                                     <button
                                       type="button"
                                       className="profile-card-show profile-card-recreate"
@@ -1811,6 +1811,7 @@ const openPrompt = useCallback((id: string) => {
                                     >
                                       Re-create
                                     </button>
+                                  ) : null}
 
 
                                 </span>
