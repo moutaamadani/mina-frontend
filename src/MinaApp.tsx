@@ -3597,6 +3597,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setStillError(msg);
       showMinaError(msg);
     } finally {
+      setMinaOverrideText(null);
       setStillGenerating(false);
     }
   };
@@ -3731,6 +3732,7 @@ const styleHeroUrls = (stylePresetKeys || [])
     } catch (e) {
       console.error("type-for-me failed:", e);
     } finally {
+      setMinaOverrideText(null);
       setMotionSuggesting(false);
     }
   }, [
@@ -4021,6 +4023,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setMotionError(msg);
       showMinaError(msg);
     } finally {
+      setMinaOverrideText(null);
       setMotionGenerating(false);
     }
   };
@@ -4273,6 +4276,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         stopAllMmaUiNow();
         setFeedbackError(humanizeMmaError(err));
       } finally {
+        setMinaOverrideText(null);
         setFeedbackSending(false);
       }
     },
