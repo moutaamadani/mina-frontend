@@ -53,6 +53,10 @@ const API_BASE_URL = (() => {
 
 const LIKE_STORAGE_KEY = "minaLikedMap";
 const RECREATE_DRAFT_KEY = "mina_recreate_draft_v1";
+const MOTION_FRAME2_VIDEO_MIN_SEC = 0;
+const MOTION_FRAME2_VIDEO_MAX_SEC = 30;
+const FABRIC_AUDIO_MIN_SEC = 0;
+const FABRIC_AUDIO_MAX_SEC = 60;
 // ============================================================================
 // [PART 1 END]
 // ============================================================================
@@ -2982,9 +2986,10 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
         }
 
         // validate duration early from blob preview
-        const maxSec = mediaType === "video" ? 30 : 60;
+        const maxSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MAX_SEC : FABRIC_AUDIO_MAX_SEC;
+        const minSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MIN_SEC : FABRIC_AUDIO_MIN_SEC;
         const d = await getMediaDurationSec(previewUrl, mediaType === "video" ? "video" : "audio");
-        if (typeof d === "number" && d > maxSec) {
+        if (typeof d === "number" && (d > maxSec || d < minSec)) {
           setMinaOverrideText(
             mediaType === "video" ? UI_ERROR_MESSAGES.videoTooLong : UI_ERROR_MESSAGES.audioTooLong
           );
@@ -3068,8 +3073,9 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
         const d = await getMediaDurationSec(remoteUrl, mediaType === "video" ? "video" : "audio");
         if (typeof d === "number" && d > 0) durationSec = d;
 
-        const maxSec = mediaType === "video" ? 30 : 60;
-        if (typeof d === "number" && d > maxSec) {
+        const maxSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MAX_SEC : FABRIC_AUDIO_MAX_SEC;
+        const minSec = mediaType === "video" ? MOTION_FRAME2_VIDEO_MIN_SEC : FABRIC_AUDIO_MIN_SEC;
+        if (typeof d === "number" && (d > maxSec || d < minSec)) {
           setMinaOverrideText(
             mediaType === "video" ? UI_ERROR_MESSAGES.videoTooLong : UI_ERROR_MESSAGES.audioTooLong
           );
@@ -3116,11 +3122,12 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       let durationSec: number | undefined = undefined;
 
       if (panel === "product" && animateMode && (kind2 === "video" || kind2 === "audio")) {
-        const maxSec = kind2 === "video" ? 30 : 60;
+        const maxSec = kind2 === "video" ? MOTION_FRAME2_VIDEO_MAX_SEC : FABRIC_AUDIO_MAX_SEC;
+        const minSec = kind2 === "video" ? MOTION_FRAME2_VIDEO_MIN_SEC : FABRIC_AUDIO_MIN_SEC;
         const d = await getMediaDurationSec(remoteUrl, kind2 === "video" ? "video" : "audio");
         if (typeof d === "number" && d > 0) durationSec = d;
 
-        if (typeof d === "number" && d > maxSec) {
+        if (typeof d === "number" && (d > maxSec || d < minSec)) {
           setMinaOverrideText(
             kind2 === "video" ? UI_ERROR_MESSAGES.videoTooLong : UI_ERROR_MESSAGES.audioTooLong
           );
