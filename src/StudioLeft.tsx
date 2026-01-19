@@ -444,6 +444,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     minaMessage,
     minaTalking,
+    minaTone,
+    onDismissMinaNotice,
     minaError,
     onClearMinaError,
 
@@ -1687,7 +1689,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 }
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
-                onFocus={() => onClearMinaError?.()}
+                onFocus={() => onDismissMinaNotice?.()}
                 rows={4}
                 onPaste={(e) => {
                   const text = e.clipboardData?.getData("text/plain") || "";
@@ -1718,8 +1720,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       overlayIsError && "is-error"
                     )}
                     onClick={() => {
-                      if (!overlayIsError) return;
-                      onClearMinaError?.();
+                      onDismissMinaNotice?.();
                       requestAnimationFrame(() => briefInputRef.current?.focus());
                     }}
                     aria-hidden="true"
