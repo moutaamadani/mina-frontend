@@ -1189,7 +1189,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   const createState: CreateState = isMotion ? motionCreateState : imageCreateState;
   const canCreateStill = imageCreateState === "ready";
-  const isCtaReady = createState === "ready";
 
   const wantsMatcha = (!isMotion && !imageCreditsOk) || (isMotion && !motionCreditsOk);
 
@@ -1298,15 +1297,13 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     openPanel("style");
   };
 
-  const minaThinkingVisible = minaTalking && !isCtaReady;
-
   return (
     <div
       className={classNames(
         "studio-left",
         globalDragging && "drag-active",
         typingHidden && "is-typing-hidden",
-        minaThinkingVisible && "is-thinking"
+        minaTalking && "is-thinking"
       )}
       style={timingVars}
     >      
@@ -1785,7 +1782,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 const hasError = !!(minaError && minaError.trim());
                 const isInfo = !hasError && minaTone === "info";
 
-                const overlayText = hasError ? minaError! : minaThinkingVisible ? minaMessage || "" : "";
+                const overlayText = hasError ? minaError! : minaTalking ? minaMessage || "" : "";
                 const overlayVisible = !!overlayText;
 
                 return (
