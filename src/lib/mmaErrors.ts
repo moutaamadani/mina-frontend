@@ -61,14 +61,35 @@ function lower(v: any): string {
 export function extractMmaErrorTextFromResult(result: any): string {
   if (!result) return "";
 
-  const direct = result?.error ?? result?.mg_error ?? result?.mma_vars?.error ?? result?.mmaVars?.error;
-  if (typeof direct === "string") return direct.trim();
+  const direct =
+    result?.error ??
+    result?.mg_error ??
+    result?.mma_vars?.error ??
+    result?.mmaVars?.error ??
+    result?.mma_vars?.mg_error ??
+    result?.mmaVars?.mg_error;
+
+  // If backend sends { mg_error: { code, message, provider } }
   if (direct && typeof direct === "object") {
     const code = safeStr(direct.code || direct.error || direct.name, "");
     const msg = safeStr(direct.message || direct.detail || direct.reason, "");
-    if (code && msg) return `${code}: ${msg}`;
-    return code || msg || "";
+
+    // ✅ try provider error/logs (Replicate)
+    const p = direct.provider || direct?.meta?.provider || null;
+    const pErr =
+      safeStr(p?.error, "") ||
+      safeStr(p?.detail, "") ||
+      safeStr(p?.message, "") ||
+      safeStr(p?.logs, "");
+
+    // Prefer the *real* provider error when available
+    const best = pErr || msg;
+
+    if (code && best) return `${code}: ${best}`;
+    return code || best || "";
   }
+
+  if (typeof direct === "string") return direct.trim();
 
   // Sometimes status is error but error field is missing
   const st = lower(result?.status || result?.mg_status || result?.mg_mma_status);
@@ -125,11 +146,19 @@ export function humanizeMmaError(err: MmaErrorLike): string {
     s.includes("no complete upper body") ||
     (s.includes("upper body") && (s.includes("detected") || s.includes("ensure")))
   ) {
-    return "This motion model needs a clear HUMAN upper-body photo (head + shoulders + torso). Try a different image or switch to a non-motion-control video engine for objects.";
+    return "This animation needs a clear photo of a person (upper body visible). Try a different image.";
   }
 
   if (s.includes("image recognition failed")) {
-    return "That image can’t be used for this motion model. Try a clearer image (well-lit, centered), or use a human upper-body photo.";
+    return "That image can’t be animated with this setting. Try a clearer image or a different one.";
+  }
+
+  if (s.includes("image size is too large") || (s.includes("image") && s.includes("too large"))) {
+    return "That image is too large. Try a smaller image.";
+  }
+
+  if (s.includes("code 1201") || (s.includes("duration") && s.includes("must not exceed 10 seconds"))) {
+    return "That reference clip is too long. Use a 10s (or shorter) video.";
   }
 
   // Generic “no URL” / pipeline failure → your preferred user-friendly text
