@@ -275,12 +275,12 @@
 
 .studio-header-overlay.header-on-light .studio-header-cta {
   color: var(--mina-ink) !important;
-  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.2) !important;
+  text-shadow: 0 0px 0 rgba(252, 250, 244, 0.55) !important;
 }
 
 .studio-header-overlay.header-on-dark .studio-header-cta {
   color: var(--mina-paper) !important;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.22) !important;
+  text-shadow: 0 0px 0 rgba(8, 10, 0, 0.35) !important;
 }
 
 .studio-header-cta:hover { opacity: 0.92 !important; }
@@ -568,3 +568,4 @@
 .mina-matcha-modal .mina-matcha-close {
   text-decoration: none !important;
 }
+
