@@ -1616,8 +1616,8 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
           resolve();
         };
 
-        // ✅ Safety: never block forever waiting for SSE
-        const hardTimeout = window.setTimeout(finish, 45_000);
+        // ✅ Safety: never block forever waiting for SSE (20 minutes)
+        const hardTimeout = window.setTimeout(finish, 1_200_000);
 
         es.onmessage = (ev: MessageEvent) => {
           try {
@@ -1980,7 +1980,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     opts?: { timeoutMs?: number; intervalMs?: number; refreshEveryMs?: number },
     onTick?: (snapshot: any) => void
   ): Promise<MmaGenerationResponse> {
-    const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 600_000)); // 10 minutes
+    const timeoutMs = Math.max(5_000, Number(opts?.timeoutMs ?? 1_200_000)); // 20 minutes
     const intervalMs = Math.max(400, Number(opts?.intervalMs ?? 900));
 
     const started = Date.now();
@@ -3531,20 +3531,21 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       );
 
-      const result = await mmaWaitForFinal(
-        generationId,
-        { timeoutMs: 120_000 },
-        (snap) => {
-          const errText = extractMmaErrorTextFromResult(snap);
-          if (errText) showMinaError(snap);
-        }
-      );
+      const result = await mmaWaitForFinal(generationId, undefined, (snap) => {
+        const errText = extractMmaErrorTextFromResult(snap);
+        if (errText) showMinaError(snap);
+      });
 
       const status = String(result?.status || "").toLowerCase().trim();
       const earlyErr = extractMmaErrorTextFromResult(result);
       if (earlyErr) throw result;
 
-      if (isTimeoutLikeStatus(status) || status === "queued" || status === "processing") {
+      if (
+        isTimeoutLikeStatus(status) ||
+        status === "queued" ||
+        status === "prompting" ||
+        status === "processing"
+      ) {
         showMinaInfo("Still generating in the background — open Profile and refresh in a minute.");
         stopAllMmaUiNow();
         return;
@@ -3552,7 +3553,19 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const rawUrl = pickMmaImageUrl(result);
       const url = rawUrl ? await ensureAssetsUrl(rawUrl, "generations") : "";
-      if (!url) throw new Error("That was too complicated for niche mode, try main.");
+      if (!url) {
+        if (
+          status === "prompting" ||
+          status === "generating" ||
+          status === "queued" ||
+          status === "processing"
+        ) {
+          showMinaInfo("Still generating in the background — open Profile and refresh in a minute.");
+          stopAllMmaUiNow();
+          return;
+        }
+        throw new Error("That was too complicated for niche mode, try main.");
+      }
 
       historyDirtyRef.current = true;
       creditsDirtyRef.current = true;
@@ -3959,14 +3972,10 @@ const styleHeroUrls = (stylePresetKeys || [])
       );
 
 
-      const result = await mmaWaitForFinal(
-        generationId,
-        { timeoutMs: 120_000 },
-        (snap) => {
-          const errText = extractMmaErrorTextFromResult(snap);
-          if (errText) showMinaError(snap);
-        }
-      );
+      const result = await mmaWaitForFinal(generationId, undefined, (snap) => {
+        const errText = extractMmaErrorTextFromResult(snap);
+        if (errText) showMinaError(snap);
+      });
 
       const status = String(result?.status || "").toLowerCase().trim();
       const earlyErr = extractMmaErrorTextFromResult(result);
