@@ -1799,7 +1799,19 @@ const openPrompt = useCallback((id: string) => {
                                     </button>
                                   ) : null}
 
-                                  {null}
+                                  {canRecreateBtn ? (
+                                    <button
+                                      type="button"
+                                      className="profile-card-show profile-card-recreate"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onRecreate?.(it.draft!);
+                                        onBackToStudio?.();
+                                      }}
+                                    >
+                                      Re-create
+                                    </button>
+
 
                                 </span>
                               </div>
