@@ -1229,6 +1229,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     return !canCreateStill || !imageCreditsOk;
   })();
 
+  const isCtaActive = !createDisabled;
   const handleCreateClick = () => {
     if (createState === "ready") {
       if (isMotion) onCreateMotion?.();
@@ -1297,13 +1298,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     openPanel("style");
   };
 
+  const minaThinkingVisible = minaTalking && !isCtaActive;
+
   return (
     <div
       className={classNames(
         "studio-left",
         globalDragging && "drag-active",
         typingHidden && "is-typing-hidden",
-        minaTalking && "is-thinking"
+        minaThinkingVisible && "is-thinking"
       )}
       style={timingVars}
     >      
@@ -1782,7 +1785,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 const hasError = !!(minaError && minaError.trim());
                 const isInfo = !hasError && minaTone === "info";
 
-                const overlayText = hasError ? minaError! : minaTalking ? minaMessage || "" : "";
+                const overlayText = hasError ? minaError! : minaThinkingVisible ? minaMessage || "" : "";
                 const overlayVisible = !!overlayText;
 
                 return (
