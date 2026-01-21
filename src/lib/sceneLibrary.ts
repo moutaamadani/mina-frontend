@@ -16,9 +16,8 @@ export const FALLBACK_SCENE_LIBRARY_RAW =
   "5,Influencer lifestyle bedroom iPhone photo,https://assets.faltastudio.com/mma/still/268f50ef-5633-4a08-b325-9d1c80d07d91.png,lifestyle;influencer;iphone photo;bedroom;woman;dog;home interior;natural light;ugc;social media;industry lifestyle;industry fashion;background beige|" +
   "6,Perfume bottle wrapped by green snake,https://assets.faltastudio.com/mma/still/22f2c4b7-60dd-4e9b-a622-6f3530d16af1.png,editorial;perfume;fragrance;snake;green snake;still life;glass bottle;dark luxury;surreal;industry perfumery;industry beauty;background red|" +
   "7,Red loafers with eggplants and glazed donut,https://assets.faltastudio.com/mma/still/da8e364c-950c-47fb-87ea-9ffe191c8699.png,fashion;still life;shoes;loafers;red shoes;eggplant;aubergine;donut;food styling;editorial;industry fashion;industry luxury;background beige|" +
-  "8,Bather soothing body cleanser tube,https://assets.faltastudio.com/mma/still/dedf0568-e47b-4beb-a2b9-53b76667db98.png,editorial;body cleanser;skincare;cosmetics;tube;black packaging;minimal;product shot;still life;luxury;soft light;studio lighting;industry beauty;industry skincare;background navy blue;blue;gradient;background beige;cream";
+  "8,Bather soothing body cleanser tube,https://assets.faltastudio.com/mma/still/dedf0568-e47b-4beb-a2b9-53b76667db98.png,editorial;body cleanser;skincare;cosmetics;tube;black packaging;minimal;product shot;still life;luxury;soft light;studio lighting;industry beauty;industry skincare;background navy blue;blue;gradient;background beige;cream|" +
   "9,Editorial portrait with gold jewelry,https://assets.faltastudio.com/mma/still/22d25022-90b5-4584-8b20-76d1af650691.png,editorial;portrait;beauty;fashion;model;woman;slick hair;blonde;gold jewelry;earrings;necklace;chain;charms;luxury;soft light;muted tones;close-up;studio portrait;industry fashion;industry jewelry;industry beauty;background olive green;background green;gradient";
-
 
 function clean(s: any) {
   let t = String(s ?? "").trim();
