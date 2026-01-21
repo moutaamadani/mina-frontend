@@ -1988,23 +1988,26 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       const st = String(last?.status || "").toLowerCase().trim();
 
-      if (
+      const isTerminalError =
+        st === "error" || st === "failed" || st === "cancelled" || st === "canceled";
+      if (isTerminalError) return last;
+
+      const isTerminalSuccess =
         st === "done" ||
-        st === "error" ||
-        st === "failed" ||
         st === "succeeded" ||
         st === "success" ||
         st === "completed" ||
-        st === "cancelled" ||
-        st === "canceled" ||
-        st === "suggested"
-      ) {
-        return last;
-      }
+        st === "suggested";
 
       // If a URL exists, treat it as finished even if status lags
       const hasMedia = !!pickMmaImageUrl(last) || !!pickMmaVideoUrl(last);
       if (hasMedia) return last;
+
+      // If status says "done" but there's no media yet, keep polling until timeout.
+      if (isTerminalSuccess) {
+        await sleep(intervalMs);
+        continue;
+      }
 
       await sleep(intervalMs);
     }
