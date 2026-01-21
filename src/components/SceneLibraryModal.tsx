@@ -1,6 +1,10 @@
 import React, { useMemo, useState } from "react";
 import "./SceneLibraryModal.css";
-import { parseSceneLibraryEnv, SceneLibraryItem } from "../lib/sceneLibrary";
+import {
+  parseSceneLibraryEnv,
+  SceneLibraryItem,
+  getSceneLibraryRawFromViteEnv,
+} from "../lib/sceneLibrary";
 
 function cfThumb(url: string, width = 700, quality = 75) {
   if (!url) return url;
@@ -42,24 +46,9 @@ export default function SceneLibraryModal({
   const [hoverId, setHoverId] = useState<string>("");
 
   const items: SceneLibraryItem[] = useMemo(() => {
-  const envRaw = (import.meta as any)?.env?.VITE_SCENE_LIBRARY_JSON;
-
-  // ✅ Hard fallback (used only if env is missing/empty)
-  const FALLBACK_SCENE_LIBRARY_RAW =
-    "1,Frosted glass vessel with amber liquid,https://assets.faltastudio.com/mma/still/12656216-f4ae-44a2-8416-e9b98875f024.png,editorial;frosted glass;glass sculpture;amber liquid;macro;still life;luxury;soft light;minimal;industry perfumery;industry luxury;background black;gradient|" +
-    "2,Amouage perfume with red anthurium,https://assets.faltastudio.com/mma/still/88a1569d-0e9f-486e-b664-ac4d3cc8dce0.png,editorial;perfume;amouage;jubilation 40;anthurium;red flower;still life;luxury;warm light;muted tone;industry perfumery;industry beauty;background beige|" +
-    "3,Ceramic bow cuff bracelet still life,https://assets.faltastudio.com/mma/still/53005a7d-7e05-41e5-9bab-bae2498a3af7.png,editorial;ceramic;bow;bracelet;cuff;jewelry;sculpture;still life;minimal;handmade;industry fashion;industry accessories;background blue|" +
-    "4,Hermes leather mushroom pouch,https://assets.faltastudio.com/mma/still/6ba951cb-457f-4276-832f-b3f9e58e39ef.png,editorial;hermes;leather;pouch;zipper;accessories;luxury;product shot;industry fashion;industry luxury;background blue;dark gradient|" +
-    "5,Influencer lifestyle bedroom iPhone photo,https://assets.faltastudio.com/mma/still/268f50ef-5633-4a08-b325-9d1c80d07d91.png,lifestyle;influencer;iphone photo;bedroom;woman;dog;home interior;natural light;ugc;social media;industry lifestyle;industry fashion;background beige|" +
-    "6,Perfume bottle wrapped by green snake,https://assets.faltastudio.com/mma/still/22f2c4b7-60dd-4e9b-a622-6f3530d16af1.png,editorial;perfume;fragrance;snake;green snake;still life;glass bottle;dark luxury;surreal;industry perfumery;industry beauty;background red|" +
-    "7,Red loafers with eggplants and glazed donut,https://assets.faltastudio.com/mma/still/da8e364c-950c-47fb-87ea-9ffe191c8699.png,fashion;still life;shoes;loafers;red shoes;eggplant;aubergine;donut;food styling;editorial;industry fashion;industry luxury;background beige|" +
-    "8,Bather soothing body cleanser tube,https://assets.faltastudio.com/mma/still/dedf0568-e47b-4beb-a2b9-53b76667db98.png,editorial;body cleanser;skincare;cosmetics;tube;black packaging;minimal;product shot;still life;luxury;soft light;studio lighting;industry beauty;industry skincare;background navy blue;blue;gradient;background beige;cream";
-    "9,Editorial portrait with gold jewelry,https://assets.faltastudio.com/mma/still/22d25022-90b5-4584-8b20-76d1af650691.png,editorial;portrait;beauty;fashion;model;woman;slick hair;blonde;gold jewelry;earrings;necklace;chain;charms;luxury;soft light;muted tones;close-up;studio portrait;industry fashion;industry jewelry;industry beauty;background olive green;background green;gradient";
-
-  const raw = String(envRaw || "").trim() || FALLBACK_SCENE_LIBRARY_RAW;
-  return parseSceneLibraryEnv(raw);
-}, []);
-
+    const raw = getSceneLibraryRawFromViteEnv();
+    return parseSceneLibraryEnv(raw);
+  }, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -79,7 +68,12 @@ export default function SceneLibraryModal({
   if (!open) return null;
 
   return (
-    <div className="scene-lib-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+    <div
+      className="scene-lib-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+    >
       <div className="scene-lib-modal" onClick={(e) => e.stopPropagation()}>
         <div className="scene-lib-head">
           <div className="scene-lib-title">Commercial-friendly Library</div>
@@ -118,7 +112,11 @@ export default function SceneLibraryModal({
                         onClose();
                       }}
                     >
-                      <img src={cfThumb(it.url, 800, 75)} alt="" draggable={false} />
+                      <img
+                        src={cfThumb(it.url, 800, 75)}
+                        alt=""
+                        draggable={false}
+                      />
                     </div>
 
                     <div className="scene-lib-meta">
@@ -138,9 +136,7 @@ export default function SceneLibraryModal({
                 ))}
               </div>
             ) : (
-              <div className="scene-lib-empty">
-                No scenes yet.
-              </div>
+              <div className="scene-lib-empty">No scenes yet.</div>
             )}
           </div>
 
