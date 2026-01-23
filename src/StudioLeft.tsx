@@ -192,7 +192,7 @@ function cfInput1080(url: string, kind: "product" | "logo" = "product") {
   if (u.includes("/cdn-cgi/image/")) return u;
 
   const format = kind === "logo" ? "png" : "jpeg"; // logo keep alpha, scenes/product => jpeg
-  const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+  const opts = `width=1080,fit=scale-down,quality=85,format=${format}`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
 }
