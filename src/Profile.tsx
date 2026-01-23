@@ -56,7 +56,7 @@ function cfInput1080(url: string, kind: "product" | "logo" | "style" = "product"
 
   // logo may need alpha => keep png, others => jpeg
   const format = kind === "logo" ? "png" : "jpeg";
-  const opts = `width=1080,fit=scale-down,quality=85,format=${format},onerror=redirect`;
+  const opts = `width=1080,fit=scale-down,quality=85,format=${format}`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
 }
