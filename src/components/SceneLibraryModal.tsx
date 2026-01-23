@@ -12,7 +12,7 @@ function cfThumb(url: string, width = 700, quality = 75) {
   if (url.includes("/cdn-cgi/image/")) return url;
 
   // ✅ Force jpeg so we never get AVIF from format=auto
-  const opts = `width=${width},fit=cover,quality=${quality},format=jpeg,onerror=redirect`;
+  const opts = `width=${width},fit=cover,quality=${quality},format=jpeg`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${url.replace(
     "https://assets.faltastudio.com/",
@@ -25,7 +25,7 @@ function cfInput1080(url: string) {
   if (!url.includes("assets.faltastudio.com/")) return url;
   if (url.includes("/cdn-cgi/image/")) return url;
 
-  const opts = `width=1080,fit=scale-down,quality=85,format=jpeg,onerror=redirect`;
+  const opts = `width=1080,fit=scale-down,quality=85,format=jpeg`;
 
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${url.replace(
     "https://assets.faltastudio.com/",
