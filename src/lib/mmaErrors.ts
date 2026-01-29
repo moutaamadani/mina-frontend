@@ -144,7 +144,7 @@ export function humanizeMmaError(err: MmaErrorLike): string {
 
   // Timeouts / background-running
   if (s.includes("timeout") || s.includes("still generating") || s.includes("in background")) {
-    return "It’s still generating in the background — open Profile and refresh in a minute.";
+    return "Large images, please upload smaller version.";
   }
 
   // Kling motion-control “upper body” hard requirement (your screenshot)
