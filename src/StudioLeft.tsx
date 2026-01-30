@@ -1898,7 +1898,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                         </button>
                       ))}
 
-                      {uploads.inspiration.length < 4 && (
+                      {uploads.inspiration.length < 8 && (
                         <button type="button" className="studio-plusbox studio-plusbox--inline" onClick={() => triggerPick("inspiration")} title="Add image">
                           <span aria-hidden="true">+</span>
                         </button>
