@@ -3475,7 +3475,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         .filter((u) => isHttpUrl(u));
 
       // final list sent to backend (cap to 4)
-      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
+      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 8);
 
       const inspirationUrlsOptimized = await Promise.all(
         inspirationUrls.map((u) =>
@@ -3810,7 +3810,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         .map((u) => u.remoteUrl || u.url)
         .filter((u) => isHttpUrl(u));
 
-      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 4);
+      const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 8);
 
       const klingBaseBody = buildMmaMotionBody({
         brief: usedMotionPrompt,
@@ -4461,7 +4461,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
 
   const capForPanel = (panel: UploadPanelKey) => {
-    if (panel === "inspiration") return 4;
+    if (panel === "inspiration") return 8;
     if (panel === "product") return animateMode ? 2 : 1;
     return 1;
   };
