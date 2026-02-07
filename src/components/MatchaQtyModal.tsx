@@ -46,7 +46,7 @@ const MatchaQtyModal: React.FC<Props> = ({
   onConfirm,
 
   subtitle = "Mina uses matchas to create and animate your images.",
-  rulesLine = `1 Image = 1 Matcha – 5s Animation = 5 Matchas`,
+  rulesLine = `1 Image = 1 or 2 Matchas – 5s Animation = 5 Matchas`,
 
   baseCredits = 50,
   basePrice = 15,
@@ -123,15 +123,20 @@ const MatchaQtyModal: React.FC<Props> = ({
 
   // ✅ Click anywhere on bar -> snap to nearest node
   const onBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = barRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const ratio = Math.max(0, Math.min(1, x / rect.width));
-    const idx = Math.round(ratio * (packList.length - 1));
-    const next = packList[Math.max(0, Math.min(packList.length - 1, idx))]?.units;
-    if (next != null) setQty(next);
-  };
+  // If the user clicked a node button, don't also run bar snapping
+  const target = e.target as HTMLElement;
+  if (target.closest("button")) return;
+
+  const el = barRef.current;
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const ratio = Math.max(0, Math.min(1, x / rect.width));
+  const idx = Math.round(ratio * (packList.length - 1));
+  const next = packList[Math.max(0, Math.min(packList.length - 1, idx))]?.units;
+  if (next != null) setQty(next);
+};
+
 
   return (
     <div className="mina-modal-backdrop" onClick={onClose}>
@@ -201,7 +206,11 @@ const MatchaQtyModal: React.FC<Props> = ({
                     type="button"
                     className={`mina-matcha-node ${on ? "is-on" : ""}`}
                     style={{ left: `${leftPct}%` }}
-                    onClick={() => setQty(p.units)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation(); // IMPORTANT: don't let the bar click snap override this
+                      setQty(p.units);
+                    }}
                     aria-label={`${creditsFor(p.units)} Matchas`}
                   >
                     <span className="mina-matcha-dot" aria-hidden="true" />
