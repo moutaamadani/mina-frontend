@@ -997,7 +997,7 @@ export default function Profile({
   const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
   const [matchaQty, setMatchaQty] = useState(1);
 
-  const clampQty = (n: number) => Math.max(1, Math.min(10, Math.floor(Number(n || 1))));
+  const clampQty = (n: number) => Math.max(1, Math.min(20, Math.floor(Number(n || 1))));
 
   const buildMatchaCheckoutUrl = (base: string, qty: number) => {
     const q = clampQty(qty);
