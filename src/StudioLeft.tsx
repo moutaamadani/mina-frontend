@@ -636,7 +636,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
   const [matchaQty, setMatchaQty] = useState(1);
 
-  const clampQty = (n: number) => Math.max(1, Math.min(10, Math.floor(Number(n || 1))));
+  const clampQty = (n: number) => Math.max(1, Math.min(20, Math.floor(Number(n || 1))));
 
   // Build a Shopify URL that actually sets quantity (best effort).
   // Works best if matchaUrl is a cart permalink like:
