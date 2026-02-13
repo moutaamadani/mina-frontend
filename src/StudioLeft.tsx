@@ -171,8 +171,6 @@ type StudioLeftProps = {
 
   stillLane: "main" | "niche";
   onToggleStillLane: () => void;
-  stillResolution: "2k" | "4k";
-  onToggleStillResolution: () => void;
   stillLaneDisabled?: boolean;
 
   timingVars?: React.CSSProperties;
@@ -453,8 +451,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
     stillLane,
     onToggleStillLane,
-    stillResolution,
-    onToggleStillResolution,
     stillLaneDisabled,
 
     timingVars,
@@ -1538,32 +1534,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">{stillLane === "niche" ? "Niche" : "Main"}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "pill-infinite-toggle",
-                      "pill-resolution-toggle",
-                      stillLane === "main" && "is-locked"
-                    )}
-                    style={pillBaseStyle(5)}
-                    onClick={onToggleStillResolution}
-                    disabled={!!stillLaneDisabled || stillLane === "main"}
-                    aria-label="Toggle still resolution"
-                    title={
-                      stillLane === "main"
-                        ? "Main lane is always 4k"
-                        : "Toggle niche resolution"
-                    }
-                  >
-                    <span className="studio-pill-main">{stillResolution.toUpperCase()}</span>
-                  </button>
-
                   {/* Ratio */}
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(6)}
+                    style={pillBaseStyle(5)}
                     onPointerDown={onAspectPointerDown}
                     onPointerUp={clearAspectHold}
                     onPointerCancel={clearAspectHold}
