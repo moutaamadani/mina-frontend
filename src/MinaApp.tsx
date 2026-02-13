@@ -4118,8 +4118,18 @@ const styleHeroUrls = (stylePresetKeys || [])
 
 
         if (!isMotion) {
+          const parentAspectRaw = String(
+            currentStill?.aspectRatio ||
+              currentStill?.draft?.settings?.aspect_ratio ||
+              currentStill?.draft?.settings?.aspectRatio ||
+              ""
+          )
+            .trim()
+            .replace("/", ":");
+
+          const preferredStillAspect = parentAspectRaw || effectiveAspectRatio;
           const safeAspectRatio =
-            REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3";
+            REPLICATE_ASPECT_RATIO_MAP[preferredStillAspect] || preferredStillAspect || "2:3";
 
           const mmaBody = {
             passId: currentPassId,
@@ -4185,7 +4195,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             url,
             createdAt: new Date().toISOString(),
             prompt: tweakBrief, // ✅ user tweak brief
-            aspectRatio: currentAspect.ratio,
+            aspectRatio: safeAspectRatio,
             draft: {
               mode: "still",
               brief: tweakBrief,
@@ -4195,7 +4205,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                 inspiration_image_urls: insp,
               },
               settings: {
-                aspect_ratio: REPLICATE_ASPECT_RATIO_MAP[currentAspect.ratio] || currentAspect.ratio || "2:3",
+                aspect_ratio: safeAspectRatio,
                 stylePresetKeys: stylePresetKeys,
                 minaVisionEnabled,
               },
@@ -4320,9 +4330,11 @@ const styleHeroUrls = (stylePresetKeys || [])
       currentMotion?.url,
       currentStill?.id,
       currentStill?.url,
+      currentStill?.aspectRatio,
+      currentStill?.draft,
       stillBrief,
       brief,
-      currentAspect.ratio,
+      effectiveAspectRatio,
       currentAspect.platformKey,
       stylePresetKeysForApi,
       primaryStyleKeyForApi,
