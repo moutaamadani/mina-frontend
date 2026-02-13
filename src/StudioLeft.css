@@ -157,6 +157,10 @@ background-color 0s ease 0s,
 .pill-infinite-toggle.is-main {
 }
 
+.pill-resolution-toggle.is-locked {
+  opacity: 0.55;
+}
+
 .studio-pill.active,
 .studio-pill:hover {
   background: rgba(8, 10, 0, 0.05);

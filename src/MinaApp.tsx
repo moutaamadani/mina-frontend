@@ -232,7 +232,9 @@ type UploadPanelKey = "product" | "logo" | "inspiration";
 type AspectKey = "9-16" | "3-4" | "2-3" | "1-1";
 
 type StillLane = "main" | "niche";
+type StillResolution = "2k" | "4k";
 const STILL_LANE_LS_KEY = "mina_still_lane_v2";
+const STILL_RESOLUTION_LS_KEY = "mina_still_resolution_v1";
 
 type AspectOption = {
   key: AspectKey;
@@ -609,6 +611,33 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       // ignore
     }
   }, [stillLane]);
+
+  const [nicheStillResolution, setNicheStillResolution] = useState<StillResolution>(() => {
+    try {
+      const v =
+        (typeof window !== "undefined" &&
+          window.localStorage.getItem(STILL_RESOLUTION_LS_KEY)) ||
+        "";
+      return v === "2k" || v === "4k" ? v : "4k";
+    } catch {
+      return "4k";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(STILL_RESOLUTION_LS_KEY, nicheStillResolution);
+    } catch {
+      // ignore
+    }
+  }, [nicheStillResolution]);
+
+  const effectiveStillResolution: StillResolution =
+    stillLane === "main" ? "4k" : nicheStillResolution;
+
+  const toggleNicheStillResolution = useCallback(() => {
+    setNicheStillResolution((prev) => (prev === "4k" ? "2k" : "4k"));
+  }, []);
 
   const [, setPlatform] = useState("tiktok");
   const [aspectIndex, setAspectIndex] = useState(() => {
@@ -3502,6 +3531,8 @@ const styleHeroUrls = (stylePresetKeys || [])
           minaVisionEnabled,
           still_lane: stillLane,
           lane: stillLane,
+          still_resolution: effectiveStillResolution,
+          resolution: effectiveStillResolution,
         },
         settings: {},
         history: {
@@ -4113,6 +4144,8 @@ const styleHeroUrls = (stylePresetKeys || [])
               minaVisionEnabled,
               still_lane: stillLane,
               lane: stillLane,
+              still_resolution: effectiveStillResolution,
+              resolution: effectiveStillResolution,
             },
             settings: {},
             history: { sessionId: sid || sessionId || null, sessionTitle: sessionTitle || null },
@@ -5690,6 +5723,8 @@ const headerOverlayClass =
               onClearMinaError={clearMinaError}
               stillLane={stillLane}
               onToggleStillLane={toggleStillLane}
+              stillResolution={effectiveStillResolution}
+              onToggleStillResolution={toggleNicheStillResolution}
               stillLaneDisabled={minaBusy}
               onGoProfile={() => goTab("profile")}
             />
