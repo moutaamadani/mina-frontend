@@ -1094,36 +1094,37 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   // Matcha rules
   // - Still niche:    2
   // - Still main:     1
-  // - Motion:         5s => 5, 10s => 10
+  // - Motion(video):  5s => 10, 10s => 20
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
   const roundUpTo5 = (sec: number) => Math.max(5, Math.ceil(sec / 5) * 5);
+  const roundUpTo10Per5s = (sec: number) => Math.max(10, Math.ceil(sec / 5) * 10);
 
   const frame2Duration = Number(frame2Item?.durationSec || 0);
 
   const videoSec = hasFrame2Video ? Math.min(30, Math.max(0, frame2Duration || 0)) : 0;
   const audioSec = hasFrame2Audio ? Math.min(60, Math.max(0, frame2Duration || 0)) : 0;
 
-  const videoCost = hasFrame2Video ? roundUpTo5(videoSec || 5) : 0;
-  const audioCost = hasFrame2Audio ? roundUpTo5(audioSec || 5) : 0;
+  const videoCost = hasFrame2Video ? roundUpTo10Per5s(videoSec || 5) : 0;
+  const audioCost = hasFrame2Audio ? roundUpTo10Per5s(audioSec || 5) : 0;
 
   const motionCost =
-    hasFrame2Video ? videoCost : hasFrame2Audio ? audioCost : motionDurationSec === 10 ? 10 : 5;
+    hasFrame2Video ? videoCost : hasFrame2Audio ? audioCost : motionDurationSec === 10 ? 20 : 10;
 
   const motionCostLabel = (() => {
     if (hasFrame2Video) {
       const blocks = Math.ceil((videoSec || 5) / 5);
-      const cost = blocks * 5;
+      const cost = blocks * 10;
       const shownSec = Math.round(videoSec || 5);
       if (blocks <= 1) return `${cost} matchas (${shownSec}s video)`;
-      return `${blocks}×5s = ${cost} matchas (${shownSec}s video)`;
+      return `${blocks}×10 = ${cost} matchas (${shownSec}s video)`;
     }
     if (hasFrame2Audio) {
       const blocks = Math.ceil((audioSec || 5) / 5);
-      const cost = blocks * 5;
+      const cost = blocks * 10;
       const shownSec = Math.round(audioSec || 5);
       if (blocks <= 1) return `${cost} matchas (${shownSec}s audio)`;
-      return `${blocks}×5s = ${cost} matchas (${shownSec}s audio)`;
+      return `${blocks}×10 = ${cost} matchas (${shownSec}s audio)`;
     }
     return `${motionCost} matchas (${motionDurationSec}s)`;
   })();
