@@ -932,10 +932,17 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const MOTION_COST_BASE = motionDurationSec === 10 ? 20 : 10;
 
   const frame2DurationSec = Number((frame2Item as any)?.durationSec || 0);
-  const refSeconds = hasFrame2Video
+  const refSecondsRaw = hasFrame2Video
     ? Math.min(30, frame2DurationSec || 5)
     : hasFrame2Audio
     ? Math.min(60, frame2DurationSec || 5)
+    : 0;
+
+  // keep billing/UI stable for slight metadata decimals (e.g. 5.02s)
+  const refSeconds = hasRefMedia
+    ? hasFrame2Video
+      ? Math.min(30, Math.max(3, Math.round(refSecondsRaw || 5)))
+      : Math.min(60, Math.max(1, Math.round(refSecondsRaw || 5)))
     : 0;
 
   const MOTION_COST = hasRefMedia ? roundUpTo10Per5s(refSeconds) : MOTION_COST_BASE;
@@ -1647,7 +1654,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Toggle duration"}
                   >
                     <span className="studio-pill-main">
-                      {hasRefMedia ? `${MOTION_COST}s` : motionDurationSec === 10 ? "10s" : "5s"}
+                      {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : motionDurationSec === 10 ? "10s" : "5s"}
                     </span>
                   </button>
 
