@@ -1259,7 +1259,8 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
   const motionTextTrimmed = motionDescription.trim();
   const canCreateMotion =
-    (motionTextTrimmed.length > 0 || !!motionReferenceImageUrl || hasFrame2Video || hasFrame2Audio) &&
+    !!motionReferenceImageUrl &&
+    (motionTextTrimmed.length > 0 || hasFrame2Video || hasFrame2Audio) &&
     !motionSuggestTyping &&
     !motionSuggesting;
 
@@ -3777,7 +3778,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   ]);
 
   const handleGenerateMotion = async () => {
-    if (!API_BASE_URL) return;
+    if (!API_BASE_URL || !motionReferenceImageUrl) return;
     if (!motionTextTrimmed && !hasFrame2Video && !hasFrame2Audio) return;
 
     if (!currentPassId) {
@@ -3826,35 +3827,16 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const inspirationUrls = Array.from(new Set([...styleHeroUrls, ...userInspirationUrls])).slice(0, 8);
 
-      const frame1 = uploads.product?.[0];
-      const frame1Raw = String(frame1?.remoteUrl || frame1?.url || motionReferenceImageUrl || "").trim();
-      const hasStartFrame = isHttpUrl(frame1Raw);
-      const isPromptOnlyMotion = !hasStartFrame && !hasFrame2Video && !hasFrame2Audio;
+      const klingBaseBody = buildMmaMotionBody({
+        brief: usedMotionPrompt,
+        uploadsProduct: uploads.product,
+        motionDurationSec,
+        motionAudioEnabled: effectiveMotionAudioEnabled,
+        motionStyleKeys,
+      });
 
-      if (!hasStartFrame && !isPromptOnlyMotion) {
-        throw new Error("Missing frame 1 image");
-      }
-
-      const klingBaseBody = isPromptOnlyMotion
-        ? null
-        : buildMmaMotionBody({
-            brief: usedMotionPrompt,
-            uploadsProduct: [
-              {
-                ...(frame1 || {}),
-                remoteUrl: frame1Raw,
-                url: frame1Raw,
-                mediaType: "image",
-              },
-              ...(uploads.product?.slice(1) || []),
-            ],
-            motionDurationSec,
-            motionAudioEnabled: effectiveMotionAudioEnabled,
-            motionStyleKeys,
-          });
-
-      const startFrameRaw = String((klingBaseBody?.assets as any)?.kling_start_image_url || "").trim();
-      const endFrame = String((klingBaseBody?.assets as any)?.kling_end_image_url || "").trim();
+      const startFrameRaw = String((klingBaseBody.assets as any)?.kling_start_image_url || "").trim();
+      const endFrame = String((klingBaseBody.assets as any)?.kling_end_image_url || "").trim();
 
       const endIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(endFrame);
 
@@ -3908,35 +3890,6 @@ const styleHeroUrls = (stylePresetKeys || [])
       const __frame2Url = String(__frame2Item?.remoteUrl || __frame2Item?.url || "").trim();
       const frame2Http = isHttpUrl(__frame2Url) ? __frame2Url : "";
       const mmaBody = (() => {
-        if (isPromptOnlyMotion) {
-          return {
-            passId: currentPassId,
-            mode: "video",
-            assets: {
-              inspiration_image_urls: inspirationUrls,
-            },
-            inputs: {
-              motionDescription: usedMotionPrompt,
-              prompt: usedMotionPrompt,
-              tone,
-              platform: animateAspectOption.platformKey,
-              aspect_ratio: animateEffectiveAspectRatio,
-              duration: motionDurationSec,
-              generate_audio: effectiveMotionAudioEnabled,
-              stylePresetKeys: stylePresetKeysForApi,
-              stylePresetKey: primaryStyleKeyForApi,
-              minaVisionEnabled,
-            },
-            settings: {},
-            history: {
-              sessionId: sid || sessionId || null,
-              sessionTitle: sessionTitle || null,
-            },
-            feedback: {},
-            prompts: {},
-          };
-        }
-
         // Frame2 VIDEO => kwaivgi/kling-v2.6-motion-control (FULL = pro)
         if (hasFrame2Video && frame2Http) {
           return {
@@ -5742,7 +5695,7 @@ const headerOverlayClass =
               setMotionStyleKeys={setMotionStyleKeys}
               motionSuggesting={motionSuggesting}
               canCreateMotion={canCreateMotion}
-              motionHasImage={(uploads.product?.length ?? 0) > 0 || motionTextTrimmed.length > 0}
+              motionHasImage={(uploads.product?.length ?? 0) > 0}
               motionCreditsOk={motionCreditsOk}
               motionBlockReason={motionBlockReason}
               motionGenerating={motionGenerating}
