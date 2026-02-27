@@ -1106,8 +1106,12 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
   const frame2Duration = Number(frame2Item?.durationSec || 0);
 
-  const videoSec = hasFrame2Video ? Math.min(30, Math.max(0, frame2Duration || 0)) : 0;
-  const audioSec = hasFrame2Audio ? Math.min(60, Math.max(0, frame2Duration || 0)) : 0;
+  const videoSecRaw = hasFrame2Video ? Math.min(30, Math.max(0, frame2Duration || 0)) : 0;
+  const audioSecRaw = hasFrame2Audio ? Math.min(60, Math.max(0, frame2Duration || 0)) : 0;
+
+  // normalize float metadata (e.g. 5.04s) to avoid accidental extra 5s billing block
+  const videoSec = hasFrame2Video ? Math.min(30, Math.max(3, Math.round(videoSecRaw || 5))) : 0;
+  const audioSec = hasFrame2Audio ? Math.min(60, Math.max(1, Math.round(audioSecRaw || 5))) : 0;
 
   const videoCost = hasFrame2Video ? roundUpTo10Per5s(videoSec || 5) : 0;
   const audioCost = hasFrame2Audio ? roundUpTo10Per5s(audioSec || 5) : 0;
@@ -3907,7 +3911,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               // required by schema
               frame2_kind: "video",
               frame2_url: frame2Http,
-              frame2_duration_sec: Math.round(videoSec || 0),
+              frame2_duration_sec: videoSec || 0,
               image: startFrameForModel,
               video: frame2Http,
 
