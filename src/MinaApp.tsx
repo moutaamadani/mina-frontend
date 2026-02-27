@@ -387,9 +387,10 @@ function aspectRatioToNumber(ratio: string) {
 
 function pickNearestAspectOption(ratio: number, options: AspectOption[]): AspectOption {
   if (!Number.isFinite(ratio) || ratio <= 0) return options[0];
+  const normalizedRatio = ratio > 1 ? 1 / ratio : ratio;
   return options.reduce((closest, option) => {
     const candidate = aspectRatioToNumber(option.ratio);
-    return Math.abs(candidate - ratio) < Math.abs(aspectRatioToNumber(closest.ratio) - ratio)
+    return Math.abs(candidate - normalizedRatio) < Math.abs(aspectRatioToNumber(closest.ratio) - normalizedRatio)
       ? option
       : closest;
   }, options[0]);
@@ -1051,6 +1052,9 @@ const showControls = uiStage >= 3 || hasEverTyped;
   const animateImage = uploads.product[0] || null;
   const animateAspectOption = ASPECT_OPTIONS.find((opt) => opt.key === animateAspectKey) || currentAspect;
   const animateAspectIconUrl = ASPECT_ICON_URLS[animateAspectOption.key];
+  const animateEffectiveAspectRatio = animateAspectRotated
+    ? swapAspectRatio(animateAspectOption.ratio)
+    : animateAspectOption.ratio;
 
   const animateImageHttp =
     animateImage?.remoteUrl && isHttpUrl(animateImage.remoteUrl)
@@ -3692,7 +3696,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               selected_movement_style: (motionStyleKeys?.[0] || "").trim(),
           
               platform: animateAspectOption.platformKey,
-              aspect_ratio: animateAspectOption.ratio,
+              aspect_ratio: animateEffectiveAspectRatio,
           
               stylePresetKeys: stylePresetKeysForApi,
               stylePresetKey: primaryStyleKeyForApi,
@@ -3758,7 +3762,7 @@ const styleHeroUrls = (stylePresetKeys || [])
     motionDescription,
     motionStyleKeys,
     animateAspectOption.platformKey,
-    animateAspectOption.ratio,
+    animateEffectiveAspectRatio,
     stylePresetKeysForApi,
     primaryStyleKeyForApi,
     minaVisionEnabled,
@@ -3858,7 +3862,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           
           tone,
           platform: animateAspectOption.platformKey,
-          aspect_ratio: animateAspectOption.ratio,
+          aspect_ratio: animateEffectiveAspectRatio,
           duration: motionDurationSec,
           generate_audio: effectiveMotionAudioEnabled,
 
@@ -4009,7 +4013,7 @@ const styleHeroUrls = (stylePresetKeys || [])
             inspiration_image_urls: inspirationUrls,
           },
           settings: {
-            aspect_ratio: animateAspectOption.ratio,
+            aspect_ratio: animateEffectiveAspectRatio,
             stylePresetKeys: stylePresetKeys, // UI keys
             minaVisionEnabled,
           },
@@ -4217,7 +4221,7 @@ const styleHeroUrls = (stylePresetKeys || [])
               motionDescription: (motionTextTrimmed || motionDescription || brief || "").trim(),
               prompt: (motionTextTrimmed || motionDescription || brief || "").trim(),
               platform: animateAspectOption.platformKey,
-              aspect_ratio: animateAspectOption.ratio,
+              aspect_ratio: animateEffectiveAspectRatio,
 
               stylePresetKeys: stylePresetKeysForApi,
               stylePresetKey: primaryStyleKeyForApi,
@@ -4269,7 +4273,7 @@ const styleHeroUrls = (stylePresetKeys || [])
                 inspiration_image_urls: insp,
               },
               settings: {
-                aspect_ratio: animateAspectOption.ratio,
+                aspect_ratio: animateEffectiveAspectRatio,
                 stylePresetKeys: stylePresetKeys,
                 minaVisionEnabled,
               },
@@ -4330,7 +4334,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       motionTextTrimmed,
       motionDescription,
       animateAspectOption.platformKey,
-      animateAspectOption.ratio,
+      animateEffectiveAspectRatio,
     ]
   );
 
@@ -4978,7 +4982,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           inspiration_image_urls: insp,
         },
         settings: {
-          aspect_ratio: animateAspectOption.ratio,
+          aspect_ratio: animateEffectiveAspectRatio,
           stylePresetKeys: stylePresetKeys, // IMPORTANT: UI keys (keep custom-xxx)
           minaVisionEnabled,
         },
