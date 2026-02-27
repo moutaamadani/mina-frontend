@@ -575,7 +575,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // Matcha rules
   // - Still niche:    2
   // - Still main:     1
-  // - Motion:         5s => 5, 10s => 10
+  // - Motion(video):  5s => 10, 10s => 20
   // ==========================
   const creditBalance = Number(creditsProp);
   const hasCreditNumber = Number.isFinite(creditBalance);
@@ -928,7 +928,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   }, [motionAudioLocked, onToggleMotionAudio]);
 
   // ✅ Motion cost (5s blocks when video/audio is used)
-  const MOTION_COST_BASE = motionDurationSec === 10 ? 10 : 5;
+  const roundUpTo10Per5s = (sec: number) => Math.max(10, Math.ceil(sec / 5) * 10);
+  const MOTION_COST_BASE = motionDurationSec === 10 ? 20 : 10;
 
   const frame2DurationSec = Number((frame2Item as any)?.durationSec || 0);
   const refSeconds = hasFrame2Video
@@ -937,17 +938,17 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     ? Math.min(60, frame2DurationSec || 5)
     : 0;
 
-  const MOTION_COST = hasRefMedia ? roundUpTo5(refSeconds) : MOTION_COST_BASE;
+  const MOTION_COST = hasRefMedia ? roundUpTo10Per5s(refSeconds) : MOTION_COST_BASE;
 
   const computedMotionCostLabel = (() => {
     const blocks = Math.ceil((refSeconds || 5) / 5);
     if (hasFrame2Video) {
       if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
-      return `${blocks}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
+      return `${blocks}×10 = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
     }
     if (hasFrame2Audio) {
       if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
-      return `${blocks}×5s = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
+      return `${blocks}×10 = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
     }
     return `${MOTION_COST} matchas (${motionDurationSec === 10 ? "10s" : "5s"})`;
   })();
