@@ -61,6 +61,19 @@ function cfInput1080(url: string, kind: "product" | "logo" | "style" = "product"
   return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
 }
 
+function cfInput2048(url: string, kind: "product" | "logo" | "style" = "product") {
+  const u = String(url || "").trim();
+  if (!u) return "";
+  if (!u.includes("assets.faltastudio.com/")) return u;
+  if (u.includes("/cdn-cgi/image/")) return u;
+
+  // logo may need alpha => keep png, others => jpeg
+  const format = kind === "logo" ? "png" : "jpeg";
+  const opts = `width=2048,fit=scale-down,quality=88,format=${format}`;
+
+  return `https://assets.faltastudio.com/cdn-cgi/image/${opts}/${u.replace("https://assets.faltastudio.com/", "")}`;
+}
+
 function tryParseJson<T = any>(v: any): T | null {
   if (!v) return null;
   if (typeof v === "object") return v as T;
@@ -1752,7 +1765,7 @@ const openPrompt = useCallback((id: string) => {
                                           },
                                           assets: {
                                             // ✅ Scene pill (your wiring uses assets.product)
-                                            productImageUrl: cfInput1080(scene, "product") || undefined,
+                                            productImageUrl: cfInput2048(scene, "product") || undefined,
 
                                             // ✅ Logo stays in logo slot (never falls into product/elements)
                                             ...(inputs?.logoImageUrl
