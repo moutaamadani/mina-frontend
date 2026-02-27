@@ -2695,7 +2695,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
   // ============================================================================
   // INPUT OPTIMIZATION for MMA (NO reupload)
-  // - If URL is our assets host, rewrite to Cloudflare /cdn-cgi/image/… (1080px)
+  // - If URL is our assets host, rewrite to Cloudflare /cdn-cgi/image/… (1080px default, 2160px in animate mode for product images)
   // - No extra R2 objects; Cloudflare caches the resized variant at the edge
   // - Fallback: if resizing isn't enabled, we auto-fallback to the original URL
   // ============================================================================
@@ -2707,7 +2707,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   // remember once if /cdn-cgi/image works on this zone
   const cdnResizeOkRef = useRef<boolean | null>(null);
 
-  function buildCdn1080Url(rawUrl: string, kind: UploadPanelKey): string {
+  function buildCdnResizedUrl(rawUrl: string, kind: UploadPanelKey): string {
     const clean = stripSignedQuery(String(rawUrl || "").trim());
     if (!clean || !isHttpUrl(clean)) return "";
 
@@ -2724,7 +2724,8 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const format = kind === "logo" ? "png" : "jpeg";
 
       // IMPORTANT: fit=scale-down prevents upscaling; onerror=redirect falls back to origin image
-      const opts = `width=1080,fit=scale-down,quality=80,format=${format}`;
+      const targetWidth = animateMode && kind === "product" ? 2160 : 1080;
+      const opts = `width=${targetWidth},fit=scale-down,quality=80,format=${format}`;
 
       // keep query if you rely on cache-busting (?v=…)
       return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
@@ -2746,7 +2747,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       return clean;
     }
 
-    const optimized = buildCdn1080Url(clean, kind);
+    const optimized = buildCdnResizedUrl(clean, kind);
     if (!optimized || optimized === clean) {
       inputOptCacheRef.current.set(clean, clean);
       return clean;
@@ -3350,7 +3351,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       // quick sanity: does the link load as media?
       const kind = inferMediaTypeFromUrl(url) || "image";
 
-      // ✅ default behavior: store 1080/80 for assets urls (faster + smaller R2)
+      // ✅ default behavior: store 1080/80 for assets urls (or 2160 for product images in animate mode)
       // ✅ exception: Animate mode + product panel + Mina-generated (/mma/...) => keep FULL
       const shouldKeepFull =
         animateMode && panel === "product" && kind === "image" && isMinaGeneratedAssetsUrl(url);
@@ -3442,7 +3443,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const logoItem = uploads.logo[0];
       const logoUrlRaw = logoItem?.remoteUrl || logoItem?.url || "";
 
-      // ✅ normal still rule: send optimized 1080/80 when possible
+      // ✅ normal still rule: send optimized 1080/80 when possible (animate product uses 2160)
       const productUrl = isHttpUrl(productUrlRaw)
         ? await ensureOptimizedInputUrl(productUrlRaw, "product")
         : "";
@@ -3832,7 +3833,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       const endIsMinaGenerated = animateMode && isMinaGeneratedAssetsUrl(endFrame);
 
       // ✅ Rule:
-      // - ONLY video ref uses optimized (1080px, q=85)
+      // - ONLY video ref uses optimized (1080px default / 2160px in animate mode, q=85)
       // - 1img / 2img / audio ref => FULL
       const startFrameForModel = hasFrame2Video
         ? await ensureOptimizedInputUrl(startFrameRaw, "product")
