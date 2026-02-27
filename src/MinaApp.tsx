@@ -2725,7 +2725,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       // IMPORTANT: fit=scale-down prevents upscaling; onerror=redirect falls back to origin image
       const targetWidth = animateMode && kind === "product" ? 2160 : 1080;
-      const opts = `width=${targetWidth},fit=scale-down,quality=80,format=${format}`;
+      const opts = `width=${targetWidth},fit=scale-down,quality=90,format=${format}`;
 
       // keep query if you rely on cache-busting (?v=…)
       return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
@@ -2820,7 +2820,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       if (u.pathname.startsWith("/cdn-cgi/image/")) return u.toString();
 
       // force jpeg for max compatibility with motion models
-      const opts = `width=${MOTION_FRAME1_SEND_WIDTH},fit=scale-down,quality=85,format=jpeg`;
+      const opts = `width=${MOTION_FRAME1_SEND_WIDTH},fit=scale-down,quality=90,format=jpeg`;
 
       return `${u.origin}/cdn-cgi/image/${opts}${u.pathname}${u.search}`;
     } catch {
