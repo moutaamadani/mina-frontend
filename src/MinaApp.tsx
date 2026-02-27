@@ -3912,9 +3912,9 @@ const styleHeroUrls = (stylePresetKeys || [])
               // ✅ match the ref-video length (3–30s)
               duration: Math.min(30, Math.max(3, roundUpTo5(videoSec || 5))),
 
-              // ✅ generate audio unless user muted; always keep original ref sound
+              // ✅ respect UI mute toggle for both generated and original reference sound
               generate_audio: effectiveMotionAudioEnabled,
-              keep_original_sound: true,
+              keep_original_sound: effectiveMotionAudioEnabled,
 
               motion_control: true,
               reference_video_url: frame2Http,
