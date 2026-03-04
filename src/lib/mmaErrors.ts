@@ -11,7 +11,7 @@ export const UI_ERROR_MESSAGES = {
   missingPassIdMega: "Missing Pass ID for MEGA session.",
   uploadFailed: "Upload failed. Please try again.",
   uploadUnsupported:
-    "That file type isn’t supported. Mina can auto-convert many images, but this one couldn’t be converted. Please upload a JPG, PNG, or WebP.",
+    "That file type isn’t supported. Please upload a JPG, PNG, or WebP.",
   uploadTooBig: "That image is too large. Please choose one under 25MB.",
   uploadBroken: "We couldn’t read that image. Please try a different file.",
   uploadLinkBroken: "That link didn’t load as an image. Please paste a direct image link.",
