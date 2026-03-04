@@ -2476,6 +2476,22 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
   async function decodeToBitmap(file: Blob): Promise<ImageBitmap | null> {
     try {
+      // Extra path: ImageDecoder can decode some formats that createImageBitmap may reject
+      // in certain browser builds (including some HEIC/HEIF-capable environments).
+      const AnyImageDecoder = (window as any).ImageDecoder;
+      if (typeof AnyImageDecoder === "function") {
+        const type = (file as any).type || "";
+        if (!type || (await AnyImageDecoder.isTypeSupported?.(type))) {
+          const data = await file.arrayBuffer();
+          const decoder = new AnyImageDecoder({ data, type: type || undefined });
+          const frame = await decoder.decode({ frameIndex: 0 });
+          const bmp = frame?.image;
+          if (bmp) return bmp as ImageBitmap;
+        }
+      }
+    } catch {}
+
+    try {
       // Fast path
       // @ts-ignore
       if (typeof createImageBitmap === "function") return await createImageBitmap(file);
