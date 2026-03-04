@@ -3004,6 +3004,14 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     if (t.startsWith("image/")) return "image";
     if (t.startsWith("video/")) return "video";
     if (t.startsWith("audio/")) return "audio";
+
+    // Fallback for clipboard/drag sources that provide empty MIME type.
+    const name = String(file?.name || "").toLowerCase();
+    const ext = (name.match(/\.([a-z0-9]+)$/i)?.[1] || "").toLowerCase();
+    if (["png", "jpg", "jpeg", "webp", "gif", "avif", "heic", "heif"].includes(ext)) return "image";
+    if (["mp4", "webm", "mov", "m4v"].includes(ext)) return "video";
+    if (["mp3", "wav", "m4a", "aac", "ogg"].includes(ext)) return "audio";
+
     return null;
   }
 
@@ -3309,19 +3317,29 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
           }
         } catch (e: any) {
           const code = String(e?.message || "");
-          const reason =
-            code === "TOO_BIG" || file.size > MAX_UPLOAD_BYTES
-              ? "too_big"
-              : !isAllowed || code === "UNSUPPORTED"
-                ? "unsupported"
-                : "broken";
 
-          const msg = humanizeUploadError(reason as any);
-          showUploadNotice(panel, msg);
+          // If optimization decode fails for an otherwise valid image,
+          // continue with original file upload instead of hard-failing.
+          // This keeps clipboard/browser-generated images working even when
+          // a specific decode path is flaky on a browser build.
+          if (code === "BROKEN" && isAllowed && file.size <= MAX_UPLOAD_BYTES) {
+            normalized = file;
+            newPreviewUrl = undefined;
+          } else {
+            const reason =
+              code === "TOO_BIG" || file.size > MAX_UPLOAD_BYTES
+                ? "too_big"
+                : !isAllowed || code === "UNSUPPORTED"
+                  ? "unsupported"
+                  : "broken";
 
-          // Remove bad item immediately so user can upload again right away
-          removeUploadItem(panel, id);
-          return;
+            const msg = humanizeUploadError(reason as any);
+            showUploadNotice(panel, msg);
+
+            // Remove bad item immediately so user can upload again right away
+            removeUploadItem(panel, id);
+            return;
+          }
         }
       }
 
@@ -4526,7 +4544,7 @@ const styleHeroUrls = (stylePresetKeys || [])
     const max = capForPanel(panel);
 
     const incoming = Array.from(files || []).filter((f) => {
-      if (!f || typeof f.type !== "string") return false;
+      if (!f) return false;
 
       const mt = inferMediaTypeFromFile(f);
       if (panel !== "product") return mt === "image";
@@ -4755,13 +4773,23 @@ const styleHeroUrls = (stylePresetKeys || [])
 
     const onDrop = (e: DragEvent) => {
       if (!e.dataTransfer) return;
-      if (!Array.from(e.dataTransfer.types || []).includes("Files")) return;
+
+      const files = e.dataTransfer.files;
+      const uri = e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "";
+      const droppedUrl = extractFirstHttpUrl(uri);
+
+      if ((!files || !files.length) && !droppedUrl) return;
+
       e.preventDefault();
       dragDepthRef.current = 0;
       setGlobalDragging(false);
 
-      const files = e.dataTransfer.files;
-      if (files && files.length) addFilesToPanel(targetPanel, files);
+      if (files && files.length) {
+        addFilesToPanel(targetPanel, files);
+        return;
+      }
+
+      if (droppedUrl) addUrlToPanel(targetPanel, droppedUrl);
     };
 
     const onPaste = (e: ClipboardEvent) => {
@@ -4770,9 +4798,15 @@ const styleHeroUrls = (stylePresetKeys || [])
       const isTypingField = !!targetEl?.closest("textarea, input, [contenteditable='true']");
 
       const items = Array.from(e.clipboardData.items || []);
-      const imgItem = items.find((it) => it.type && it.type.startsWith("image/"));
-      if (imgItem) {
-        const file = imgItem.getAsFile();
+      const fileItem = items.find((it) => {
+        const t = String(it.type || "").toLowerCase();
+        if (t.startsWith("image/") || t.startsWith("video/") || t.startsWith("audio/")) return true;
+        if (it.kind !== "file") return false;
+        const f = it.getAsFile();
+        return !!f && !!inferMediaTypeFromFile(f);
+      });
+      if (fileItem) {
+        const file = fileItem.getAsFile();
         if (file) {
           if (!isTypingField) e.preventDefault();
           const list = {
@@ -4787,7 +4821,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
       const text = e.clipboardData.getData("text/plain") || "";
       const url = extractFirstHttpUrl(text);
-      if (url && /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) {
+      if (url) {
         if (!isTypingField) e.preventDefault();
         addUrlToPanel(targetPanel, url);
       }
