@@ -635,7 +635,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [stillError, setStillError] = useState<string | null>(null);
   const [lastStillPrompt, setLastStillPrompt] = useState<string>("");
 
-  // Mina UI “talking”
+  // Mina UI "talking"
   const [minaMessage, setMinaMessage] = useState("");
   const [minaTalking, setMinaTalking] = useState(false);
   const [minaOverrideText, setMinaOverrideText] = useState<string | null>(null);
@@ -1327,7 +1327,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
 
   // ========================================================================
-  // MINA “thinking out loud” UI
+  // MINA "thinking out loud" UI
   // ========================================================================
   useEffect(() => {
     if (minaTone !== "thinking") return;
@@ -2377,7 +2377,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   // - Allow: png/jpg/jpeg/webp
   // - Max: 25MB
   // - Auto-convert unsupported-but-decodable images (ex: AVIF) to JPEG
-  // - Auto-resize/compress huge images to avoid “broken upload” + slow downloads
+  // - Auto-resize/compress huge images to avoid "broken upload" + slow downloads
   // - Show simple messages, flash for 5s, then ready to upload again
   // ========================================================================
   const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25MB
@@ -2415,7 +2415,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     // "audio/ogg", // only if supported by your provider
   ]);
 
-  // When we decide to “optimize”, we re-encode to JPEG/PNG (depending on panel)
+  // When we decide to "optimize", we re-encode to JPEG/PNG (depending on panel)
   const OPT_MAX_DIM = 1080; // keep inputs small for faster uploads
   const OPT_INITIAL_QUALITY = 0.8;
 
@@ -3038,7 +3038,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     if (!/^https?:\/\//i.test(u) && !u.startsWith("blob:")) return null;
     if (isVideoUrl(u)) return "video";
     if (isAudioUrl(u)) return "audio";
-    // default “image” for http(s) that isn’t video/audio (matches your current behavior)
+    // default "image" for http(s) that isn’t video/audio (matches your current behavior)
     return "image";
   }
 
@@ -3364,11 +3364,11 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       // 2) Upload to R2
       const remoteUrl = await uploadFileToR2(panel, normalized);
 
-      // 3) Verify the uploaded URL actually loads as media (catches “broken upload”)
+      // 3) Verify the uploaded URL actually loads as media (catches "broken upload")
       //    Use retry to handle CDN propagation delay on freshly-uploaded files.
       const ok = await probeMediaUrlWithRetry(remoteUrl, mediaType, 8000, 2, 1500);
       if (!ok) {
-        showUploadNotice(panel, humanizeUploadError(“broken”));
+        showUploadNotice(panel, humanizeUploadError("broken"));
         removeUploadItem(panel, id);
         return;
       }
@@ -3531,7 +3531,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         return [preset.thumb.trim()];
     }
 
-    // 2) custom styles (your “Your style”)
+    // 2) custom styles (your "Your style")
     const cs = (customStyles || []).find((s) => String(s.key) === String(k));
     if (cs) {
       const arr = Array.isArray((cs as any).heroUrls) ? (cs as any).heroUrls : [];
@@ -4540,7 +4540,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   const openPanel = (key: PanelKey) => {
   if (!key) return;
 
-  // ✅ arm UI immediately (so first click doesn’t feel like it only “wakes” the UI)
+  // ✅ arm UI immediately (so first click doesn’t feel like it only "wakes" the UI)
   if (!hasEverTyped) setHasEverTyped(true);
 
   setActivePanel(key);
@@ -5270,7 +5270,7 @@ const styleHeroUrls = (stylePresetKeys || [])
 
     const trio = [hero, ...others];
 
-    // 2) upload ALL selected images to R2 (optional, but matches “upload 10 photos”)
+    // 2) upload ALL selected images to R2 (optional, but matches "upload 10 photos")
     //    Then store Hero+2 as heroUrls (like a real preset hero table)
     const allFiles = customStyleImages.map((x) => x.file).filter(Boolean).slice(0, 10);
 
