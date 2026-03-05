@@ -2687,6 +2687,24 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     });
   }
 
+  /** Probe with retries — newly uploaded R2/CDN files may not be instantly available. */
+  async function probeMediaUrlWithRetry(
+    url: string,
+    kind: "image" | "video" | "audio",
+    timeoutMs = 8000,
+    retries = 2,
+    delayMs = 1500
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const ok = await probeMediaUrl(url, kind, timeoutMs);
+      if (ok) return true;
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+    }
+    return false;
+  }
+
   function getMediaDurationSec(url: string, kind: "video" | "audio", timeoutMs = 8000): Promise<number | null> {
     return new Promise((resolve) => {
       if (!url || (!isHttpUrl(url) && !url.startsWith("blob:"))) return resolve(null);
@@ -3347,9 +3365,10 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const remoteUrl = await uploadFileToR2(panel, normalized);
 
       // 3) Verify the uploaded URL actually loads as media (catches “broken upload”)
-      const ok = await probeMediaUrl(remoteUrl, mediaType, 8000);
+      //    Use retry to handle CDN propagation delay on freshly-uploaded files.
+      const ok = await probeMediaUrlWithRetry(remoteUrl, mediaType, 8000, 2, 1500);
       if (!ok) {
-        showUploadNotice(panel, humanizeUploadError("broken"));
+        showUploadNotice(panel, humanizeUploadError(“broken”));
         removeUploadItem(panel, id);
         return;
       }
@@ -3420,9 +3439,9 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       const remoteUrl = await storeRemoteToR2(urlForStore, panel);
 
-      // verify stored URL too
+      // verify stored URL too (retry for CDN propagation delay)
       const kind2 = inferMediaTypeFromUrl(remoteUrl) || kind;
-      const ok2 = await probeMediaUrl(remoteUrl, kind2, 8000);
+      const ok2 = await probeMediaUrlWithRetry(remoteUrl, kind2, 8000, 2, 1500);
       if (!ok2) {
         showUploadNotice(panel, humanizeUploadError("broken"));
         removeUploadItem(panel, id);
