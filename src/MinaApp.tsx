@@ -3368,7 +3368,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       //    Use retry to handle CDN propagation delay on freshly-uploaded files.
       const ok = await probeMediaUrlWithRetry(remoteUrl, mediaType, 8000, 2, 1500);
       if (!ok) {
-        showUploadNotice(panel, humanizeUploadError(“broken”));
+        showUploadNotice(panel, humanizeUploadError("broken"));
         removeUploadItem(panel, id);
         return;
       }
