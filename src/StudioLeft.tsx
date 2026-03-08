@@ -135,7 +135,7 @@ type StudioLeftProps = {
   onToggleAnimateMode?: (next: boolean) => void;
 
   // ✅ Motion controls
-  motionDurationSec?: 5 | 10;
+  motionDurationSec?: 5 | 10 | 15;
   motionCostLabel?: string;
   onToggleMotionDuration?: () => void;
 
@@ -575,7 +575,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   // Matcha rules
   // - Still niche:    2
   // - Still main:     1
-  // - Motion(video):  5s => 10, 10s => 20
+  // - Motion(video):  5s => 10, 10s => 20, 15s => 30
   // ==========================
   const creditBalance = Number(creditsProp);
   const hasCreditNumber = Number.isFinite(creditBalance);
@@ -929,7 +929,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
 
   // ✅ Motion cost (5s blocks when video/audio is used)
   const roundUpTo10Per5s = (sec: number) => Math.max(10, Math.ceil(sec / 5) * 10);
-  const MOTION_COST_BASE = motionDurationSec === 10 ? 20 : 10;
+  const MOTION_COST_BASE = Math.max(10, Math.ceil(motionDurationSec / 5) * 10);
 
   const frame2DurationSec = Number((frame2Item as any)?.durationSec || 0);
   const refSecondsRaw = hasFrame2Video
@@ -957,7 +957,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
       return `${blocks}×10 = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
     }
-    return `${MOTION_COST} matchas (${motionDurationSec === 10 ? "10s" : "5s"})`;
+    return `${MOTION_COST} matchas (${motionDurationSec}s)`;
   })();
 
   const motionCostLabel = motionCostLabelProp ?? computedMotionCostLabel;
@@ -1654,7 +1654,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Toggle duration"}
                   >
                     <span className="studio-pill-main">
-                      {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : motionDurationSec === 10 ? "10s" : "5s"}
+                      {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : `${motionDurationSec}s`}
                     </span>
                   </button>
 

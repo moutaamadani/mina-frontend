@@ -683,7 +683,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
   const [motionAudioEnabled, setMotionAudioEnabled] = useState(true);
-  const [motionDurationSec, setMotionDurationSec] = useState<5 | 10>(5);
+  const [motionDurationSec, setMotionDurationSec] = useState<5 | 10 | 15>(5);
 
  
   const [activeMediaKind, setActiveMediaKind] = useState<"still" | "motion" | null>(null);
@@ -1098,7 +1098,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   // Matcha rules
   // - Still niche:    2
   // - Still main:     1
-  // - Motion(video):  5s => 10, 10s => 20
+  // - Motion(video):  5s => 10, 10s => 20, 15s => 30
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
   const roundUpTo5 = (sec: number) => Math.max(5, Math.ceil(sec / 5) * 5);
@@ -1116,8 +1116,11 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   const videoCost = hasFrame2Video ? roundUpTo10Per5s(videoSec || 5) : 0;
   const audioCost = hasFrame2Audio ? roundUpTo10Per5s(audioSec || 5) : 0;
 
-  const motionCost =
-    hasFrame2Video ? videoCost : hasFrame2Audio ? audioCost : motionDurationSec === 10 ? 20 : 10;
+  const motionCost = hasFrame2Video
+    ? videoCost
+    : hasFrame2Audio
+    ? audioCost
+    : Math.max(10, Math.ceil(motionDurationSec / 5) * 10);
 
   const motionCostLabel = (() => {
     if (hasFrame2Video) {
@@ -3056,7 +3059,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       mediaType?: "image" | "video" | "audio";
       durationSec?: number;
     }>;
-    motionDurationSec: 5 | 10;
+    motionDurationSec: 5 | 10 | 15;
     motionAudioEnabled: boolean;
     motionStyleKeys?: string[];
   }) {
@@ -5796,7 +5799,9 @@ const headerOverlayClass =
               onToggleMotionAudio={() => setMotionAudioEnabled((v) => !v)}
               motionDurationSec={motionDurationSec}
               motionCostLabel={motionCostLabel}
-              onToggleMotionDuration={() => setMotionDurationSec((v) => (v === 5 ? 10 : 5))}
+              onToggleMotionDuration={() =>
+                setMotionDurationSec((v) => (v === 5 ? 10 : v === 10 ? 15 : 5))
+              }
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
               minaMessage={minaMessage}
