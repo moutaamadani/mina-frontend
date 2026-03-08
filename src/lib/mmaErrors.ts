@@ -177,7 +177,7 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
     s.includes(“no output url”)
   ) {
     if (mode === “create”) {
-      return “Mina Animate mode is currently under high demand. Please use Main mode for now.”;
+      return “Mina Animate mode is currently under high demand. Please wait a bit then try again.”;
     }
     return “Something went wrong. Please try again.”;
   }
