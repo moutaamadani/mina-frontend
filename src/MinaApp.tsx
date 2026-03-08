@@ -3631,7 +3631,7 @@ const styleHeroUrls = (stylePresetKeys || [])
           stopAllMmaUiNow();
           return;
         }
-        throw new Error("That was too complicated for niche mode, try main.");
+        throw new Error("Mina Animate mode is currently under high demand. Please use Main mode for now.");
       }
 
       historyDirtyRef.current = true;
@@ -3673,7 +3673,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setLastStillPrompt(item.prompt);
     } catch (err: any) {
       stopAllMmaUiNow();
-      const msg = humanizeMmaError(err);
+      const msg = humanizeMmaError(err, "create");
       setStillError(msg);
       showMinaError(msg);
     } finally {
@@ -4105,7 +4105,7 @@ const styleHeroUrls = (stylePresetKeys || [])
       setActiveMediaKind("motion");
     } catch (err: any) {
       stopAllMmaUiNow();
-      const msg = humanizeMmaError(err);
+      const msg = humanizeMmaError(err, "animate");
       setMotionError(msg);
       showMinaError(msg);
     } finally {

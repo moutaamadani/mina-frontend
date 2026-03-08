@@ -109,7 +109,7 @@ export function isTimeoutLikeStatus(status: string): boolean {
  * Convert raw error into a single user-facing string.
  * Keep the “That was too complicated” message here so it’s consistent everywhere.
  */
-export function humanizeMmaError(err: MmaErrorLike): string {
+export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate"): string {
   // If we were given a full MMA result object, extract error text from it first
   const extracted = err && typeof err === "object" ? extractMmaErrorTextFromResult(err) : "";
   const raw =
@@ -168,15 +168,18 @@ export function humanizeMmaError(err: MmaErrorLike): string {
     return "That reference clip is too long. Use a 10s (or shorter) video.";
   }
 
-  // Generic “no URL” / pipeline failure → your preferred user-friendly text
+  // Generic “no URL” / pipeline failure → niche overload message only in create mode
   if (
-    s.includes("video_no_url") ||
-    s.includes("mma_no_url") ||
-    s.includes("pipeline_error") ||
-    s.includes("no_output_url") ||
-    s.includes("no output url")
+    s.includes(“video_no_url”) ||
+    s.includes(“mma_no_url”) ||
+    s.includes(“pipeline_error”) ||
+    s.includes(“no_output_url”) ||
+    s.includes(“no output url”)
   ) {
-    return "Niche mode is in high demand. Please use Main mode.";
+    if (mode === “create”) {
+      return “Mina Animate mode is currently under high demand. Please use Main mode for now.”;
+    }
+    return “Something went wrong. Please try again.”;
   }
 
   // Fallback: keep it short and clean
