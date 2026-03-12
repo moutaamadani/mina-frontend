@@ -4448,6 +4448,67 @@ const styleHeroUrls = (stylePresetKeys || [])
   );
 
   // ========================================================================
+  // [FINGERTIPS] Image editing tools (Replicate models with fractional matcha)
+  // ========================================================================
+  const [fingertipsSending, setFingertipsSending] = useState(false);
+
+  const onFingertipsGenerate = useCallback(
+    async (args: { modelKey: string; inputs: Record<string, any> }) => {
+      if (!API_BASE_URL || !currentPassId) return null;
+
+      setFingertipsSending(true);
+      try {
+        const res = await apiFetch("/fingertips/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            modelKey: args.modelKey,
+            inputs: args.inputs,
+            passId: currentPassId,
+          }),
+        });
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          return { generation_id: "", status: "error", error: json?.message || json?.error || "Fingertips failed" } as any;
+        }
+
+        // If we got an output, add it to the still carousel
+        const outputUrl = json?.output_url || (Array.isArray(json?.output) ? json.output[0] : json?.output) || null;
+        if (outputUrl && typeof outputUrl === "string") {
+          const finalUrl = await ensureAssetsUrl(outputUrl, "generations");
+          if (finalUrl) {
+            const newItem = {
+              id: json.generation_id || crypto.randomUUID(),
+              url: finalUrl,
+              createdAt: new Date().toISOString(),
+              prompt: `fingertips:${args.modelKey}`,
+            };
+            setStillItems((prev: any) => {
+              const next = [newItem, ...prev];
+              setStillIndex(0);
+              return next;
+            });
+            setActiveMediaKind("still");
+          }
+        }
+
+        // Refresh credits
+        creditsDirtyRef.current = true;
+        historyDirtyRef.current = true;
+        void fetchCredits();
+
+        return json;
+      } catch (err: any) {
+        return { generation_id: "", status: "error", error: err?.message || "Fingertips failed" } as any;
+      } finally {
+        setFingertipsSending(false);
+      }
+    },
+    [API_BASE_URL, currentPassId, apiFetch, ensureAssetsUrl, fetchCredits]
+  );
+
+  // ========================================================================
   // [LIKES] MMA ONLY
   // ========================================================================
   const normalizeLikeUrl = (url: string) => stripSignedQuery(String(url || "").trim());
@@ -5434,6 +5495,9 @@ const styleHeroUrls = (stylePresetKeys || [])
         onSetScene={({ url, clearInspiration }) =>
           handleSetSceneFromViewer({ url, clearInspiration: clearInspiration ?? true })
         }
+        onFingertipsGenerate={onFingertipsGenerate}
+        fingertipsSending={fingertipsSending}
+        currentAspect={effectiveAspectRatio}
       />
     );
   };
