@@ -569,3 +569,97 @@
   text-decoration: none !important;
 }
 
+/* ============================================================
+   Welcome Matcha modal (same visual language as matcha modal)
+   - NO rounded corners
+   - Clean, centered layout
+   ============================================================ */
+
+.mina-modal.mina-welcome-modal {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(400px, 86vh);
+  overflow: hidden;
+  border-radius: 0 !important;
+  background: var(--mina-paper);
+  color: var(--mina-ink);
+}
+
+.mina-welcome-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0px 0px 6px;
+}
+
+.mina-welcome-topbar-left {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  padding: 4px 8px;
+  opacity: 0.45;
+}
+
+.mina-welcome-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 120ms ease;
+}
+
+.mina-welcome-close:hover { opacity: 0.7; }
+
+.mina-welcome-body {
+  padding: 32px 24px 16px;
+  text-align: center;
+}
+
+.mina-welcome-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin-bottom: 10px;
+}
+
+.mina-welcome-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.45;
+  opacity: 0.6;
+}
+
+.mina-welcome-footer {
+  display: flex;
+  justify-content: center;
+  padding: 8px 24px 28px;
+}
+
+.mina-welcome-cta {
+  background: var(--mina-ink);
+  color: var(--mina-paper);
+  border: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  padding: 14px 32px;
+  cursor: pointer;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.mina-welcome-cta:hover { opacity: 0.88; }
+.mina-welcome-cta:active { transform: scale(0.98); opacity: 0.8; }
+.mina-welcome-cta:disabled { opacity: 0.45; cursor: default; transform: none; }
+
+.mina-welcome-modal button {
+  text-decoration: none !important;
+}
+

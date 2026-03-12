@@ -18,6 +18,7 @@ import { isAdmin as checkIsAdmin, loadAdminConfig } from "./lib/adminConfig";
 import { useAuthContext, usePassId } from "./components/AuthGate";
 import Profile from "./Profile";
 import TopLoadingBar from "./components/TopLoadingBar";
+import WelcomeMatchaModal from "./components/WelcomeMatchaModal";
 import { downloadMinaAsset } from "./lib/minaDownload";
 import {
   extractMmaErrorTextFromResult,
@@ -573,6 +574,14 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [pendingRequests, setPendingRequests] = useState(0);
 
   // =====================
+  // Welcome popup for new users
+  // =====================
+  const WELCOME_CLAIMED_KEY = "mina_welcome_claimed";
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeClaiming, setWelcomeClaiming] = useState(false);
+  const welcomeShownRef = useRef(false);
+
+  // =====================
   // Studio: brief + modes
   // =====================
   const [brief, setBrief] = useState("");
@@ -913,6 +922,27 @@ const MinaApp: React.FC<MinaAppProps> = () => {
       cancelled = true;
     };
   }, [authContext]);
+
+  // Auto-switch to "main" lane (create mode) when remaining matcha is exactly 1
+  useEffect(() => {
+    if (credits?.balance === 1 && stillLane !== "main") {
+      setStillLane("main");
+    }
+  }, [credits?.balance, stillLane]);
+
+  // Welcome popup: show 2s after login for new users only (once per account)
+  useEffect(() => {
+    if (welcomeShownRef.current) return;
+    if (!authContext?.isNewUser) return;
+    // Don't show if already claimed in a previous session
+    try {
+      if (window.localStorage.getItem(WELCOME_CLAIMED_KEY)) return;
+    } catch {}
+
+    welcomeShownRef.current = true;
+    const timer = window.setTimeout(() => setWelcomeOpen(true), 2000);
+    return () => window.clearTimeout(timer);
+  }, [authContext?.isNewUser]);
 
   // Motion keywords from config
   useEffect(() => {
@@ -2140,6 +2170,32 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       creditsCacheRef.current[currentPassId] = { balance: parsed, meta: creditsCacheRef.current[currentPassId]?.meta };
       creditsCacheAtRef.current[currentPassId] = Date.now();
       creditsDirtyRef.current = false;
+    }
+  };
+
+  // Welcome matcha claim handler
+  const handleClaimWelcomeMatcha = async () => {
+    if (welcomeClaiming) return;
+    setWelcomeClaiming(true);
+    try {
+      const res = await apiFetch("/api/welcome-matcha/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = (await res.json().catch(() => ({}))) as any;
+      if (json?.ok) {
+        // Mark as claimed so we never show again
+        try { window.localStorage.setItem(WELCOME_CLAIMED_KEY, "1"); } catch {}
+        // Refresh credits to show the new balance
+        creditsDirtyRef.current = true;
+        await fetchCredits();
+      }
+    } catch {
+      // silent
+    } finally {
+      setWelcomeClaiming(false);
+      setWelcomeOpen(false);
     }
   };
 
@@ -5890,6 +5946,15 @@ const headerOverlayClass =
     <>
       <TopLoadingBar active={topBarActive} />
       {appUi}
+      <WelcomeMatchaModal
+        open={welcomeOpen}
+        onClose={() => {
+          setWelcomeOpen(false);
+          try { window.localStorage.setItem(WELCOME_CLAIMED_KEY, "1"); } catch {}
+        }}
+        onClaim={handleClaimWelcomeMatcha}
+        claiming={welcomeClaiming}
+      />
     </>
   );
 };

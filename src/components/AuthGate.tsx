@@ -43,6 +43,7 @@ const AuthContext = React.createContext<{
   initializing: boolean;
   authLoading: boolean;
   accessToken: string | null;
+  isNewUser: boolean;
 } | null>(null);
 
 export function usePassId(): string | null {
@@ -291,13 +292,18 @@ async function getSupabaseAccessToken(): Promise<string | null> {
  *
  * This is the actual verification, not /me.
  */
-async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<string | null> {
+type BackendSyncResult = {
+  passId: string | null;
+  isNewUser: boolean;
+};
+
+async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<BackendSyncResult> {
   const existing = existingPassId?.trim() || null;
-  if (!API_BASE_URL) return existing;
+  if (!API_BASE_URL) return { passId: existing, isNewUser: false };
 
   const token = await getSupabaseAccessToken();
   // No token => not logged in => nothing to verify. Use local passId.
-  if (!token) return existing;
+  if (!token) return { passId: existing, isNewUser: false };
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -330,11 +336,11 @@ async function ensurePassIdViaBackend(existingPassId?: string | null): Promise<s
     const next = (nextRaw || headerPid || "").trim() || null;
 
     // If backend says not logged in, keep existing local id
-    if (json?.loggedIn === false) return existing;
+    if (json?.loggedIn === false) return { passId: existing, isNewUser: false };
 
-    return next || existing;
+    return { passId: next || existing, isNewUser: !!json?.isNewUser };
   } catch {
-    return existing;
+    return { passId: existing, isNewUser: false };
   }
 }
 
@@ -397,6 +403,9 @@ export function AuthGate({ children }: AuthGateProps) {
   });
   const [authCallbackError, setAuthCallbackError] = useState<string | null>(null);
 
+  // New-user flag (set when backend says the customer row was just created)
+  const [isNewUser, setIsNewUser] = useState(false);
+
   // optional stats
   const [newUsers, setNewUsers] = useState<number | null>(null);
   const displayedUsers = BASELINE_USERS + (newUsers ?? 0);
@@ -425,8 +434,9 @@ export function AuthGate({ children }: AuthGateProps) {
       // 2) backend canonicalize/link ONLY if logged in and allowed
       const shouldCallBackend = !!uid && !opts?.skipBackend;
       if (shouldCallBackend) {
-        const canonical = await ensurePassIdViaBackend(candidate);
-        candidate = canonical?.trim() || candidate;
+        const result = await ensurePassIdViaBackend(candidate);
+        candidate = result.passId?.trim() || candidate;
+        if (result.isNewUser) setIsNewUser(true);
       }
 
       // 3) guaranteed fallback
@@ -457,11 +467,11 @@ export function AuthGate({ children }: AuthGateProps) {
   // PassId context wrapper
   const gatedChildren = useMemo(() => {
     return (
-      <AuthContext.Provider value={{ session, initializing, authLoading, accessToken }}>
+      <AuthContext.Provider value={{ session, initializing, authLoading, accessToken, isNewUser }}>
         <PassIdContext.Provider value={passId}>{children}</PassIdContext.Provider>
       </AuthContext.Provider>
     );
-  }, [accessToken, authLoading, children, initializing, passId, session]);
+  }, [accessToken, authLoading, children, initializing, isNewUser, passId, session]);
 
   // Init + auth listener
   useEffect(() => {
