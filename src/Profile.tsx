@@ -903,11 +903,37 @@ export default function Profile({
     } catch {}
   }, []);
 
+  const [lbZoomed, setLbZoomed] = useState(false);
+  const lbClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleLbMediaClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Delay single-click to allow double-click detection
+    if (lbClickTimer.current) clearTimeout(lbClickTimer.current);
+    lbClickTimer.current = setTimeout(() => {
+      setLbZoomed((z) => !z);
+      lbClickTimer.current = null;
+    }, 250);
+  }, []);
+
+  const handleLbMediaDblClick = useCallback((url: string, isMotion: boolean) => {
+    // Cancel the pending single-click zoom toggle
+    if (lbClickTimer.current) {
+      clearTimeout(lbClickTimer.current);
+      lbClickTimer.current = null;
+    }
+    downloadMedia(url, "", isMotion);
+  }, []);
+
   const openLightbox = (url: string | null, isMotion: boolean) => {
     if (!url) return;
     setLightbox({ url, isMotion });
+    setLbZoomed(false);
   };
-  const closeLightbox = () => setLightbox(null);
+  const closeLightbox = () => {
+    setLightbox(null);
+    setLbZoomed(false);
+  };
 
   const preloadedRef = useRef<Set<string>>(new Set());
 
@@ -1054,7 +1080,10 @@ export default function Profile({
   useEffect(() => {
     if (!lightbox) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeLightbox();
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        closeLightbox();
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1456,54 +1485,87 @@ const openPrompt = useCallback((id: string) => {
       />
 
       {lightbox ? (
-        <div
-          className="profile-lightbox"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => {
-            if (lightboxJustSwipedRef.current) {
-              lightboxJustSwipedRef.current = false;
-              return;
-            }
-            closeLightbox();
-          }}
-          onPointerDown={onLightboxPointerDown}
-          onPointerMove={onLightboxPointerMove}
-          onPointerUp={onLightboxPointerUp}
-          onPointerCancel={onLightboxPointerUp}
-        >
+        <>
+          {/* Backdrop — click to close */}
           <div
-            className="profile-lightbox-media"
-            onClick={(e) => {
-              e.stopPropagation();
+            className="profile-lightbox-backdrop"
+            onClick={() => {
+              if (lightboxJustSwipedRef.current) {
+                lightboxJustSwipedRef.current = false;
+                return;
+              }
               closeLightbox();
             }}
+          />
+
+          <div
+            className="profile-lightbox"
+            role="dialog"
+            aria-modal="true"
+            onPointerDown={onLightboxPointerDown}
+            onPointerMove={onLightboxPointerMove}
+            onPointerUp={onLightboxPointerUp}
+            onPointerCancel={onLightboxPointerUp}
           >
-            {lightbox.isMotion ? (
-              <video
-                className="profile-lightbox-video"
-                src={lightbox.url}
-                autoPlay
-                loop
-                muted
-                playsInline
-                controls={false}
-                disablePictureInPicture
-                controlsList="nodownload noplaybackrate noremoteplayback"
-              />
-            ) : (
-              <img
-                className="profile-lightbox-img"
-                src={lightbox.url}
-                alt=""
-                loading="eager"
-                decoding="async"
-                fetchPriority="high"
-                draggable={false}
-              />
-            )}
+            {/* Close button */}
+            <button
+              className="profile-lightbox-close"
+              type="button"
+              onClick={closeLightbox}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            <div
+              className={`profile-lightbox-media${lbZoomed ? " is-zoomed" : ""}`}
+              onClick={(e) => {
+                // Click on the container (not media) → close
+                if (e.target === e.currentTarget) {
+                  closeLightbox();
+                }
+              }}
+            >
+              {lightbox.isMotion ? (
+                <video
+                  className="profile-lightbox-video"
+                  src={lightbox.url}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  controls={false}
+                  disablePictureInPicture
+                  controlsList="nodownload noplaybackrate noremoteplayback"
+                  onClick={handleLbMediaClick}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    handleLbMediaDblClick(lightbox.url, true);
+                  }}
+                />
+              ) : (
+                <img
+                  className="profile-lightbox-img"
+                  src={lightbox.url}
+                  alt=""
+                  loading="eager"
+                  decoding="async"
+                  fetchPriority="high"
+                  draggable={false}
+                  onClick={handleLbMediaClick}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    handleLbMediaDblClick(lightbox.url, false);
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="profile-lightbox-hint">
+              double-click to download
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       <div className="profile-shell">
@@ -1680,13 +1742,13 @@ const openPrompt = useCallback((id: string) => {
                       role="button"
                       tabIndex={0}
                       onClick={() => {
-                        const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                        const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                         if (!it.isMotion) prefetchImage(big);
                         openLightbox(big, it.isMotion);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
-                          const big = it.isMotion ? it.url : cfThumb(it.url, 2400, 85);
+                          const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                           if (!it.isMotion) prefetchImage(big);
                           openLightbox(big, it.isMotion);
                         }
@@ -1704,6 +1766,7 @@ const openPrompt = useCallback((id: string) => {
                             muted
                             onMouseEnter={() => setVideoHover(it.id, true)}
                             onMouseLeave={() => setVideoHover(it.id, false)}
+                            onCanPlay={(e) => e.currentTarget.classList.add("is-loaded")}
                           />
                         ) : (
                           (() => {
@@ -1724,8 +1787,11 @@ const openPrompt = useCallback((id: string) => {
                                 alt=""
                                 loading="lazy"
                                 decoding="async"
+                                onLoad={(e) => e.currentTarget.classList.add("is-loaded")}
                                 onError={(e) => {
-                                  (e.currentTarget as HTMLImageElement).src = it.url;
+                                  const img = e.currentTarget as HTMLImageElement;
+                                  img.src = it.url;
+                                  img.classList.add("is-loaded");
                                 }}
                               />
                             );
