@@ -5498,6 +5498,22 @@ const styleHeroUrls = (stylePresetKeys || [])
         onFingertipsGenerate={onFingertipsGenerate}
         fingertipsSending={fingertipsSending}
         currentAspect={effectiveAspectRatio}
+        onLike={handleLikeCurrent}
+        isLiked={isCurrentLiked}
+        likeDisabled={
+          (!currentStill && !currentMotion) ||
+          likeSubmitting ||
+          feedbackSending ||
+          stillGenerating ||
+          motionGenerating
+        }
+        onDownload={handleDownloadCurrent}
+        downloadDisabled={
+          (!currentStill && !currentMotion) ||
+          feedbackSending ||
+          stillGenerating ||
+          motionGenerating
+        }
       />
     );
   };
@@ -5762,64 +5778,7 @@ const headerOverlayClass =
           </div>
 
           <div className="studio-header-right">
-            {activeTab === "studio" && (
-              <>
-                {/* lock everything while creating/animating/tweaking */}
-                {/*
-                  stillGenerating = creating image
-                  motionGenerating = generating video
-                  feedbackSending = tweaking
-                */}
-                <button
-                  type="button"
-                  className="studio-header-cta"
-                   
-                  onClick={handleToggleAnimateMode}
-                  disabled={stillGenerating || motionGenerating || feedbackSending}
-                >
-                  {feedbackSending
-                    ? "Tweaking…"
-                    : stillGenerating
-                      ? "Creating…"
-                      : motionGenerating
-                        ? "Animating…"
-                        : animateMode
-                          ? "Create"
-                          : "Animate"}
-                </button>
-          
-                <button
-                  type="button"
-                  className="studio-header-cta"
-                   
-                  onClick={handleLikeCurrent}
-                  disabled={
-                    (!currentStill && !currentMotion) ||
-                    likeSubmitting ||
-                    feedbackSending ||
-                    stillGenerating ||
-                    motionGenerating
-                  }
-                >
-                  {isCurrentLiked ? "Ok" : "Like"}
-                </button>
-          
-                <button
-                  type="button"
-                  className="studio-header-cta"
-                   
-                  onClick={handleDownloadCurrent}
-                  disabled={
-                    (!currentStill && !currentMotion) ||
-                    feedbackSending ||
-                    stillGenerating ||
-                    motionGenerating
-                  }
-                >
-                  Download
-                </button>
-              </>
-            )}
+            {/* Animate/Like/Download moved to StudioLeft + StudioRight bottom bar */}
           </div>
         </div>
 
@@ -5909,6 +5868,7 @@ const headerOverlayClass =
               onToggleStillLane={toggleStillLane}
               stillLaneDisabled={minaBusy}
               onGoProfile={() => goTab("profile")}
+              feedbackSending={feedbackSending}
             />
             {renderStudioRight()}
 
