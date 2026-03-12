@@ -475,9 +475,9 @@
   display: block;
 }
 
-/* Prevent tap on video from showing native playback UI */
+/* Allow click/double-click on lightbox video */
 .profile-lightbox-video {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 @media (hover: hover) {
@@ -893,4 +893,113 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* =============================================================
+   Porto Rocha–style fade-in for grid media
+   ============================================================= */
+
+.profile-card-media img,
+.profile-card-media video {
+  opacity: 0;
+  transition:
+    opacity 500ms ease,
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity;
+}
+
+.profile-card-media img.is-loaded,
+.profile-card-media video.is-loaded {
+  opacity: 1;
+}
+
+/* =============================================================
+   Lightbox v2 — full-size, zoom, close button, backdrop
+   ============================================================= */
+
+.profile-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: rgba(0, 0, 0, 0.92);
+  animation: lb-fade-in 300ms ease forwards;
+}
+
+@keyframes lb-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.profile-lightbox {
+  animation: lb-fade-in 300ms ease forwards;
+}
+
+/* Close button top-right */
+.profile-lightbox-close {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 1001;
+
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 18px;
+  font-weight: 300;
+  line-height: 1;
+
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.profile-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* Zoom states */
+.profile-lightbox-media.is-zoomed {
+  cursor: zoom-out;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.profile-lightbox-media.is-zoomed img,
+.profile-lightbox-media.is-zoomed video {
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  cursor: zoom-out;
+}
+
+.profile-lightbox-media:not(.is-zoomed) {
+  cursor: zoom-in;
+}
+
+.profile-lightbox-media:not(.is-zoomed) img,
+.profile-lightbox-media:not(.is-zoomed) video {
+  cursor: zoom-in;
+}
+
+/* Download hint */
+.profile-lightbox-hint {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  pointer-events: none;
+  white-space: nowrap;
 }
