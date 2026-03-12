@@ -36,6 +36,7 @@ const normalizeBase = (raw?: string | null) => {
 };
 
 const MATCHA_URL = "https://www.faltastudio.com/cart/43328351928403:1";
+const MATCHA_5000_URL = "https://www.faltastudio.com/cart/44184397283411:1";
 
 // Prefer an env override, then fall back to same-origin /api so production
 // builds avoid CORS errors when the backend is reverse-proxied.
@@ -5804,6 +5805,7 @@ const headerOverlayClass =
               }
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
+              matcha5000Url={MATCHA_5000_URL}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
               minaTone={minaTone}
@@ -5835,6 +5837,7 @@ const headerOverlayClass =
             generations={historyGenerations as any}
             feedbacks={historyFeedbacks as any}
             matchaUrl={MATCHA_URL}
+            matcha5000Url={MATCHA_5000_URL}
             loading={historyLoading || creditsLoading}
             error={historyError}
             onLoadMore={() => void fetchHistoryMore()}

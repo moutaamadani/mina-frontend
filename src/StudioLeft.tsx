@@ -156,6 +156,7 @@ type StudioLeftProps = {
   imageCreditsOk?: boolean;
   credits?: number;
   matchaUrl: string;
+  matcha5000Url?: string;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -441,6 +442,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     imageCreditsOk: imageCreditsOkProp,
     credits: creditsProp,
     matchaUrl,
+    matcha5000Url,
 
     minaMessage,
     minaTalking,
@@ -636,7 +638,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const [matchaQtyOpen, setMatchaQtyOpen] = useState(false);
   const [matchaQty, setMatchaQty] = useState(1);
 
-  const clampQty = (n: number) => Math.max(1, Math.min(20, Math.floor(Number(n || 1))));
+  const clampQty = (n: number) => Math.max(1, Math.min(100, Math.floor(Number(n || 1))));
 
   // Build a Shopify URL that actually sets quantity (best effort).
   // Works best if matchaUrl is a cart permalink like:
@@ -678,7 +680,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   const confirmMatchaQty = (qty: number) => {
-    const url = buildMatchaCheckoutUrl(matchaUrl, qty);
+    // 5000 pack uses its own Shopify product (MINA-5000)
+    const is5000 = qty === 100 && matcha5000Url;
+    const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
     setMatchaQtyOpen(false);
     window.open(url, "_blank", "noopener");
   };
