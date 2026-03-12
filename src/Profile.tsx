@@ -1914,10 +1914,10 @@ const openPrompt = useCallback((id: string) => {
                               ) : null;
                             })()}
 
-                            {/* Product thumb */}
+                            {/* Scene thumb (was "Product") */}
                             {inputs.productImageUrl ? (
                               <div className="profile-card-detailrow">
-                                <span className="k">Product</span>
+                                <span className="k">Scene</span>
                                 <span className="v">
                                   <img
                                     className="profile-input-thumb"
@@ -1966,32 +1966,32 @@ const openPrompt = useCallback((id: string) => {
                               </div>
                             ) : null}
 
-                            {/* Inspo thumb (+count) */}
+                            {/* Product & Elements thumbs (was "Inspo") — show all images */}
                             {inputs.styleImageUrls?.length ? (
                               <div className="profile-card-detailrow">
-                                <span className="k">Inspo</span>
+                                <span className="k">Product &amp; Elements</span>
                                 <span className="v">
-                                  <span className="profile-thumbstack">
-                                    <img
-                                      className="profile-input-thumb"
-                                      src={cfThumb(inputs.styleImageUrls[0], 140, 70)}
-                                      alt=""
-                                      loading="lazy"
-                                      decoding="async"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (it.draft) {
-                                          onRecreate?.(it.draft);
-                                          onBackToStudio?.();
-                                          return;
-                                        }
-                                        prefetchImage(inputs.styleImageUrls[0]);
-                                        openLightbox(inputs.styleImageUrls[0], false);
-                                      }}
-                                    />
-                                    {inputs.styleImageUrls.length > 1 ? (
-                                      <span className="profile-thumbbadge">+{inputs.styleImageUrls.length - 1}</span>
-                                    ) : null}
+                                  <span className="profile-thumbrow">
+                                    {inputs.styleImageUrls.map((url: string) => (
+                                      <img
+                                        key={url}
+                                        className="profile-input-thumb"
+                                        src={cfThumb(url, 140, 70)}
+                                        alt=""
+                                        loading="lazy"
+                                        decoding="async"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (it.draft) {
+                                            onRecreate?.(it.draft);
+                                            onBackToStudio?.();
+                                            return;
+                                          }
+                                          prefetchImage(url);
+                                          openLightbox(url, false);
+                                        }}
+                                      />
+                                    ))}
                                   </span>
                                 </span>
                               </div>
@@ -2019,14 +2019,12 @@ const openPrompt = useCallback((id: string) => {
                               const show = it.isMotion && items.length;
                               if (!show) return null;
 
-                              const visible = items.slice(0, 3);
-
                               return (
                                 <div className="profile-card-detailrow">
                                   <span className="k">Frames</span>
                                   <span className="v">
                                     <span className="profile-thumbrow">
-                                      {visible.map((m) => {
+                                      {items.map((m) => {
                                         if (m.kind === "video") {
                                           return (
                                             <video
@@ -2122,14 +2120,35 @@ const openPrompt = useCallback((id: string) => {
                                         );
                                       })}
 
-                                      {items.length > visible.length ? (
-                                        <span className="profile-thumbbadge">+{items.length - visible.length}</span>
-                                      ) : null}
                                     </span>
                                   </span>
                                 </div>
                               );
                             })()}
+
+                            {/* Aspect Ratio */}
+                            {inputs.aspectRatio ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Aspect Ratio</span>
+                                <span className="v">{inputs.aspectRatio}</span>
+                              </div>
+                            ) : null}
+
+                            {/* Duration (motion only) */}
+                            {it.isMotion && inputs.motionDurationSec ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Duration</span>
+                                <span className="v">{inputs.motionDurationSec}s</span>
+                              </div>
+                            ) : null}
+
+                            {/* Sound (motion only) */}
+                            {it.isMotion && typeof inputs.generateAudio === "boolean" ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Sound</span>
+                                <span className="v">{inputs.generateAudio ? "Sound" : "Muted"}</span>
+                              </div>
+                            ) : null}
                           </div>
                         ) : null}
                       </div>
