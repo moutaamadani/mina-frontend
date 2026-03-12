@@ -46,7 +46,7 @@ const WelcomeMatchaModal: React.FC<Props> = ({ open, onClose }) => {
       >
         {/* Topbar — same as MatchaQtyModal */}
         <div className="mina-matcha-topbar">
-          <div className="mina-matcha-topbar-left">Welcome to Mina</div>
+          <div className="mina-matcha-topbar-left">5 Matcha Lattes — Welcome Pack</div>
           <button
             type="button"
             className="mina-modal-close mina-matcha-close"
@@ -60,11 +60,13 @@ const WelcomeMatchaModal: React.FC<Props> = ({ open, onClose }) => {
 
         {/* Body — same structure as MatchaQtyModal */}
         <div className="mina-matcha-body">
-          <div className="mina-matcha-subtitle">Matchas for you</div>
+          <div className="mina-matcha-subtitle">This panel is shown only once.</div>
           <div className="mina-matcha-rules">
             Mina uses matchas to create your images and videos.
+            
             1 Main Image = 1 Matcha · 1 Niche Image or 1s Video = 2 Matchas.
-            We're giving you 5 free matchas for your first month — on us.
+            
+            We're giving you 5 free matchas for your first month.
           </div>
         </div>
 
