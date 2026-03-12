@@ -177,6 +177,8 @@ type StudioLeftProps = {
   timingVars?: React.CSSProperties;
 
   onGoProfile: () => void;
+
+  feedbackSending?: boolean;
 };
 
 // ------------------------------------
@@ -2159,6 +2161,25 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 >
                   {createLabel}
                 </button>
+
+                {props.onToggleAnimateMode && (
+                  <button
+                    type="button"
+                    className="studio-animate-toggle"
+                    onClick={() => props.onToggleAnimateMode?.(!animateMode)}
+                    disabled={stillGenerating || !!motionGenerating || !!props.feedbackSending}
+                  >
+                    {props.feedbackSending
+                      ? "Tweaking…"
+                      : stillGenerating
+                        ? "Creating…"
+                        : motionGenerating
+                          ? "Animating…"
+                          : animateMode
+                            ? "Create"
+                            : "Animate"}
+                  </button>
+                )}
               </div>
 
               {!isMotion && stillError && !(minaError && minaError.trim()) && (

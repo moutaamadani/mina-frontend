@@ -683,6 +683,30 @@ margin-bottom: 6px;
 
 .studio-create-block {
   margin-top: 28px;
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+
+.studio-animate-toggle {
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.studio-animate-toggle:hover {
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.studio-animate-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .studio-create-link {

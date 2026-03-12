@@ -56,6 +56,13 @@ type StudioRightProps = {
   }) => Promise<FingertipsResult | null>;
   fingertipsSending?: boolean;
   currentAspect?: string;
+
+  // ✅ Like + Download (moved from header)
+  onLike?: () => void;
+  isLiked?: boolean;
+  likeDisabled?: boolean;
+  onDownload?: () => void;
+  downloadDisabled?: boolean;
 };
 
 // ============================================================================
@@ -82,6 +89,11 @@ export default function StudioRight(props: StudioRightProps) {
     onFingertipsGenerate,
     fingertipsSending,
     currentAspect,
+    onLike,
+    isLiked,
+    likeDisabled,
+    onDownload,
+    downloadDisabled,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -739,6 +751,32 @@ export default function StudioRight(props: StudioRightProps) {
               title={!onSetScene ? "Set Scene not available" : undefined}
             >
               Set Scene
+            </button>
+
+            <span className="studio-action-separator" aria-hidden="true">
+              |
+            </span>
+
+            <button
+              type="button"
+              className={`studio-action-btn${isLiked ? " is-on" : ""}`}
+              onClick={() => onLike?.()}
+              disabled={isEmpty || likeDisabled}
+            >
+              {isLiked ? "Liked" : "Like"}
+            </button>
+
+            <span className="studio-action-separator" aria-hidden="true">
+              |
+            </span>
+
+            <button
+              type="button"
+              className="studio-action-btn"
+              onClick={() => onDownload?.()}
+              disabled={isEmpty || downloadDisabled}
+            >
+              Download
             </button>
 
             <span className="studio-action-separator" aria-hidden="true">
