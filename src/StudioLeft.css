@@ -683,12 +683,14 @@ margin-bottom: 6px;
 
 .studio-create-block {
   margin-top: 28px;
-  display: flex;
-  align-items: baseline;
-  gap: 18px;
 }
 
 .studio-animate-toggle {
+  position: absolute;
+  top: 40px;
+  right: 40px;
+  z-index: 4;
+
   border: none;
   padding: 0;
   background: transparent;
@@ -794,6 +796,11 @@ margin-bottom: 6px;
 @media (max-width: 960px) {
   .studio-left {
     padding: calc(40px + env(safe-area-inset-top)) 20px 20px !important;
+  }
+
+  .studio-animate-toggle {
+    top: calc(12px + env(safe-area-inset-top));
+    right: 20px;
   }
 
   .studio-footer-links {
