@@ -1301,26 +1301,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       )}
       style={timingVars}
     >
-      {/* Animate / Create toggle — top-right corner */}
-      {props.onToggleAnimateMode && (
-        <button
-          type="button"
-          className="studio-animate-toggle"
-          onClick={() => props.onToggleAnimateMode?.(!animateMode)}
-          disabled={stillGenerating || !!motionGenerating || !!props.feedbackSending}
-        >
-          {props.feedbackSending
-            ? "Tweaking…"
-            : stillGenerating
-              ? "Creating…"
-              : motionGenerating
-                ? "Animating…"
-                : animateMode
-                  ? "Create"
-                  : "Animate"}
-        </button>
-      )}
-
       {tutorialOpen && (
         <div
           role="dialog"

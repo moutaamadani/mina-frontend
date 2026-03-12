@@ -651,6 +651,28 @@ video {
   gap: 16px;
 }
 
+/* Animate / Create toggle in header */
+.studio-animate-toggle {
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.9);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.studio-animate-toggle:hover {
+  color: #000;
+}
+
+.studio-animate-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 /* main two-column body */
 
 .studio-body--two-col {

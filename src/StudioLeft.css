@@ -685,31 +685,7 @@ margin-bottom: 6px;
   margin-top: 28px;
 }
 
-.studio-animate-toggle {
-  position: absolute;
-  top: 40px;
-  right: 40px;
-  z-index: 4;
-
-  border: none;
-  padding: 0;
-  background: transparent;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(0, 0, 0, 0.5);
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.studio-animate-toggle:hover {
-  color: rgba(0, 0, 0, 0.8);
-}
-
-.studio-animate-toggle:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
+/* Animate toggle now lives in studio-header-right (MinaApp) */
 
 .studio-create-link {
   border: none;
@@ -796,11 +772,6 @@ margin-bottom: 6px;
 @media (max-width: 960px) {
   .studio-left {
     padding: calc(40px + env(safe-area-inset-top)) 20px 20px !important;
-  }
-
-  .studio-animate-toggle {
-    top: calc(12px + env(safe-area-inset-top));
-    right: 20px;
   }
 
   .studio-footer-links {

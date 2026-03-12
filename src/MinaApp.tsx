@@ -5778,7 +5778,22 @@ const headerOverlayClass =
           </div>
 
           <div className="studio-header-right">
-            {/* Animate/Like/Download moved to StudioLeft + StudioRight bottom bar */}
+            <button
+              type="button"
+              className="studio-animate-toggle"
+              onClick={handleToggleAnimateMode}
+              disabled={stillGenerating || motionGenerating || feedbackSending}
+            >
+              {feedbackSending
+                ? "Tweaking…"
+                : stillGenerating
+                  ? "Creating…"
+                  : motionGenerating
+                    ? "Animating…"
+                    : animateMode
+                      ? "Create"
+                      : "Animate"}
+            </button>
           </div>
         </div>
 
