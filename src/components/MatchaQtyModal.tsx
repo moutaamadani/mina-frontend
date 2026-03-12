@@ -1,7 +1,7 @@
 // src/components/MatchaQtyModal.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-type Pack = { units: number };
+type Pack = { units: number; priceOverride?: number };
 
 type Props = {
   open: boolean;
@@ -61,20 +61,20 @@ const MatchaQtyModal: React.FC<Props> = ({
   const barRef = useRef<HTMLDivElement | null>(null);
   const [showTransparency, setShowTransparency] = useState(false);
 
-  // ✅ ONLY 50 / 100 / 500 / 1000 (max 1000)
+  // ✅ ONLY 50 / 100 / 500 / 5000 (max 5000)
     const packList: Pack[] = useMemo(
       () => [
         { units: 1 },  // 50
         { units: 2 },  // 100
         { units: 10 }, // 500
-        { units: 20 }, // 1000
+        { units: 100, priceOverride: 1250 }, // 5000
       ],
       []
     );
 
 
   const minUnits = 1;
-  const maxUnits = 20;
+  const maxUnits = 100;
 
   const safeQtyRaw = clampInt(qty, minUnits, maxUnits);
   const onScale = packList.some((p) => p.units === safeQtyRaw);
@@ -84,7 +84,11 @@ const MatchaQtyModal: React.FC<Props> = ({
   const fillPct = (activeIndex / (packList.length - 1)) * 100;
 
   const creditsFor = (units: number) => units * baseCredits;
-  const priceFor = (units: number) => units * basePrice;
+  const priceFor = (units: number) => {
+    const pack = packList.find((p) => p.units === units);
+    if (pack?.priceOverride != null) return pack.priceOverride;
+    return units * basePrice;
+  };
 
   // ✅ On open: default to 2× MINA-50 unless user already has a valid selection
   useEffect(() => {
