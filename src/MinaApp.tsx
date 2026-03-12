@@ -5476,17 +5476,45 @@ const styleHeroUrls = (stylePresetKeys || [])
   const displayedMotion = mediaKindForDisplay === "motion" ? currentMotion : null;
   const displayedStill = mediaKindForDisplay === "motion" ? null : currentStill;
 
-  const handleRightPanelUpload = async (file: File) => {
-    try {
-      const remoteUrl = await uploadFileToR2("product", file);
-      if (!remoteUrl) return;
-      const id = `drop_${Date.now()}`;
-      setStillItems((prev) => [{ id, url: remoteUrl }, ...prev]);
-      setStillIndex(0);
-    } catch (err) {
-      console.warn("[StudioRight] drop upload failed:", err);
-    }
+  // Upload from right-panel "+ Upload image to edit" button → goes into product pill
+  const handleRightPanelUpload = (file: File) => {
+    const list = { 0: file, length: 1, item: (i: number) => (i === 0 ? file : null) } as unknown as FileList;
+    addFilesToPanel("product", list);
   };
+
+  // Mirror first product upload to right panel as editable still
+  const mirrorIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const first = uploads.product[0];
+    const url = first?.remoteUrl || first?.url || "";
+    const isUsable = !!url && !url.startsWith("blob:") && !first?.uploading;
+
+    if (isUsable && url) {
+      // Add or update mirror
+      const id = `mirror_${first.id}`;
+      if (mirrorIdRef.current !== id) {
+        // Remove previous mirror if any
+        if (mirrorIdRef.current) {
+          const prevId = mirrorIdRef.current;
+          setStillItems((prev) => prev.filter((s) => s.id !== prevId));
+        }
+        mirrorIdRef.current = id;
+        setStillItems((prev) => {
+          const without = prev.filter((s) => s.id !== id);
+          return [{ id, url }, ...without];
+        });
+        setStillIndex(0);
+      }
+    } else {
+      // First product image removed or not ready — remove mirror
+      if (mirrorIdRef.current) {
+        const prevId = mirrorIdRef.current;
+        setStillItems((prev) => prev.filter((s) => s.id !== prevId));
+        mirrorIdRef.current = null;
+      }
+    }
+  }, [uploads.product[0]?.id, uploads.product[0]?.remoteUrl, uploads.product[0]?.uploading]);
 
   const renderStudioRight = () => {
     return (

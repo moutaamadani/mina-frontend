@@ -41,30 +41,26 @@
   pointer-events: none;
 }
 
-/* Stage 0 drop zone (Create mode) */
-.studio-dropzone {
+/* Stage 0 upload button (Create mode) */
+.studio-upload-btn {
   position: absolute;
-  inset: 0;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
+  border: 0;
+  background: transparent;
+  padding: 0;
   cursor: pointer;
-  transition: background 220ms ease;
-}
 
-.studio-dropzone.is-dragover {
-  background: rgba(8, 10, 0, 0.04);
-}
-
-.studio-dropzone-label {
   font-size: 11px;
-  font-weight: 600;
-  color: rgba(0, 0, 0, 0.2);
-  pointer-events: none;
-  text-align: center;
-  padding: 24px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.studio-upload-btn:hover {
+  color: rgba(0, 0, 0, 0.6);
 }
 
 /* Click surface (zones + zoom) */
