@@ -578,7 +578,6 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   // =====================
   const WELCOME_CLAIMED_KEY = "mina_welcome_claimed";
   const [welcomeOpen, setWelcomeOpen] = useState(false);
-  const [welcomeClaiming, setWelcomeClaiming] = useState(false);
   const welcomeShownRef = useRef(false);
 
   // =====================
@@ -2170,32 +2169,6 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       creditsCacheRef.current[currentPassId] = { balance: parsed, meta: creditsCacheRef.current[currentPassId]?.meta };
       creditsCacheAtRef.current[currentPassId] = Date.now();
       creditsDirtyRef.current = false;
-    }
-  };
-
-  // Welcome matcha claim handler
-  const handleClaimWelcomeMatcha = async () => {
-    if (welcomeClaiming) return;
-    setWelcomeClaiming(true);
-    try {
-      const res = await apiFetch("/api/welcome-matcha/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const json = (await res.json().catch(() => ({}))) as any;
-      if (json?.ok) {
-        // Mark as claimed so we never show again
-        try { window.localStorage.setItem(WELCOME_CLAIMED_KEY, "1"); } catch {}
-        // Refresh credits to show the new balance
-        creditsDirtyRef.current = true;
-        await fetchCredits();
-      }
-    } catch {
-      // silent
-    } finally {
-      setWelcomeClaiming(false);
-      setWelcomeOpen(false);
     }
   };
 
@@ -5952,8 +5925,6 @@ const headerOverlayClass =
           setWelcomeOpen(false);
           try { window.localStorage.setItem(WELCOME_CLAIMED_KEY, "1"); } catch {}
         }}
-        onClaim={handleClaimWelcomeMatcha}
-        claiming={welcomeClaiming}
       />
     </>
   );
