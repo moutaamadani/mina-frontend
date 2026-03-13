@@ -153,6 +153,20 @@ export default function StudioRight(props: StudioRightProps) {
     return null;
   }, [currentMotion, showMotion, safeStillUrl]);
 
+  // Preload adjacent carousel images so swiping feels instant
+  useEffect(() => {
+    if (stillItems.length < 2) return;
+    const n = stillItems.length;
+    const indices = [(stillIndex - 1 + n) % n, (stillIndex + 1) % n];
+    indices.forEach((i) => {
+      const url = stillItems[i]?.url;
+      if (url) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [stillIndex, stillItems]);
+
   // ============================================================================
   // Swipe/drag handling (unchanged)
   // ============================================================================
@@ -523,14 +537,9 @@ export default function StudioRight(props: StudioRightProps) {
       let inputs: Record<string, any> = { image: safeStillUrl };
 
       if (modelKey === "upscale") {
-        // Feed CDN-optimized 1080w image so 4× upscale ≈ 4320px (4K)
-        const cdnUrl = safeStillUrl.includes("/cdn-cgi/image/")
-          ? safeStillUrl
-          : safeStillUrl.includes("assets.faltastudio.com")
-            ? `https://assets.faltastudio.com/cdn-cgi/image/width=1080,quality=70,format=auto/${safeStillUrl.replace("https://assets.faltastudio.com/", "")}`
-            : safeStillUrl;
-        inputs.image = cdnUrl;
-        inputs.scale_factor = 4; // 1080 × 4 = 4320px (4K)
+        // crystal-upscaler: send original image, scale_factor 2
+        inputs.image = safeStillUrl;
+        inputs.scale_factor = 2;
       } else if (modelKey === "expand") {
         inputs.image = safeStillUrl;
 
@@ -756,11 +765,12 @@ export default function StudioRight(props: StudioRightProps) {
                 ) : (
                   <img
                     key={media.url}
-                    className="studio-output-media"
+                    className="studio-output-media studio-output-media--loading"
                     src={media?.url || ""}
                     alt=""
                     draggable={false}
                     onDragStart={(e) => e.preventDefault()}
+                    onLoad={(e) => e.currentTarget.classList.remove("studio-output-media--loading")}
                   />
                 )}
               </div>
