@@ -1008,22 +1008,17 @@
 }
 
 /* =============================================================
-   Bulk delete mode
+   Multi-select delete
    ============================================================= */
 
-/* "delete" confirm text in red (enters bulk mode) */
+/* "delete" / "delete all" confirm text in red */
 .profile-card-confirm-yes--red {
   color: #c0392b !important;
-  font-weight: 700 !important;
+  font-weight: 400 !important;
 }
 
 .profile-card-confirm-yes--red:hover:not(:disabled) {
   color: #a93226 !important;
-}
-
-/* Card in bulk mode — clickable cursor */
-.profile-card.is-bulk-mode .profile-card-media {
-  cursor: pointer;
 }
 
 /* Selected card overlay — red contour + red fill */
@@ -1039,55 +1034,4 @@
   background: rgba(192, 57, 43, 0.1);
   pointer-events: none;
   z-index: 2;
-}
-
-/* Sticky bulk toolbar at bottom */
-.profile-bulk-bar {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 18px;
-
-  background: #EEEEE2;
-  border-top: 1px solid rgba(8, 10, 0, 0.08);
-}
-
-.profile-bulk-btn {
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(8, 10, 0, 0.85);
-  padding: 0;
-}
-
-.profile-bulk-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.profile-bulk-btn--delete {
-  color: #c0392b;
-}
-
-.profile-bulk-btn--confirm {
-  color: #c0392b;
-}
-
-.profile-bulk-btn--confirm:hover:not(:disabled) {
-  color: #a93226;
-}
-
-.profile-bulk-sep {
-  color: rgba(8, 10, 0, 0.25);
-  font-weight: 700;
-  font-size: 13px;
-  line-height: 1;
 }
