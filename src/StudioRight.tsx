@@ -774,7 +774,7 @@ export default function StudioRight(props: StudioRightProps) {
         <div className="studio-feedback-bar">
           <input
             className="studio-feedback-input--compact"
-            placeholder="Remove background, mute colors, change, replace or add anything"
+            placeholder="Double click or type to edit "
             value={tweakText}
             onChange={(e) => setTweakText(e.target.value)}
             disabled={!!sending || !creditsOk}
