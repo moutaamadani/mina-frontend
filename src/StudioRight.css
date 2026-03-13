@@ -62,6 +62,12 @@
   color: rgba(0, 0, 0, 0.4);
 }
 
+.studio-upload-btn--loading {
+  pointer-events: none;
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Click surface (zones + zoom) */
 .studio-output-click {
   width: 100%;

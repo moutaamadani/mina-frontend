@@ -2529,7 +2529,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       // @ts-ignore
       if (typeof createImageBitmap === "function") return await createImageBitmap(file);
     } catch {}
-    // Fallback path (Image element)
+    // Fallback path (Image element → canvas → ImageBitmap)
     try {
       const url = URL.createObjectURL(file);
       const bmp = await new Promise<ImageBitmap>((resolve, reject) => {
@@ -2543,9 +2543,18 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
             const ctx = canvas.getContext("2d");
             if (!ctx) throw new Error("No canvas");
             ctx.drawImage(img, 0, 0);
-            // @ts-ignore
-            const b = await createImageBitmap(canvas);
-            resolve(b);
+            // Safari may not support createImageBitmap(canvas) — wrap in try
+            try {
+              // @ts-ignore
+              if (typeof createImageBitmap === "function") {
+                const b = await createImageBitmap(canvas);
+                return resolve(b);
+              }
+            } catch {}
+            // Ultimate Safari fallback: synthesize a minimal object with
+            // width/height and the canvas itself so normalizeImageForUpload
+            // can drawImage() it just like an ImageBitmap.
+            resolve({ width: canvas.width, height: canvas.height, close: () => {}, _canvas: canvas } as any);
           } catch (e) {
             reject(e);
           }
@@ -2627,7 +2636,9 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       throw new Error("BROKEN");
     }
 
-    ctx.drawImage(bmp as any, 0, 0, outW, outH);
+    // Use the underlying canvas if available (Safari fallback), otherwise ImageBitmap
+    const drawSource = (bmp as any)._canvas || bmp;
+    ctx.drawImage(drawSource as any, 0, 0, outW, outH);
     try {
       (bmp as any).close?.();
     } catch {}
@@ -3399,9 +3410,13 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
       // 3) Verify the uploaded URL actually loads as media (catches “broken upload”)
       //    Use retry to handle CDN propagation delay on freshly-uploaded files.
-      const ok = await probeMediaUrlWithRetry(remoteUrl, mediaType, 8000, 2, 1500);
+      //    Skip probe for images that were successfully normalized locally —
+      //    we already decoded + re-encoded them, so the file is valid.
+      //    The R2 PUT returned 200 so the upload succeeded.
+      const wasNormalized = normalized !== file;
+      const ok = wasNormalized || await probeMediaUrlWithRetry(remoteUrl, mediaType, 12000, 4, 2000);
       if (!ok) {
-        showUploadNotice(panel, humanizeUploadError("broken"));
+        showUploadNotice(panel, humanizeUploadError(“broken”));
         removeUploadItem(panel, id);
         return;
       }
@@ -4654,6 +4669,12 @@ const styleHeroUrls = (stylePresetKeys || [])
   setUiStage((s) => (s < 3 ? 3 : s));
 };
 
+  /** Reveal left-studio panels when the brief textarea gets focus (before typing) */
+  const handleBriefFocus = useCallback(() => {
+    if (!hasEverTyped) setHasEverTyped(true);
+    setActivePanel((prev) => prev ?? “product”);
+    setUiStage((s) => (s < 3 ? 3 : s));
+  }, [hasEverTyped]);
 
   const capForPanel = (panel: UploadPanelKey) => {
     if (panel === "inspiration") return 8;
@@ -5478,6 +5499,11 @@ const styleHeroUrls = (stylePresetKeys || [])
 
   // Upload from right-panel "+ Upload image to edit" button → goes into product pill
   const handleRightPanelUpload = (file: File) => {
+    // Reveal left studio when uploading from right panel
+    if (!hasEverTyped) setHasEverTyped(true);
+    setActivePanel((prev) => prev ?? "product");
+    setUiStage((s) => (s < 3 ? 3 : s));
+
     const list = { 0: file, length: 1, item: (i: number) => (i === 0 ? file : null) } as unknown as FileList;
     addFilesToPanel("product", list);
   };
@@ -5556,6 +5582,7 @@ const styleHeroUrls = (stylePresetKeys || [])
         }
         animateMode={animateMode}
         onDropUpload={handleRightPanelUpload}
+        rightUploading={!!uploads.product[0]?.uploading}
       />
     );
   };
@@ -5856,6 +5883,7 @@ const headerOverlayClass =
               briefShellRef={briefShellRef}
               onBriefScroll={handleBriefScroll}
               onBriefChange={handleBriefChange}
+              onBriefFocus={handleBriefFocus}
               animateMode={animateMode}
               onToggleAnimateMode={handleToggleAnimateMode}
               activePanel={activePanel}

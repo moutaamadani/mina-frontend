@@ -167,6 +167,8 @@ type StudioLeftProps = {
   minaTalking?: boolean;
   minaTone?: "thinking" | "error" | "info";
   onDismissMinaNotice?: () => void;
+  /** Called when the brief textarea receives focus — used to reveal panels early */
+  onBriefFocus?: () => void;
   minaError?: string | null;
   onClearMinaError?: () => void;
 
@@ -450,6 +452,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     minaTalking,
     minaTone,
     onDismissMinaNotice,
+    onBriefFocus,
     minaError,
     onClearMinaError,
 
@@ -1756,7 +1759,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                 }
                 value={brief}
                 onChange={(e) => onBriefChange(e.target.value)}
-                onFocus={() => onDismissMinaNotice?.()}
+                onFocus={() => { onDismissMinaNotice?.(); onBriefFocus?.(); }}
                 rows={4}
                 onPaste={(e) => {
                   const text = e.clipboardData?.getData("text/plain") || "";

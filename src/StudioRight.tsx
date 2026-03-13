@@ -67,6 +67,8 @@ type StudioRightProps = {
   // ✅ Create-mode drop zone (state 0)
   animateMode?: boolean;
   onDropUpload?: (file: File) => void;
+  /** true while the right-panel upload is in flight */
+  rightUploading?: boolean;
 };
 
 // ============================================================================
@@ -100,6 +102,7 @@ export default function StudioRight(props: StudioRightProps) {
     downloadDisabled,
     animateMode,
     onDropUpload,
+    rightUploading,
   } = props;
 
   const isEmpty = !currentStill && !currentMotion;
@@ -707,10 +710,11 @@ export default function StudioRight(props: StudioRightProps) {
             <>
               <button
                 type="button"
-                className="studio-upload-btn"
+                className={`studio-upload-btn${rightUploading ? " studio-upload-btn--loading" : ""}`}
+                disabled={!!rightUploading}
                 onClick={() => fileInputRef.current?.click()}
               >
-                + Upload image to edit
+                {rightUploading ? "Uploading…" : "+ Upload image to edit"}
               </button>
               <input
                 ref={fileInputRef}
