@@ -651,6 +651,14 @@ video {
   gap: 16px;
 }
 
+@media (min-width: 901px) {
+  .studio-animate-toggle--header {
+    position: absolute;
+    left: calc(60% - 72px);
+    top: 0;
+  }
+}
+
 /* Animate / Create toggle in header — always visible via mix-blend-mode difference */
 .studio-animate-toggle {
   border: none;
@@ -662,8 +670,11 @@ video {
   color: #fff;
   cursor: pointer;
   text-decoration: none;
-  mix-blend-mode: difference;
   transition: opacity 120ms ease;
+}
+
+.studio-animate-toggle--header {
+  mix-blend-mode: difference;
 }
 
 .studio-animate-toggle:hover {
