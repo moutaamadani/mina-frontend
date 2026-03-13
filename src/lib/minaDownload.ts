@@ -1,6 +1,7 @@
 // src/lib/minaDownload.ts
-// Robust “force download” for BOTH images + videos (no window.open fallback).
-// - Uses fetch -> blob -> <a download>
+// Robust "force download" for BOTH images + videos.
+// - Desktop: fetch -> blob -> <a download>  (instant if image already cached)
+// - iOS:     fetch -> blob -> navigator.share({ files }) → saves to Photos gallery
 // - If direct fetch fails (CORS), optionally tries backend proxy: GET {API_BASE_URL}/public/download?url=...
 
 export type MinaDownloadKind = "still" | "motion";
@@ -76,6 +77,33 @@ function extFromContentType(ct: string, fallback: string) {
   return fallback;
 }
 
+function mimeFromExt(ext: string): string {
+  const e = ext.toLowerCase();
+  if (e === ".jpg" || e === ".jpeg") return "image/jpeg";
+  if (e === ".png") return "image/png";
+  if (e === ".webp") return "image/webp";
+  if (e === ".gif") return "image/gif";
+  if (e === ".mp4") return "video/mp4";
+  if (e === ".webm") return "video/webm";
+  if (e === ".mov") return "video/quicktime";
+  return "application/octet-stream";
+}
+
+// Detect iOS (iPhone/iPad/iPod, including iPadOS in desktop mode)
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/.test(ua)) return true;
+  // iPadOS 13+ reports as Mac
+  if (/Macintosh/.test(ua) && "ontouchend" in document) return true;
+  return false;
+}
+
+// Check if Web Share API supports file sharing
+function canShareFiles(): boolean {
+  return typeof navigator !== "undefined" && typeof navigator.share === "function" && typeof navigator.canShare === "function";
+}
+
 function forceDownloadBlob(blob: Blob, filename: string) {
   const name = sanitizeFilename(filename || "Mina_export");
 
@@ -105,12 +133,30 @@ function forceDownloadBlob(blob: Blob, filename: string) {
   }, 1500);
 }
 
+// iOS: use Web Share API to save to Photos gallery
+async function shareToGallery(blob: Blob, filename: string, mimeType: string): Promise<boolean> {
+  if (!canShareFiles()) return false;
+
+  try {
+    const file = new File([blob], filename, { type: mimeType });
+    const shareData = { files: [file] };
+
+    if (!navigator.canShare(shareData)) return false;
+
+    await navigator.share(shareData);
+    return true;
+  } catch (err: any) {
+    // User cancelled the share sheet — not an error
+    if (err?.name === "AbortError") return true;
+    return false;
+  }
+}
+
 async function fetchAsBlob(url: string): Promise<{ blob: Blob; contentType: string }> {
   const res = await fetch(url, {
     method: "GET",
     mode: "cors",
     credentials: "omit",
-    cache: "no-store",
   });
 
   if (!res.ok) {
@@ -136,16 +182,30 @@ function buildName(opts: DownloadOpts, extGuess: string) {
   return core.endsWith(ext) ? core : `${core}${ext}`;
 }
 
+async function downloadWithBlob(opts: DownloadOpts, blob: Blob, contentType: string): Promise<void> {
+  const urlExt = extFromUrl(opts.url) || (opts.kind === "motion" ? ".mp4" : ".jpg");
+  const ext = extFromContentType(contentType, urlExt);
+  const filename = buildName(opts, ext);
+  const mime = contentType || mimeFromExt(ext);
+
+  // iOS → share to Photos gallery
+  if (isIOS()) {
+    const shared = await shareToGallery(blob, filename, mime);
+    if (shared) return;
+  }
+
+  // Desktop / fallback → anchor download
+  forceDownloadBlob(blob, filename);
+}
+
 export async function downloadMinaAsset(opts: DownloadOpts): Promise<void> {
   const url = String(opts?.url || "").trim();
   if (!url) throw new Error("Missing url");
 
   // 1) Try direct fetch -> blob
   try {
-    const urlExt = extFromUrl(url) || (opts.kind === "motion" ? ".mp4" : ".jpg");
     const { blob, contentType } = await fetchAsBlob(url);
-    const ext = extFromContentType(contentType, urlExt);
-    forceDownloadBlob(blob, buildName(opts, ext));
+    await downloadWithBlob(opts, blob, contentType);
     return;
   } catch (e1) {
     // 2) Optional: try backend proxy (if you add it)
@@ -153,10 +213,8 @@ export async function downloadMinaAsset(opts: DownloadOpts): Promise<void> {
     if (API_BASE_URL) {
       try {
         const proxy = `${API_BASE_URL}/public/download?url=${encodeURIComponent(url)}`;
-        const urlExt = extFromUrl(url) || (opts.kind === "motion" ? ".mp4" : ".jpg");
         const { blob, contentType } = await fetchAsBlob(proxy);
-        const ext = extFromContentType(contentType, urlExt);
-        forceDownloadBlob(blob, buildName(opts, ext));
+        await downloadWithBlob(opts, blob, contentType);
         return;
       } catch (e2) {
         throw e1 instanceof Error ? e1 : new Error("Download failed");
