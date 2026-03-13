@@ -1035,3 +1035,11 @@
   pointer-events: none;
   z-index: 2;
 }
+
+/* Drag-select rectangle */
+.profile-drag-rect {
+  pointer-events: none;
+  z-index: 200;
+  border: 1px solid #c0392b;
+  background: rgba(192, 57, 43, 0.08);
+}

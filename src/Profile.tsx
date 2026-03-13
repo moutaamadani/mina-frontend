@@ -825,6 +825,152 @@ export default function Profile({
 
   // How many cards are in confirm-delete state
   const confirmCount = useMemo(() => Object.values(confirmDeleteIds).filter(Boolean).length, [confirmDeleteIds]);
+  const isSelectMode = confirmCount > 0;
+
+  // Drag-select rectangle (desktop + touch)
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [dragRect, setDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const dragState = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    scrollTop: number;
+    touch: boolean;
+    longPressTimer: ReturnType<typeof setTimeout> | null;
+  }>({ active: false, startX: 0, startY: 0, scrollTop: 0, touch: false, longPressTimer: null });
+
+  // Get all card elements and their IDs that intersect a rect
+  const getCardsInRect = useCallback((rect: { x: number; y: number; w: number; h: number }) => {
+    if (!gridRef.current) return [];
+    const cards = gridRef.current.querySelectorAll<HTMLElement>("[data-card-id]");
+    const result: string[] = [];
+    const rx1 = Math.min(rect.x, rect.x + rect.w);
+    const ry1 = Math.min(rect.y, rect.y + rect.h);
+    const rx2 = Math.max(rect.x, rect.x + rect.w);
+    const ry2 = Math.max(rect.y, rect.y + rect.h);
+
+    cards.forEach((card) => {
+      const cr = card.getBoundingClientRect();
+      // Check overlap
+      if (cr.left < rx2 && cr.right > rx1 && cr.top < ry2 && cr.bottom > ry1) {
+        const id = card.getAttribute("data-card-id");
+        if (id) result.push(id);
+      }
+    });
+    return result;
+  }, []);
+
+  // --- Desktop drag-select ---
+  const onGridMouseDown = useCallback((e: React.MouseEvent) => {
+    // Only start drag on the grid background / card media, not on buttons
+    const tag = (e.target as HTMLElement).tagName.toLowerCase();
+    if (tag === "button" || tag === "input" || tag === "a") return;
+    // Only left-click
+    if (e.button !== 0) return;
+    // Only if already in select mode (at least one card confirmed)
+    if (!isSelectMode) return;
+
+    e.preventDefault();
+    dragState.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      scrollTop: 0,
+      touch: false,
+      longPressTimer: null,
+    };
+    setDragRect({ x: e.clientX, y: e.clientY, w: 0, h: 0 });
+  }, [isSelectMode]);
+
+  const onGridMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragState.current.active || dragState.current.touch) return;
+    const { startX, startY } = dragState.current;
+    setDragRect({ x: startX, y: startY, w: e.clientX - startX, h: e.clientY - startY });
+  }, []);
+
+  const onGridMouseUp = useCallback(() => {
+    if (!dragState.current.active || dragState.current.touch) return;
+    dragState.current.active = false;
+    if (dragRect) {
+      const ids = getCardsInRect(dragRect);
+      if (ids.length > 0) {
+        setConfirmDeleteIds((prev) => {
+          const next = { ...prev };
+          for (const id of ids) next[id] = true;
+          return next;
+        });
+      }
+    }
+    setDragRect(null);
+  }, [dragRect, getCardsInRect]);
+
+  // --- Touch drag-select (long-press to start, drag to sweep) ---
+  const onGridTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!isSelectMode) return;
+    const tag = (e.target as HTMLElement).tagName.toLowerCase();
+    if (tag === "button" || tag === "input" || tag === "a") return;
+
+    const touch = e.touches[0];
+    const st = dragState.current;
+    st.startX = touch.clientX;
+    st.startY = touch.clientY;
+    st.touch = true;
+    st.active = false;
+
+    // Long-press: 400ms to start drag-select
+    if (st.longPressTimer) clearTimeout(st.longPressTimer);
+    st.longPressTimer = setTimeout(() => {
+      st.active = true;
+      setDragRect({ x: touch.clientX, y: touch.clientY, w: 0, h: 0 });
+    }, 400);
+  }, [isSelectMode]);
+
+  const onGridTouchMove = useCallback((e: React.TouchEvent) => {
+    const st = dragState.current;
+    if (!st.touch) return;
+
+    const touch = e.touches[0];
+    const dist = Math.hypot(touch.clientX - st.startX, touch.clientY - st.startY);
+
+    // If moved before long-press fires, cancel it (normal scroll)
+    if (!st.active && dist > 10) {
+      if (st.longPressTimer) {
+        clearTimeout(st.longPressTimer);
+        st.longPressTimer = null;
+      }
+      return;
+    }
+
+    if (!st.active) return;
+
+    e.preventDefault(); // prevent scroll while dragging
+    setDragRect({ x: st.startX, y: st.startY, w: touch.clientX - st.startX, h: touch.clientY - st.startY });
+  }, []);
+
+  const onGridTouchEnd = useCallback(() => {
+    const st = dragState.current;
+    if (st.longPressTimer) {
+      clearTimeout(st.longPressTimer);
+      st.longPressTimer = null;
+    }
+    if (!st.active || !st.touch) {
+      st.touch = false;
+      return;
+    }
+    st.active = false;
+    st.touch = false;
+    if (dragRect) {
+      const ids = getCardsInRect(dragRect);
+      if (ids.length > 0) {
+        setConfirmDeleteIds((prev) => {
+          const next = { ...prev };
+          for (const id of ids) next[id] = true;
+          return next;
+        });
+      }
+    }
+    setDragRect(null);
+  }, [dragRect, getCardsInRect]);
 
   // Filters
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
@@ -1726,7 +1872,31 @@ const openPrompt = useCallback((id: string) => {
           </div>
         </div>
 
-        <div className="profile-grid">
+        <div
+          ref={gridRef}
+          className="profile-grid"
+          onMouseDown={onGridMouseDown}
+          onMouseMove={onGridMouseMove}
+          onMouseUp={onGridMouseUp}
+          onMouseLeave={onGridMouseUp}
+          onTouchStart={onGridTouchStart}
+          onTouchMove={onGridTouchMove}
+          onTouchEnd={onGridTouchEnd}
+          onTouchCancel={onGridTouchEnd}
+        >
+          {/* Drag-select rectangle overlay */}
+          {dragRect && (dragRect.w !== 0 || dragRect.h !== 0) && (
+            <div
+              className="profile-drag-rect"
+              style={{
+                position: "fixed",
+                left: Math.min(dragRect.x, dragRect.x + dragRect.w),
+                top: Math.min(dragRect.y, dragRect.y + dragRect.h),
+                width: Math.abs(dragRect.w),
+                height: Math.abs(dragRect.h),
+              }}
+            />
+          )}
           {showInitialSkeletons
             ? Array.from({ length: skeletonCount }).map((_, i) => (
                 <div key={`sk_${i}`} className={`profile-card ${sizeClassForIndex(i)} profile-card--skeleton`}>
@@ -1762,6 +1932,7 @@ const openPrompt = useCallback((id: string) => {
                 return (
                   <div
                     key={it.id}
+                    data-card-id={it.id}
                     className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
                       ghostIds[it.id] ? "is-ghost" : ""
                     } ${confirming ? "is-bulk-selected" : ""}`}
@@ -1823,12 +1994,20 @@ const openPrompt = useCallback((id: string) => {
                       role="button"
                       tabIndex={0}
                       onClick={() => {
+                        if (isSelectMode) {
+                          askDelete(it.id);
+                          return;
+                        }
                         const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                         if (!it.isMotion) prefetchImage(big);
                         openLightbox(big, it.isMotion);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
+                          if (isSelectMode) {
+                            askDelete(it.id);
+                            return;
+                          }
                           const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                           if (!it.isMotion) prefetchImage(big);
                           openLightbox(big, it.isMotion);
