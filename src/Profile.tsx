@@ -1809,10 +1809,13 @@ const openPrompt = useCallback((id: string) => {
                         {bulkMode ? null : confirming ? (
                           <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
                             <button
-                              className="profile-card-confirm-yes"
+                              className="profile-card-confirm-yes profile-card-confirm-yes--red"
                               type="button"
-                              onClick={() => deleteItem(it.id)}
-                              disabled={deleting || !onDelete}
+                              onClick={() => {
+                                cancelDelete(it.id);
+                                enterBulkMode();
+                              }}
+                              disabled={!onDelete}
                             >
                               delete
                             </button>
@@ -1820,19 +1823,20 @@ const openPrompt = useCallback((id: string) => {
                               className="profile-card-confirm-no"
                               type="button"
                               onClick={() => cancelDelete(it.id)}
-                              disabled={deleting}
                             >
                               cancel
                             </button>
                           </div>
                         ) : (
                           <button
-                            className="profile-card-delete-text"
+                            className="profile-card-delete"
                             type="button"
-                            onClick={() => enterBulkMode()}
-                            disabled={!onDelete}
+                            onClick={() => askDelete(it.id)}
+                            disabled={deleting || !onDelete}
+                            title="Delete"
+                            aria-label="Delete"
                           >
-                            Delete
+                            −
                           </button>
                         )}
                       </div>

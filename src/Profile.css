@@ -1011,25 +1011,14 @@
    Bulk delete mode
    ============================================================= */
 
-/* "Delete" text button (replaces the minus sign) */
-.profile-card-delete-text {
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
-  color: #c0392b;
-  padding: 2px 6px;
-  line-height: 1;
+/* "delete" confirm text in red (enters bulk mode) */
+.profile-card-confirm-yes--red {
+  color: #c0392b !important;
+  font-weight: 700 !important;
 }
 
-.profile-card-delete-text:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.profile-card-delete-text:hover:not(:disabled) {
-  color: #a93226;
+.profile-card-confirm-yes--red:hover:not(:disabled) {
+  color: #a93226 !important;
 }
 
 /* Card in bulk mode — clickable cursor */
