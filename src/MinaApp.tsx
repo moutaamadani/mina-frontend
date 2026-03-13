@@ -5850,7 +5850,7 @@ const headerOverlayClass =
             {activeTab === "studio" && (
               <button
                 type="button"
-                className="studio-animate-toggle"
+                className="studio-animate-toggle studio-animate-toggle--header"
                 onClick={handleToggleAnimateMode}
                 disabled={stillGenerating || motionGenerating || feedbackSending}
               >
