@@ -2283,10 +2283,25 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const gens = history?.generations || [];
       const feedbacks = history?.feedbacks || [];
 
-      const updated = await normalizeHistoryGenerations(gens);
-
       const nextCursor = history?.page?.nextCursor ?? null;
       const hasMore = !!history?.page?.hasMore;
+
+      // Show first batch immediately (strip signed queries only — fast)
+      const quick = gens.map((g: GenerationRecord) => {
+        const u = String(g.outputUrl || "").trim();
+        if (!u) return g;
+        const s = stripSignedQuery(u);
+        return s !== u ? { ...g, outputUrl: s } : g;
+      });
+
+      setHistoryGenerations(quick);
+      setHistoryFeedbacks(feedbacks);
+      setHistoryNextCursor(nextCursor);
+      setHistoryHasMore(hasMore);
+      setHistoryLoading(false);
+
+      // Normalize remaining (Replicate URL migration) in background
+      const updated = await normalizeHistoryGenerations(gens);
 
       historyCacheRef.current[currentPassId] = {
         generations: updated,
@@ -2296,9 +2311,6 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       historyDirtyRef.current = false;
 
       setHistoryGenerations(updated);
-      setHistoryFeedbacks(feedbacks);
-      setHistoryNextCursor(nextCursor);
-      setHistoryHasMore(hasMore);
     } catch (err: any) {
       setHistoryError(err?.message || "Unable to load history.");
     } finally {

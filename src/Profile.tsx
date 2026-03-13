@@ -839,7 +839,7 @@ export default function Profile({
     "Replace my product in the scene, keep my scene, composition, tone, aesthetic, highlights, and vibe style exactly the same";
 
   // Pagination
-  const [visibleCount, setVisibleCount] = useState(36);
+  const [visibleCount, setVisibleCount] = useState(20);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const loadingMoreRefFlag = useRef(false);
@@ -1344,7 +1344,7 @@ export default function Profile({
   }, [generations, feedbacks, likedUrlSet, motion, activeAspectFilter, onRecreate, removedIds, sizeClassForIndex]);
 
   useEffect(() => {
-    setVisibleCount(36);
+    setVisibleCount(20);
   }, [motion, activeAspectFilter]);
 
   useEffect(() => {
