@@ -77,6 +77,52 @@ type StudioRightProps = {
 const FT_INITIAL_DELAY = 260;
 const FT_STAGGER = 90;
 
+/**
+ * StillImage — preloads the image fully before displaying it.
+ * The browser decodes the entire image off-screen, then we set the src
+ * so it paints in one frame (no progressive top-to-bottom scan).
+ */
+function StillImage({ url }: { url: string }) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(false);
+    if (!url) return;
+
+    const img = new Image();
+    img.src = url;
+
+    // decode() ensures the image is fully rasterized before we reveal it
+    const show = () => {
+      if (imgRef.current) {
+        imgRef.current.src = url;
+        imgRef.current.classList.remove("studio-output-media--loading");
+      }
+      setReady(true);
+    };
+
+    if (typeof img.decode === "function") {
+      img.decode().then(show).catch(show);
+    } else {
+      img.onload = show;
+      img.onerror = show;
+    }
+  }, [url]);
+
+  return (
+    <img
+      ref={imgRef}
+      className={`studio-output-media${ready ? "" : " studio-output-media--loading"}`}
+      // Start with empty src — no progressive rendering. Set by useEffect once decoded.
+      src={ready ? url : ""}
+      alt=""
+      draggable={false}
+      onDragStart={(e) => e.preventDefault()}
+    />
+  );
+}
+
 export default function StudioRight(props: StudioRightProps) {
   const {
     currentStill,
@@ -152,6 +198,20 @@ export default function StudioRight(props: StudioRightProps) {
     if (safeStillUrl) return { type: "image" as const, url: safeStillUrl };
     return null;
   }, [currentMotion, showMotion, safeStillUrl]);
+
+  // Preload adjacent carousel images so swiping feels instant
+  useEffect(() => {
+    if (stillItems.length < 2) return;
+    const n = stillItems.length;
+    const indices = [(stillIndex - 1 + n) % n, (stillIndex + 1) % n];
+    indices.forEach((i) => {
+      const url = stillItems[i]?.url;
+      if (url) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }, [stillIndex, stillItems]);
 
   // ============================================================================
   // Swipe/drag handling (unchanged)
@@ -523,14 +583,9 @@ export default function StudioRight(props: StudioRightProps) {
       let inputs: Record<string, any> = { image: safeStillUrl };
 
       if (modelKey === "upscale") {
-        // Feed CDN-optimized 1080w image so 4× upscale ≈ 4320px (4K)
-        const cdnUrl = safeStillUrl.includes("/cdn-cgi/image/")
-          ? safeStillUrl
-          : safeStillUrl.includes("assets.faltastudio.com")
-            ? `https://assets.faltastudio.com/cdn-cgi/image/width=1080,quality=70,format=auto/${safeStillUrl.replace("https://assets.faltastudio.com/", "")}`
-            : safeStillUrl;
-        inputs.image = cdnUrl;
-        inputs.scale_factor = 4; // 1080 × 4 = 4320px (4K)
+        // crystal-upscaler: send original image, scale_factor 2
+        inputs.image = safeStillUrl;
+        inputs.scale_factor = 2;
       } else if (modelKey === "expand") {
         inputs.image = safeStillUrl;
 
@@ -754,14 +809,7 @@ export default function StudioRight(props: StudioRightProps) {
                     onDragStart={(e) => e.preventDefault()}
                   />
                 ) : (
-                  <img
-                    key={media.url}
-                    className="studio-output-media"
-                    src={media?.url || ""}
-                    alt=""
-                    draggable={false}
-                    onDragStart={(e) => e.preventDefault()}
-                  />
+                  <StillImage key={media.url} url={media?.url || ""} />
                 )}
               </div>
             </button>
