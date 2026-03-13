@@ -252,6 +252,7 @@
 
 /* Media (no border, no radius, subtle tint) */
 .profile-card-media {
+  position: relative;
   width: 100%;
   border: 0;
   background: rgba(8, 10, 0, 0.05);
@@ -1004,4 +1005,100 @@
 
 .profile-lightbox-hint.is-visible {
   opacity: 1;
+}
+
+/* =============================================================
+   Bulk delete mode
+   ============================================================= */
+
+/* "Delete" text button (replaces the minus sign) */
+.profile-card-delete-text {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: #c0392b;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+.profile-card-delete-text:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.profile-card-delete-text:hover:not(:disabled) {
+  color: #a93226;
+}
+
+/* Card in bulk mode — clickable cursor */
+.profile-card.is-bulk-mode .profile-card-media {
+  cursor: pointer;
+}
+
+/* Selected card overlay — red contour + red fill */
+.profile-card.is-bulk-selected .profile-card-media {
+  outline: 1pt solid #c0392b;
+  outline-offset: -1px;
+}
+
+.profile-card.is-bulk-selected .profile-card-media::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(192, 57, 43, 0.1);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Sticky bulk toolbar at bottom */
+.profile-bulk-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+
+  background: #EEEEE2;
+  border-top: 1px solid rgba(8, 10, 0, 0.08);
+}
+
+.profile-bulk-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(8, 10, 0, 0.85);
+  padding: 0;
+}
+
+.profile-bulk-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.profile-bulk-btn--delete {
+  color: #c0392b;
+}
+
+.profile-bulk-btn--confirm {
+  color: #c0392b;
+}
+
+.profile-bulk-btn--confirm:hover:not(:disabled) {
+  color: #a93226;
+}
+
+.profile-bulk-sep {
+  color: rgba(8, 10, 0, 0.25);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
 }

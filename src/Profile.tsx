@@ -823,6 +823,83 @@ export default function Profile({
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<Record<string, boolean>>({});
   const [lightbox, setLightbox] = useState<{ url: string; isMotion: boolean } | null>(null);
 
+  // Bulk delete mode
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const selectedCount = useMemo(() => Object.values(selectedIds).filter(Boolean).length, [selectedIds]);
+
+  const enterBulkMode = useCallback(() => {
+    setBulkMode(true);
+    setSelectedIds({});
+  }, []);
+
+  const exitBulkMode = useCallback(() => {
+    setBulkMode(false);
+    setSelectedIds({});
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        next[id] = true;
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback((allIds: string[]) => {
+    const next: Record<string, boolean> = {};
+    for (const id of allIds) next[id] = true;
+    setSelectedIds(next);
+  }, []);
+
+  const unselectAll = useCallback(() => {
+    setSelectedIds({});
+  }, []);
+
+  const bulkDeleteSelected = useCallback(async () => {
+    if (!onDelete || bulkDeleting) return;
+    const ids = Object.keys(selectedIds).filter((id) => selectedIds[id]);
+    if (!ids.length) return;
+
+    setBulkDeleting(true);
+
+    for (const id of ids) {
+      setRemovingIds((prev) => ({ ...prev, [id]: true }));
+    }
+
+    for (const id of ids) {
+      try {
+        await onDelete(id);
+        setGhostIds((prev) => ({ ...prev, [id]: true }));
+        setTimeout(() => {
+          setRemovedIds((prev) => ({ ...prev, [id]: true }));
+          setGhostIds((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        }, 260);
+      } catch (e: any) {
+        console.warn("[bulk-delete] failed for", id, e?.message);
+      }
+      setRemovingIds((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+
+    setSelectedIds({});
+    setBulkDeleting(false);
+    setBulkMode(false);
+  }, [onDelete, selectedIds, bulkDeleting]);
+
   // Filters
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
   const cycleMotion = () => setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
@@ -1709,12 +1786,14 @@ const openPrompt = useCallback((id: string) => {
                 const canRecreateBtn = !!onRecreate && !!it.draft && it.canRecreate;
                 const showActionsRow = !!inputs && (canScene || canAnimateBtn || canRecreateBtn);
 
+                const isSelected = Boolean(selectedIds[it.id]);
+
                 return (
                   <div
                     key={it.id}
                     className={`profile-card ${it.sizeClass} ${removing ? "is-removing" : ""} ${
                       ghostIds[it.id] ? "is-ghost" : ""
-                    }`}
+                    } ${bulkMode && isSelected ? "is-bulk-selected" : ""} ${bulkMode ? "is-bulk-mode" : ""}`}
                   >
                     <div className="profile-card-top">
                       <button
@@ -1727,7 +1806,7 @@ const openPrompt = useCallback((id: string) => {
                       </button>
 
                       <div className="profile-card-top-right">
-                        {confirming ? (
+                        {bulkMode ? null : confirming ? (
                           <div className="profile-card-confirm" role="group" aria-label="Confirm delete">
                             <button
                               className="profile-card-confirm-yes"
@@ -1748,14 +1827,12 @@ const openPrompt = useCallback((id: string) => {
                           </div>
                         ) : (
                           <button
-                            className="profile-card-delete"
+                            className="profile-card-delete-text"
                             type="button"
-                            onClick={() => askDelete(it.id)}
-                            disabled={deleting || !onDelete}
-                            title="Delete"
-                            aria-label="Delete"
+                            onClick={() => enterBulkMode()}
+                            disabled={!onDelete}
                           >
-                            −
+                            Delete
                           </button>
                         )}
                       </div>
@@ -1768,12 +1845,20 @@ const openPrompt = useCallback((id: string) => {
                       role="button"
                       tabIndex={0}
                       onClick={() => {
+                        if (bulkMode) {
+                          toggleSelect(it.id);
+                          return;
+                        }
                         const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                         if (!it.isMotion) prefetchImage(big);
                         openLightbox(big, it.isMotion);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
+                          if (bulkMode) {
+                            toggleSelect(it.id);
+                            return;
+                          }
                           const big = it.isMotion ? it.url : cfInput2048(it.url, "product");
                           if (!it.isMotion) prefetchImage(big);
                           openLightbox(big, it.isMotion);
@@ -2209,6 +2294,57 @@ const openPrompt = useCallback((id: string) => {
               ))
             : null}
         </div>
+
+        {/* Bulk delete toolbar */}
+        {bulkMode && (
+          <div className="profile-bulk-bar">
+            <button
+              type="button"
+              className="profile-bulk-btn profile-bulk-btn--delete"
+              onClick={() => selectAll(visibleItems.map((i) => i.id))}
+              disabled={bulkDeleting}
+            >
+              Select all
+            </button>
+
+            <span className="profile-bulk-sep">|</span>
+
+            <button
+              type="button"
+              className="profile-bulk-btn"
+              onClick={unselectAll}
+              disabled={bulkDeleting || selectedCount === 0}
+            >
+              Unselect all
+            </button>
+
+            <span className="profile-bulk-sep">|</span>
+
+            <button
+              type="button"
+              className="profile-bulk-btn"
+              onClick={exitBulkMode}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </button>
+
+            <div style={{ flex: 1 }} />
+
+            <button
+              type="button"
+              className="profile-bulk-btn profile-bulk-btn--confirm"
+              onClick={bulkDeleteSelected}
+              disabled={bulkDeleting || selectedCount === 0}
+            >
+              {bulkDeleting
+                ? "Deleting…"
+                : selectedCount > 0
+                  ? `Delete ${selectedCount}`
+                  : "Delete"}
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
