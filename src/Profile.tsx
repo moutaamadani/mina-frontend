@@ -972,6 +972,25 @@ export default function Profile({
     setDragRect(null);
   }, [dragRect, getCardsInRect]);
 
+  // Keyboard shortcuts: Delete/Backspace → delete selected, Escape → cancel
+  useEffect(() => {
+    if (!isSelectMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelDeleteAll();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        // Don't trigger if user is typing in an input
+        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea") return;
+        e.preventDefault();
+        deleteAllConfirmed();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isSelectMode, confirmDeleteIds]);
+
   // Filters
   const [motion, setMotion] = useState<"all" | "still" | "motion">("all");
   const cycleMotion = () => setMotion((prev) => (prev === "all" ? "motion" : prev === "motion" ? "still" : "all"));
