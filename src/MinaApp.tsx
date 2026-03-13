@@ -3416,7 +3416,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       const wasNormalized = normalized !== file;
       const ok = wasNormalized || await probeMediaUrlWithRetry(remoteUrl, mediaType, 12000, 4, 2000);
       if (!ok) {
-        showUploadNotice(panel, humanizeUploadError(“broken”));
+        showUploadNotice(panel, humanizeUploadError("broken"));
         removeUploadItem(panel, id);
         return;
       }
@@ -4672,7 +4672,7 @@ const styleHeroUrls = (stylePresetKeys || [])
   /** Reveal left-studio panels when the brief textarea gets focus (before typing) */
   const handleBriefFocus = useCallback(() => {
     if (!hasEverTyped) setHasEverTyped(true);
-    setActivePanel((prev) => prev ?? “product”);
+    setActivePanel((prev) => prev ?? "product");
     setUiStage((s) => (s < 3 ? 3 : s));
   }, [hasEverTyped]);
 
