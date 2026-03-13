@@ -206,6 +206,8 @@ export default function StudioRight(props: StudioRightProps) {
   const maskCursorRef = useRef<HTMLDivElement | null>(null);
   const [maskDrawing, setMaskDrawing] = useState(false);
   const maskLastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const maskOverlayRef = useRef<HTMLDivElement | null>(null);
+  const maskZoomRef = useRef({ scale: 1, x: 0, y: 0 });
 
   // Exit fingertips
   const exitFingertips = useCallback(() => {
@@ -353,8 +355,20 @@ export default function StudioRight(props: StudioRightProps) {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    // Start with transparent canvas (user sees the dimmed image underneath)
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Reset zoom
+    maskZoomRef.current = { scale: 1, x: 0, y: 0 };
+    applyMaskZoom();
+  }, []);
+
+  const applyMaskZoom = useCallback(() => {
+    const { scale, x, y } = maskZoomRef.current;
+    const transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    const underlay = maskOverlayRef.current?.querySelector(".ft-mask-underlay") as HTMLElement | null;
+    const canvas = maskCanvasRef.current;
+    if (underlay) underlay.style.transform = transform;
+    if (canvas) canvas.style.transform = transform;
   }, []);
 
   useEffect(() => {
@@ -371,21 +385,25 @@ export default function StudioRight(props: StudioRightProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const cx = ((x - rect.left) / rect.width) * canvas.width;
-    const cy = ((y - rect.top) / rect.height) * canvas.height;
+    // Account for zoom transform when computing canvas coordinates
+    const overlay = maskOverlayRef.current;
+    if (!overlay) return;
+    const rect = overlay.getBoundingClientRect();
+    const z = maskZoomRef.current;
+    // Convert screen coords to unscaled canvas coords
+    const cx = ((x - rect.left - z.x) / z.scale / overlay.clientWidth) * canvas.width;
+    const cy = ((y - rect.top - z.y) / z.scale / overlay.clientHeight) * canvas.height;
 
-    const radius = 20;
+    const radius = 20 / z.scale; // Scale-independent brush size
 
     if (isStart) {
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(80, 130, 255, 0.2)";
+      ctx.fillStyle = "rgba(80, 130, 255, 0.35)";
       ctx.fill();
-      // Dashed blue outline
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = "rgba(80, 130, 255, 0.5)";
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(80, 130, 255, 0.6)";
+      ctx.lineWidth = 1.5 / z.scale;
       ctx.stroke();
       ctx.setLineDash([]);
     } else {
@@ -394,17 +412,16 @@ export default function StudioRight(props: StudioRightProps) {
         ctx.beginPath();
         ctx.moveTo(last.x, last.y);
         ctx.lineTo(cx, cy);
-        ctx.strokeStyle = "rgba(80, 130, 255, 0.2)";
+        ctx.strokeStyle = "rgba(80, 130, 255, 0.35)";
         ctx.lineWidth = radius * 2;
         ctx.lineCap = "round";
         ctx.stroke();
 
-        // Draw dashed outline path
         ctx.beginPath();
         ctx.arc(cx, cy, radius, 0, Math.PI * 2);
         ctx.setLineDash([4, 4]);
-        ctx.strokeStyle = "rgba(80, 130, 255, 0.5)";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "rgba(80, 130, 255, 0.6)";
+        ctx.lineWidth = 1.5 / z.scale;
         ctx.stroke();
         ctx.setLineDash([]);
       }
@@ -503,13 +520,44 @@ export default function StudioRight(props: StudioRightProps) {
       let inputs: Record<string, any> = { image: safeStillUrl };
 
       if (modelKey === "upscale") {
-        // 50% quality URL for optimization, upscale to high res
-        inputs.image = safeStillUrl;
-        inputs.scale_factor = 4; // target 8-16 megapixels
+        // Feed CDN-optimized 1080w image so 4× upscale ≈ 4320px (4K)
+        const cdnUrl = safeStillUrl.includes("/cdn-cgi/image/")
+          ? safeStillUrl
+          : safeStillUrl.includes("assets.faltastudio.com")
+            ? `https://assets.faltastudio.com/cdn-cgi/image/width=1080,quality=70,format=auto/${safeStillUrl.replace("https://assets.faltastudio.com/", "")}`
+            : safeStillUrl;
+        inputs.image = cdnUrl;
+        inputs.scale_factor = 4; // 1080 × 4 = 4320px (4K)
       } else if (modelKey === "expand") {
         inputs.image = safeStillUrl;
-        // Flip to opposite aspect ratio
-        const aspect = currentAspect || "9:16";
+
+        // Detect actual image dimensions to determine real current aspect ratio
+        // (avoids stale currentAspect after previous expand)
+        let realAspect = currentAspect || "9:16";
+        try {
+          const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+            img.onerror = reject;
+            img.src = safeStillUrl;
+          });
+          const ratio = dims.w / dims.h;
+          // Map to nearest standard ratio
+          if (Math.abs(ratio - 9 / 16) < 0.08) realAspect = "9:16";
+          else if (Math.abs(ratio - 16 / 9) < 0.08) realAspect = "16:9";
+          else if (Math.abs(ratio - 3 / 4) < 0.08) realAspect = "3:4";
+          else if (Math.abs(ratio - 4 / 3) < 0.08) realAspect = "4:3";
+          else if (Math.abs(ratio - 2 / 3) < 0.08) realAspect = "2:3";
+          else if (Math.abs(ratio - 3 / 2) < 0.08) realAspect = "3:2";
+          else if (Math.abs(ratio - 1) < 0.08) realAspect = "1:1";
+          // else keep currentAspect fallback
+        } catch {
+          // fallback to currentAspect
+        }
+
+        // Expand: grow canvas by ~40% in the shorter dimension
+        // Use canvas_size approach for reliable repeated expansions
+        const aspect = realAspect;
         if (aspect === "9:16" || aspect === "9_16") {
           inputs.aspect_ratio = "16:9";
         } else if (aspect === "16:9" || aspect === "16_9") {
@@ -523,8 +571,8 @@ export default function StudioRight(props: StudioRightProps) {
         } else if (aspect === "3:2" || aspect === "3_2") {
           inputs.aspect_ratio = "2:3";
         } else {
-          // 1:1 → expand by ~20% (use canvas_size approach)
-          inputs.aspect_ratio = "1:1";
+          // 1:1 or unknown → expand to 4:3
+          inputs.aspect_ratio = "4:3";
         }
       }
 
@@ -714,9 +762,27 @@ export default function StudioRight(props: StudioRightProps) {
               </div>
             </button>
 
-            {/* MASK OVERLAY — shown when drawing selection */}
+            {/* MASK OVERLAY — Canva-style: full opacity image, scroll/pinch to zoom, click to draw */}
             {ftMode === "mask" && safeStillUrl && (
-              <div className="ft-mask-overlay">
+              <div
+                className="ft-mask-overlay"
+                ref={maskOverlayRef}
+                onWheel={(e) => {
+                  e.preventDefault();
+                  const z = maskZoomRef.current;
+                  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                  const newScale = Math.max(0.5, Math.min(5, z.scale * delta));
+
+                  // Zoom toward cursor position
+                  const rect = maskOverlayRef.current!.getBoundingClientRect();
+                  const mx = e.clientX - rect.left;
+                  const my = e.clientY - rect.top;
+                  z.x = mx - (mx - z.x) * (newScale / z.scale);
+                  z.y = my - (my - z.y) * (newScale / z.scale);
+                  z.scale = newScale;
+                  applyMaskZoom();
+                }}
+              >
                 <img
                   className="ft-mask-underlay"
                   src={safeStillUrl}
@@ -847,29 +913,37 @@ export default function StudioRight(props: StudioRightProps) {
       {!isEmpty && ftMode === "toolbar" && (
         <div className="studio-fingertips-bar">
           {([
-            { key: "remove_bg" as FtModelKey, label: "Remove BG" },
-            { key: "upscale" as FtModelKey, label: "Upscale" },
-            { key: "expand" as FtModelKey, label: "Expand" },
-            { key: "flux_fill" as FtModelKey, label: "Fill Gen" },
-            { key: "vectorize" as FtModelKey, label: "SVG" },
-            { key: "eraser" as FtModelKey, label: "Eraser" },
+            { key: "remove_bg" as FtModelKey, label: "Remove BG", sep: false },
+            { key: "upscale" as FtModelKey, label: "Enhance", sep: false },
+            { key: "expand" as FtModelKey, label: "Expand", sep: false },
+            { key: "vectorize" as FtModelKey, label: "Vectorize", sep: false },
+            { key: "flux_fill" as FtModelKey, label: "Draw", sep: true },
+            { key: "eraser" as FtModelKey, label: "Erase", sep: false },
           ]).map((item, idx) => (
-            <button
-              key={item.key}
-              type="button"
-              className={`ft-btn ${ftBtnVisible ? "is-visible" : ""}`}
-              style={{ transitionDelay: ftBtnVisible ? `${FT_INITIAL_DELAY + idx * FT_STAGGER}ms` : "0ms" }}
-              onClick={() => {
-                if (item.key === "flux_fill") {
-                  handleFluxFill();
-                } else {
-                  handleFtModel(item.key);
-                }
-              }}
-              disabled={isBusy}
-            >
-              {ftProcessing && ftActiveModel === item.key ? "Processing…" : item.label}
-            </button>
+            <React.Fragment key={item.key}>
+              {item.sep && (
+                <span
+                  className={`ft-btn-separator ${ftBtnVisible ? "is-visible" : ""}`}
+                  style={{ transitionDelay: ftBtnVisible ? `${FT_INITIAL_DELAY + idx * FT_STAGGER}ms` : "0ms" }}
+                  aria-hidden="true"
+                >|</span>
+              )}
+              <button
+                type="button"
+                className={`ft-btn ${ftBtnVisible ? "is-visible" : ""}`}
+                style={{ transitionDelay: ftBtnVisible ? `${FT_INITIAL_DELAY + idx * FT_STAGGER}ms` : "0ms" }}
+                onClick={() => {
+                  if (item.key === "flux_fill") {
+                    handleFluxFill();
+                  } else {
+                    handleFtModel(item.key);
+                  }
+                }}
+                disabled={isBusy}
+              >
+                {ftProcessing && ftActiveModel === item.key ? "Processing…" : item.label}
+              </button>
+            </React.Fragment>
           ))}
 
           <span style={{ flex: "1 1 auto" }} />

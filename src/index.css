@@ -651,7 +651,7 @@ video {
   gap: 16px;
 }
 
-/* Animate / Create toggle in header — auto-contrast like other header CTAs */
+/* Animate / Create toggle in header — always visible via mix-blend-mode difference */
 .studio-animate-toggle {
   border: none;
   padding: 0;
@@ -659,9 +659,10 @@ video {
   font-family: inherit;
   font-size: 13px;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.9);
+  color: #fff;
   cursor: pointer;
   text-decoration: none;
+  mix-blend-mode: difference;
   transition: opacity 120ms ease;
 }
 
@@ -672,16 +673,6 @@ video {
 .studio-animate-toggle:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-/* Light background → black text */
-.studio-header-overlay.header-on-light .studio-animate-toggle {
-  color: var(--mina-ink, #080a00);
-}
-
-/* Dark background → white text */
-.studio-header-overlay.header-on-dark .studio-animate-toggle {
-  color: var(--mina-paper, #fcfaf4);
 }
 
 /* main two-column body */

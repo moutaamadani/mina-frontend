@@ -904,10 +904,19 @@ export default function Profile({
   }, []);
 
   const [lbZoomed, setLbZoomed] = useState(false);
+  const [lbZoomOrigin, setLbZoomOrigin] = useState("center center");
   const lbClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lbHintVisible, setLbHintVisible] = useState(false);
+  const lbHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLbMediaClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    // Compute click position as percentage for zoom origin
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const xPct = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPct = ((e.clientY - rect.top) / rect.height) * 100;
+    setLbZoomOrigin(`${xPct}% ${yPct}%`);
+
     // Delay single-click to allow double-click detection
     if (lbClickTimer.current) clearTimeout(lbClickTimer.current);
     lbClickTimer.current = setTimeout(() => {
@@ -923,6 +932,17 @@ export default function Profile({
       lbClickTimer.current = null;
     }
     downloadMedia(url, "", isMotion);
+  }, []);
+
+  // Show "double-click to download" hint after 1s hover, hide on leave
+  const handleLbMediaEnter = useCallback(() => {
+    if (lbHintTimer.current) clearTimeout(lbHintTimer.current);
+    lbHintTimer.current = setTimeout(() => setLbHintVisible(true), 1000);
+  }, []);
+  const handleLbMediaLeave = useCallback(() => {
+    if (lbHintTimer.current) clearTimeout(lbHintTimer.current);
+    lbHintTimer.current = null;
+    setLbHintVisible(false);
   }, []);
 
   const openLightbox = (url: string | null, isMotion: boolean) => {
@@ -1507,18 +1527,19 @@ const openPrompt = useCallback((id: string) => {
             onPointerUp={onLightboxPointerUp}
             onPointerCancel={onLightboxPointerUp}
           >
-            {/* Close button */}
+            {/* Back button top-right (desktop) */}
             <button
               className="profile-lightbox-close"
               type="button"
               onClick={closeLightbox}
-              aria-label="Close"
+              aria-label="Back"
             >
-              ✕
+              Back
             </button>
 
             <div
               className={`profile-lightbox-media${lbZoomed ? " is-zoomed" : ""}`}
+              style={lbZoomed ? { transformOrigin: lbZoomOrigin } : undefined}
               onClick={(e) => {
                 // Click on the container (not media) → close
                 if (e.target === e.currentTarget) {
@@ -1542,6 +1563,8 @@ const openPrompt = useCallback((id: string) => {
                     e.stopPropagation();
                     handleLbMediaDblClick(lightbox.url, true);
                   }}
+                  onMouseEnter={handleLbMediaEnter}
+                  onMouseLeave={handleLbMediaLeave}
                 />
               ) : (
                 <img
@@ -1552,16 +1575,19 @@ const openPrompt = useCallback((id: string) => {
                   decoding="async"
                   fetchPriority="high"
                   draggable={false}
+                  style={lbZoomed ? { transformOrigin: lbZoomOrigin } : undefined}
                   onClick={handleLbMediaClick}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
                     handleLbMediaDblClick(lightbox.url, false);
                   }}
+                  onMouseEnter={handleLbMediaEnter}
+                  onMouseLeave={handleLbMediaLeave}
                 />
               )}
             </div>
 
-            <div className="profile-lightbox-hint">
+            <div className={`profile-lightbox-hint${lbHintVisible ? " is-visible" : ""}`}>
               double-click to download
             </div>
           </div>
