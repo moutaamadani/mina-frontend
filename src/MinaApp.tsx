@@ -4712,6 +4712,10 @@ const styleHeroUrls = (stylePresetKeys || [])
         setFingertipsSending(false);
         setFingertipsActiveModel(null);
         setStillGenerating(false);
+        // Ensure thinking state is fully cleared — the phrase-cycling effect
+        // may have re-set minaOverrideText after the success handler cleared it.
+        setMinaOverrideText(null);
+        setMinaTalking(false);
       }
     },
     [API_BASE_URL, currentPassId, apiFetch, ensureAssetsUrl, fetchCredits, showMinaError, dismissMinaNotice]
