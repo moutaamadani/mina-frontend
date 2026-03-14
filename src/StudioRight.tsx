@@ -684,13 +684,12 @@ export default function StudioRight(props: StudioRightProps) {
       if (ftActiveModel === "eraser") {
         inputs.mask_image = maskDataUrl;
       } else if (ftActiveModel === "flux_fill") {
+        // bria/genfill inputs — GPT generates negative_prompt on the backend
         inputs.mask = maskDataUrl;
         inputs.prompt = ftPrompt || "";
-        inputs.num_inference_steps = 50;
-        inputs.guidance = 30;
-        inputs.megapixels = "match_input";
-        inputs.output_format = "png";
-        inputs.output_quality = 100;
+        inputs.mask_type = "manual";
+        inputs.sync = true;
+        inputs.preserve_alpha = true;
       }
 
       const result = await onFingertipsGenerate({ modelKey: ftActiveModel, inputs });
@@ -1050,8 +1049,7 @@ export default function StudioRight(props: StudioRightProps) {
             { key: "expand" as FtModelKey, label: "Expand", sep: false },
             /* unhide from here: Vectorize */
             // { key: "vectorize" as FtModelKey, label: "Vectorize", sep: false },
-            /* unhide from here: Draw */
-            // { key: "flux_fill" as FtModelKey, label: "Draw", sep: true },
+            { key: "flux_fill" as FtModelKey, label: "Draw", sep: true },
             { key: "eraser" as FtModelKey, label: "Erase", sep: false },
           ]).map((item, idx) => (
             <React.Fragment key={item.key}>
