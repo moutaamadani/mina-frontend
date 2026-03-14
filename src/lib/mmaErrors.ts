@@ -178,7 +178,17 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
     return UI_ERROR_MESSAGES.fingertipsFailed;
   }
 
-  if (s.includes("r2_not_configured") || s.includes("r2_fetch_failed") || s.includes("r2_store_failed")) {
+  // Provider errors — never show raw provider codes to user
+  if (
+    s.includes(“replicate_failed”) ||
+    s.includes(“replicate_canceled”) ||
+    s.includes(“replicate_error”) ||
+    s.includes(“replicate_timeout”)
+  ) {
+    return UI_ERROR_MESSAGES.fingertipsFailed;
+  }
+
+  if (s.includes(“r2_not_configured”) || s.includes(“r2_fetch_failed”) || s.includes(“r2_store_failed”)) {
     return UI_ERROR_MESSAGES.fingertipsNoOutput;
   }
 
@@ -196,6 +206,10 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
     return "Something went wrong. Please try again.";
   }
 
-  // Fallback: keep it short and clean
+  // Fallback: if the raw string looks like an internal code (ALL_CAPS_SNAKE), hide it
+  if (/^[A-Z][A-Z0-9_]+(:.*)?$/.test(raw.trim())) {
+    return "Something went wrong. Please try again.";
+  }
+
   return raw;
 }
