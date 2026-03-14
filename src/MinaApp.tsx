@@ -933,8 +933,10 @@ const MinaApp: React.FC<MinaAppProps> = () => {
 
   // Welcome popup: show 2s after login for new users only (once per account)
   useEffect(() => {
-    if (welcomeShownRef.current) return;
-    if (!authContext?.isNewUser) return;
+    // Welcome matcha modal — disabled
+    // if (welcomeShownRef.current) return;
+    // if (!authContext?.isNewUser) return;
+    return;
     // Don't show if already claimed in a previous session
     try {
       if (window.localStorage.getItem(WELCOME_CLAIMED_KEY)) return;
