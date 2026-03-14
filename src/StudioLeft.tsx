@@ -1701,7 +1701,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-sub">{motionAspectSubtitle}</span>
                   </button>
 
-                  {/* Type for me (✅ moved to the right after Ratio) */}
+                  {/* ──────────────────────────────────────────────────────
+                      "Type for me" pill — HIDDEN (not working reliably).
+                      To re-enable, simply uncomment the JSX block below.
+                      ────────────────────────────────────────────────────── */}
+                  {/* <-- uncomment this block to restore the "Type for me" pill
                   {(() => {
                     const typeForMeDisabled =
                       motionSuggesting || motionGenerating || !hasMotionImage || !motionCreditsOk || hasRefMedia;
@@ -1740,6 +1744,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       </button>
                     );
                   })()}
+                  end of "Type for me" pill --> */}
                 </>
               )}
             </div>
