@@ -285,7 +285,7 @@ export default function StudioRight(props: StudioRightProps) {
     setEraseAnimating(false);
     setCursorInZone(false);
     lassoPointsRef.current = [];
-    closedPathsRef.current = [];
+    closedPathRef.current = null;
   }, []);
 
   // Stagger buttons in on toolbar show
@@ -415,16 +415,18 @@ export default function StudioRight(props: StudioRightProps) {
   // ============================================================================
   // Store real image dimensions so the mask matches the source image pixel-for-pixel
   const maskImgDimsRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
-  // Lasso path points (in image-space coordinates)
+  // Lasso path points (in overlay-space coordinates)
   const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
-  // Closed paths (completed lasso selections)
-  const closedPathsRef = useRef<{ x: number; y: number }[][]>([]);
+  // Single closed path (only ONE contour allowed)
+  const closedPathRef = useRef<{ x: number; y: number }[] | null>(null);
   // SVG overlay ref for rendering the lasso path
   const lassoSvgRef = useRef<SVGSVGElement | null>(null);
   // Marching ants animation ref
   const marchingAntsRef = useRef<number | null>(null);
   // Erase animation state
   const [eraseAnimating, setEraseAnimating] = useState(false);
+  // SVG path data for the erase animation clip
+  const eraseClipPathRef = useRef<string>("");
   // Cursor visibility state
   const [cursorInZone, setCursorInZone] = useState(false);
 
@@ -491,49 +493,55 @@ export default function StudioRight(props: StudioRightProps) {
     return d;
   }, [smoothPoints, simplifyPoints]);
 
-  // Render lasso paths into the SVG overlay
+  // Render lasso path into the SVG overlay — shows fill WHILE drawing
   const renderLassoPaths = useCallback(() => {
     const svg = lassoSvgRef.current;
     if (!svg) return;
 
-    // Clear existing paths (keep defs)
     const existing = svg.querySelectorAll(".lasso-path-group");
     existing.forEach((el) => el.remove());
 
     const overlay = maskOverlayRef.current;
     if (!overlay) return;
 
-    const allPaths = [...closedPathsRef.current];
-    const currentPoints = lassoPointsRef.current;
-
-    // Render closed paths
-    allPaths.forEach((pts, idx) => {
-      const d = buildSvgPath(pts, true);
-      if (!d) return;
-      const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-      g.classList.add("lasso-path-group");
-
-      // Fill with low opacity
-      const fill = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      fill.setAttribute("d", d);
-      fill.setAttribute("class", "lasso-fill");
-      g.appendChild(fill);
-
-      // Dashed stroke (marching ants)
-      const stroke = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      stroke.setAttribute("d", d);
-      stroke.setAttribute("class", "lasso-stroke");
-      g.appendChild(stroke);
-
-      svg.appendChild(g);
-    });
-
-    // Render current drawing path (not yet closed)
-    if (currentPoints.length > 1) {
-      const d = buildSvgPath(currentPoints, false);
+    // Render closed path (completed)
+    const closed = closedPathRef.current;
+    if (closed && closed.length > 2) {
+      const d = buildSvgPath(closed, true);
       if (d) {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.classList.add("lasso-path-group");
+
+        const fill = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        fill.setAttribute("d", d);
+        fill.setAttribute("class", "lasso-fill");
+        g.appendChild(fill);
+
+        const stroke = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        stroke.setAttribute("d", d);
+        stroke.setAttribute("class", "lasso-stroke");
+        g.appendChild(stroke);
+
+        svg.appendChild(g);
+      }
+    }
+
+    // Render current drawing path — always show fill (closed) so user sees the area
+    const currentPoints = lassoPointsRef.current;
+    if (currentPoints.length > 1) {
+      const isClosed = currentPoints.length >= 3;
+      const d = buildSvgPath(currentPoints, isClosed);
+      if (d) {
+        const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        g.classList.add("lasso-path-group");
+
+        // Show fill while drawing so user can see the selected area
+        if (isClosed) {
+          const fill = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          fill.setAttribute("d", d);
+          fill.setAttribute("class", "lasso-fill");
+          g.appendChild(fill);
+        }
 
         const stroke = document.createElementNS("http://www.w3.org/2000/svg", "path");
         stroke.setAttribute("d", d);
@@ -572,7 +580,7 @@ export default function StudioRight(props: StudioRightProps) {
     // Reset zoom and lasso state
     maskZoomRef.current = { scale: 1, x: 0, y: 0 };
     lassoPointsRef.current = [];
-    closedPathsRef.current = [];
+    closedPathRef.current = null;
     applyMaskZoom();
   }, [safeStillUrl]);
 
@@ -582,9 +590,11 @@ export default function StudioRight(props: StudioRightProps) {
     const underlay = maskOverlayRef.current?.querySelector(".ft-mask-underlay") as HTMLElement | null;
     const canvas = maskCanvasRef.current;
     const svg = lassoSvgRef.current;
+    const eraseSvg = maskOverlayRef.current?.querySelector(".ft-erase-svg") as HTMLElement | null;
     if (underlay) underlay.style.transform = transform;
     if (canvas) canvas.style.transform = transform;
     if (svg) svg.style.transform = transform;
+    if (eraseSvg) eraseSvg.style.transform = transform;
   }, []);
 
   useEffect(() => {
@@ -593,6 +603,36 @@ export default function StudioRight(props: StudioRightProps) {
       return () => clearTimeout(t);
     }
   }, [ftMode, initMaskCanvas]);
+
+  // Prevent page scroll/zoom when mask overlay is active (native listener with passive: false)
+  useEffect(() => {
+    if (ftMode !== "mask") return;
+    const overlay = maskOverlayRef.current;
+    if (!overlay) return;
+    const wheelHandler = (e: WheelEvent) => { e.preventDefault(); };
+    const touchHandler = (e: TouchEvent) => { if (e.touches.length > 1) e.preventDefault(); };
+    // Safari trackpad pinch via non-standard gesture events
+    const gestureHandler = (e: Event) => {
+      e.preventDefault();
+      const ge = e as any;
+      if (ge.scale != null) {
+        const z = maskZoomRef.current;
+        const newScale = Math.max(0.5, Math.min(5, z.scale * ge.scale));
+        z.scale = newScale;
+        applyMaskZoom();
+      }
+    };
+    overlay.addEventListener("wheel", wheelHandler, { passive: false });
+    overlay.addEventListener("touchmove", touchHandler, { passive: false });
+    overlay.addEventListener("gesturestart", gestureHandler as EventListener, { passive: false });
+    overlay.addEventListener("gesturechange", gestureHandler as EventListener, { passive: false });
+    return () => {
+      overlay.removeEventListener("wheel", wheelHandler);
+      overlay.removeEventListener("touchmove", touchHandler);
+      overlay.removeEventListener("gesturestart", gestureHandler as EventListener);
+      overlay.removeEventListener("gesturechange", gestureHandler as EventListener);
+    };
+  }, [ftMode, applyMaskZoom]);
 
   // Start marching ants animation
   useEffect(() => {
@@ -640,10 +680,20 @@ export default function StudioRight(props: StudioRightProps) {
   const handleMaskPointerDown = useCallback((e: React.PointerEvent) => {
     const pt = screenToImageCoords(e.clientX, e.clientY);
     if (!pt) return;
+
+    // Clear previous contour — only one allowed at a time
+    closedPathRef.current = null;
+    const canvas = maskCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    renderLassoPaths();
+
     setMaskDrawing(true);
     lassoPointsRef.current = [pt];
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-  }, [screenToImageCoords]);
+  }, [screenToImageCoords, renderLassoPaths]);
 
   const handleMaskPointerMove = useCallback((e: React.PointerEvent) => {
     // Update custom cursor position
@@ -666,7 +716,7 @@ export default function StudioRight(props: StudioRightProps) {
     const pts = lassoPointsRef.current;
     if (pts.length >= 3) {
       // Close the path — add it to completed paths
-      closedPathsRef.current.push([...pts]);
+      closedPathRef.current = [...pts];
 
       // Render the closed path onto the hidden mask canvas with feathered edges
       const canvas = maskCanvasRef.current;
@@ -854,10 +904,13 @@ export default function StudioRight(props: StudioRightProps) {
       return;
     }
 
-    // Play diagonal gradient erase animation
+    // Store contour path for clip animation, then start looping animation
+    const contour = closedPathRef.current;
+    if (contour && contour.length > 2) {
+      const smoothed = smoothPoints(simplifyPoints(contour, 3));
+      eraseClipPathRef.current = buildSvgPath(smoothed, true) || "";
+    }
     setEraseAnimating(true);
-    await new Promise((r) => setTimeout(r, 700));
-
     setFtProcessing(true);
     setFtError(null);
 
@@ -886,7 +939,7 @@ export default function StudioRight(props: StudioRightProps) {
       setFtProcessing(false);
       setEraseAnimating(false);
     }
-  }, [onFingertipsGenerate, safeStillUrl, ftActiveModel, ftPrompt, extractMaskDataUrl, exitFingertips]);
+  }, [onFingertipsGenerate, safeStillUrl, ftActiveModel, ftPrompt, extractMaskDataUrl, exitFingertips, smoothPoints, simplifyPoints, buildSvgPath]);
 
   // Send prompt-based model (flux_fill needs mask too, so from mask mode we go to prompt)
   const handlePromptSubmit = useCallback(async () => {
@@ -1024,13 +1077,33 @@ export default function StudioRight(props: StudioRightProps) {
               <div
                 className={`ft-mask-overlay${maskPanning ? " is-panning" : ""}${cursorInZone ? " cursor-in" : " cursor-out"}`}
                 ref={maskOverlayRef}
-                onPointerEnter={() => setCursorInZone(true)}
+                onPointerEnter={(e) => {
+                  setCursorInZone(true);
+                  if (maskCursorRef.current) {
+                    maskCursorRef.current.style.left = `${e.clientX}px`;
+                    maskCursorRef.current.style.top = `${e.clientY}px`;
+                  }
+                }}
                 onPointerLeave={() => setCursorInZone(false)}
                 onWheel={(e) => {
-                  e.preventDefault();
+                  // NOTE: actual preventDefault is handled via native listener below
                   const z = maskZoomRef.current;
 
-                  // Shift+scroll = pan
+                  // Trackpad pinch: browser sends ctrlKey + deltaY
+                  if (e.ctrlKey) {
+                    const pinchDelta = e.deltaY > 0 ? 0.95 : 1.05;
+                    const newScale = Math.max(0.5, Math.min(5, z.scale * pinchDelta));
+                    const rect = maskOverlayRef.current!.getBoundingClientRect();
+                    const mx = e.clientX - rect.left;
+                    const my = e.clientY - rect.top;
+                    z.x = mx - (mx - z.x) * (newScale / z.scale);
+                    z.y = my - (my - z.y) * (newScale / z.scale);
+                    z.scale = newScale;
+                    applyMaskZoom();
+                    return;
+                  }
+
+                  // Shift+scroll or horizontal scroll = pan
                   if (e.shiftKey || (Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.5 && Math.abs(e.deltaX) > 2)) {
                     z.x -= e.deltaX || e.deltaY;
                     z.y -= e.shiftKey ? e.deltaY : 0;
@@ -1115,8 +1188,23 @@ export default function StudioRight(props: StudioRightProps) {
                   }}
                 />
 
-                {/* Erase animation overlay */}
-                {eraseAnimating && <div className="ft-erase-animation" />}
+                {/* Erase animation — looping shimmer inside the drawn contour */}
+                {eraseAnimating && eraseClipPathRef.current && (
+                  <svg className="ft-erase-svg">
+                    <defs>
+                      <clipPath id="erase-clip">
+                        <path d={eraseClipPathRef.current} />
+                      </clipPath>
+                    </defs>
+                    <rect
+                      x="0" y="0"
+                      width="100%"
+                      height="100%"
+                      clipPath="url(#erase-clip)"
+                      className="ft-erase-fill"
+                    />
+                  </svg>
+                )}
 
                 <div
                   ref={maskCursorRef}
@@ -1425,7 +1513,7 @@ export default function StudioRight(props: StudioRightProps) {
             style={{ transitionDelay: ftBtnVisible ? `${FT_INITIAL_DELAY + 2 * FT_STAGGER}ms` : "0ms" }}
             onClick={() => {
               // Clear all lasso paths + canvas
-              closedPathsRef.current = [];
+              closedPathRef.current = null;
               lassoPointsRef.current = [];
               renderLassoPaths();
               const canvas = maskCanvasRef.current;

@@ -4721,52 +4721,6 @@ const styleHeroUrls = (stylePresetKeys || [])
     [API_BASE_URL, currentPassId, apiFetch, ensureAssetsUrl, fetchCredits, showMinaError, dismissMinaNotice]
   );
 
-  // Cycle through entertaining phrases while fingertips is generating.
-  // Write directly to minaMessage (NOT minaOverrideText) to avoid the
-  // overlay-typing effect re-triggering on every character update.
-  useEffect(() => {
-    if (!fingertipsSending || !fingertipsActiveModel) return;
-
-    setMinaTalking(true);
-
-    const phrases = FT_PHRASES[fingertipsActiveModel] || [];
-    if (!phrases.length) {
-      const label = FT_LABELS[fingertipsActiveModel] || "processing";
-      setMinaMessage(label + "…");
-      return;
-    }
-
-    let phraseIdx = Math.floor(Math.random() * phrases.length);
-    let charIdx = 0;
-    let t: number | null = null;
-
-    const CHAR_MS = 35;
-    const END_PAUSE_MS = 800;
-
-    const tick = () => {
-      const phrase = phrases[phraseIdx % phrases.length] || "";
-      charIdx += 1;
-      const slice = phrase.slice(0, Math.min(charIdx, phrase.length));
-
-      setMinaMessage(slice || "…");
-
-      const reachedEnd = charIdx > phrase.length;
-      if (reachedEnd) {
-        charIdx = 0;
-        phraseIdx = (phraseIdx + 1) % phrases.length;
-        t = window.setTimeout(tick, END_PAUSE_MS);
-      } else {
-        t = window.setTimeout(tick, CHAR_MS);
-      }
-    };
-
-    t = window.setTimeout(tick, CHAR_MS);
-
-    return () => {
-      if (t !== null) window.clearTimeout(t);
-    };
-  }, [fingertipsSending, fingertipsActiveModel]);
-
   // ========================================================================
   // [LIKES] MMA ONLY
   // ========================================================================

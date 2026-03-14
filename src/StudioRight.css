@@ -439,8 +439,8 @@
 .lasso-stroke {
   fill: none;
   stroke: rgba(80, 130, 255, 0.9);
-  stroke-width: 2;
-  stroke-dasharray: 8 6;
+  stroke-width: 1;
+  stroke-dasharray: 6 4;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -448,9 +448,9 @@
 
 /* Drawing-in-progress stroke — thinner, more transparent */
 .lasso-stroke--drawing {
-  stroke: rgba(80, 130, 255, 0.6);
-  stroke-width: 1.5;
-  stroke-dasharray: 4 4;
+  stroke: rgba(80, 130, 255, 0.5);
+  stroke-width: 0.8;
+  stroke-dasharray: 4 3;
 }
 
 /* Custom cursor — crosshair style */
@@ -460,7 +460,10 @@
   z-index: 9999;
   width: 24px;
   height: 24px;
+  left: -100px;
+  top: -100px;
   transform: translate(-50%, -50%);
+  opacity: 0;
   /* Crosshair made with borders */
   border-radius: 50%;
   border: 1.5px solid rgba(80, 130, 255, 0.8);
@@ -504,29 +507,26 @@
 }
 
 /* =========================================================
-   Erase animation — diagonal gradient sweep
+   Erase animation — looping shimmer inside the drawn contour
    ========================================================= */
-.ft-erase-animation {
+.ft-erase-svg {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 45;
   pointer-events: none;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.7) 40%,
-    rgba(255, 255, 255, 0.9) 50%,
-    rgba(255, 255, 255, 0.7) 60%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  background-size: 300% 300%;
-  animation: ft-erase-sweep 700ms ease-in-out forwards;
+  transform-origin: 0 0;
 }
 
-@keyframes ft-erase-sweep {
-  0% { background-position: 150% 150%; opacity: 1; }
-  80% { background-position: -50% -50%; opacity: 1; }
-  100% { background-position: -50% -50%; opacity: 0; }
+.ft-erase-fill {
+  fill: rgba(255, 255, 255, 0.3);
+  animation: ft-erase-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ft-erase-pulse {
+  0%, 100% { fill-opacity: 0.15; }
+  50% { fill-opacity: 0.45; }
 }
 
 /* Zoom/pan hint */
