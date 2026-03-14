@@ -427,10 +427,44 @@
   transition: width 80ms ease, height 80ms ease;
 }
 
-/* Hide default cursor when mask is active */
+/* Hide default cursor when mask is active (draw mode) */
 .ft-mask-overlay,
 .ft-mask-overlay * {
   cursor: none !important;
+}
+
+/* Show grab cursor when panning */
+.ft-mask-overlay.is-panning,
+.ft-mask-overlay.is-panning * {
+  cursor: grabbing !important;
+}
+
+/* Hide custom cursor when panning */
+.ft-mask-cursor.is-panning {
+  display: none;
+}
+
+/* Zoom/pan hint — bottom-left, fades out after a few seconds */
+.ft-mask-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 50;
+
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 4px 10px;
+  border-radius: 6px;
+  pointer-events: none;
+
+  animation: ft-hint-fade 4s ease-in-out forwards;
+}
+
+@keyframes ft-hint-fade {
+  0%, 60% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 @media (max-width: 900px) {

@@ -23,6 +23,10 @@ export const UI_ERROR_MESSAGES = {
   videoTooLongNotice: "Videos max 30s please.",
   audioTooLongNotice: "Audios max 60s please.",
   sensitiveFlagged: "That request was flagged as sensitive. Please change your input and try again.",
+  // Fingertips
+  fingertipsFailed: "Edit failed. Please try again.",
+  fingertipsNoOutput: "Edit produced no result. You were not charged.",
+  fingertipsMaskRequired: "Paint over the area you want to edit first.",
 } as const;
 
 export type UploadErrorReason = "unsupported" | "too_big" | "broken" | "link_broken";
@@ -168,13 +172,23 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
     return "That reference clip is too long. Use a 10s (or shorter) video.";
   }
 
+  // Fingertips-specific errors
+  if (s.includes(“fingertips_generation_failed”) || s.includes(“fingertips_failed”)) {
+    if (s.includes(“not charged”) || s.includes(“refunded”)) return UI_ERROR_MESSAGES.fingertipsNoOutput;
+    return UI_ERROR_MESSAGES.fingertipsFailed;
+  }
+
+  if (s.includes(“r2_not_configured”) || s.includes(“r2_fetch_failed”) || s.includes(“r2_store_failed”)) {
+    return UI_ERROR_MESSAGES.fingertipsNoOutput;
+  }
+
   // Generic “no URL” / pipeline failure → niche overload message only in create mode
   if (
-    s.includes("video_no_url") ||
-    s.includes("mma_no_url") ||
-    s.includes("pipeline_error") ||
-    s.includes("no_output_url") ||
-    s.includes("no output url")
+    s.includes(“video_no_url”) ||
+    s.includes(“mma_no_url”) ||
+    s.includes(“pipeline_error”) ||
+    s.includes(“no_output_url”) ||
+    s.includes(“no output url”)
   ) {
     if (mode === "create") {
       return "Mina Animate mode is currently under high demand. Please wait a bit then try again.";
