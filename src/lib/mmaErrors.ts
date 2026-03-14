@@ -11,10 +11,10 @@ export const UI_ERROR_MESSAGES = {
   missingPassIdMega: "Missing Pass ID for MEGA session.",
   uploadFailed: "Upload failed. Please try again.",
   uploadUnsupported:
-   "That file type isn’t supported. Please upload a JPG, PNG, or WebP.",
+   "That file type isn't supported. Please upload a JPG, PNG, or WebP.",
   uploadTooBig: "That image is too large. Please choose one under 25MB.",
-  uploadBroken: "We couldn’t read that image. Please try a different file.",
-  uploadLinkBroken: "That link didn’t load as an image. Please paste a direct image link.",
+  uploadBroken: "We couldn't read that image. Please try a different file.",
+  uploadLinkBroken: "That link didn't load as an image. Please paste a direct image link.",
   tweakMissingText: "Type a tweak first.",
   tweakMissingMedia: "Create an image/video first, then tweak it.",
   mmaTweakFailed: "MMA tweak failed.",
@@ -111,7 +111,7 @@ export function isTimeoutLikeStatus(status: string): boolean {
 
 /**
  * Convert raw error into a single user-facing string.
- * Keep the “That was too complicated” message here so it’s consistent everywhere.
+ * Keep the "That was too complicated" message here so it's consistent everywhere.
  */
 export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate"): string {
   // If we were given a full MMA result object, extract error text from it first
@@ -152,7 +152,7 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
     return "Large images, please upload smaller version.";
   }
 
-  // Kling motion-control “upper body” hard requirement (your screenshot)
+  // Kling motion-control "upper body" hard requirement (your screenshot)
   if (
     s.includes("no complete upper body") ||
     (s.includes("upper body") && (s.includes("detected") || s.includes("ensure")))
@@ -161,7 +161,7 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
   }
 
   if (s.includes("image recognition failed")) {
-    return "That image can’t be animated with this setting. Try a clearer image or a different one.";
+    return "That image can't be animated with this setting. Try a clearer image or a different one.";
   }
 
   if (s.includes("image size is too large") || (s.includes("image") && s.includes("too large"))) {
@@ -180,19 +180,19 @@ export function humanizeMmaError(err: MmaErrorLike, mode?: "create" | "animate")
 
   // Provider errors — never show raw provider codes to user
   if (
-    s.includes(“replicate_failed”) ||
-    s.includes(“replicate_canceled”) ||
-    s.includes(“replicate_error”) ||
-    s.includes(“replicate_timeout”)
+    s.includes("replicate_failed") ||
+    s.includes("replicate_canceled") ||
+    s.includes("replicate_error") ||
+    s.includes("replicate_timeout")
   ) {
     return UI_ERROR_MESSAGES.fingertipsFailed;
   }
 
-  if (s.includes(“r2_not_configured”) || s.includes(“r2_fetch_failed”) || s.includes(“r2_store_failed”)) {
+  if (s.includes("r2_not_configured") || s.includes("r2_fetch_failed") || s.includes("r2_store_failed")) {
     return UI_ERROR_MESSAGES.fingertipsNoOutput;
   }
 
-  // Generic “no URL” / pipeline failure → niche overload message only in create mode
+  // Generic "no URL" / pipeline failure → niche overload message only in create mode
   if (
     s.includes("video_no_url") ||
     s.includes("mma_no_url") ||
