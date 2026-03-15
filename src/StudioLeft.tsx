@@ -135,9 +135,10 @@ type StudioLeftProps = {
   onToggleAnimateMode?: (next: boolean) => void;
 
   // ✅ Motion controls
-  motionDurationSec?: 5 | 10 | 15;
+  motionDurationSec?: number;
   motionCostLabel?: string;
   onToggleMotionDuration?: () => void;
+  onSetMotionDuration?: (sec: number) => void;
 
   motionAudioEnabled?: boolean; // true = sound on
   motionAudioLocked?: boolean;
@@ -438,6 +439,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     motionDurationSec,
     motionCostLabel: motionCostLabelProp,
     onToggleMotionDuration,
+    onSetMotionDuration,
 
     motionAudioEnabled,
     motionAudioLocked: motionAudioLockedProp,
@@ -859,6 +861,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const [localMotionStyle, setLocalMotionStyle] = useState<MotionStyleKey[]>([]);
   const motionStyleKeys = props.motionStyleKeys ?? localMotionStyle;
   const setMotionStyleKeys = props.setMotionStyleKeys ?? setLocalMotionStyle;
+
+  // Custom duration input (long-press on duration pill)
+  const [durationInputOpen, setDurationInputOpen] = useState(false);
+  const [durationInputValue, setDurationInputValue] = useState("");
+  const durationLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const durationInputRef = useRef<HTMLInputElement>(null);
 
   // ✅ Always start movement styles as none-selected when entering motion mode
   useEffect(() => {
@@ -1656,22 +1664,89 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">{effectiveMotionAudioEnabled ? "Sound" : "Muted"}</span>
                   </button>
 
-                  {/* ✅ Duration (disabled when video/audio is used) */}
-                  <button
-                    type="button"
-                    className={classNames("studio-pill", "pill-duration-toggle", hasRefMedia && "studio-pill--ghost")}
-                    style={pillBaseStyle(2)}
-                    onClick={() => {
-                      if (hasRefMedia) return;
-                      onToggleMotionDuration?.();
-                    }}
-                    disabled={!onToggleMotionDuration || hasRefMedia}
-                    title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Toggle duration"}
-                  >
-                    <span className="studio-pill-main">
-                      {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : `${motionDurationSec}s`}
+                  {/* ✅ Duration (disabled when video/audio is used) — long-press for custom input */}
+                  {durationInputOpen && !hasRefMedia ? (
+                    <span className="studio-pill pill-duration-toggle" style={pillBaseStyle(2)}>
+                      <input
+                        ref={durationInputRef}
+                        type="number"
+                        min={3}
+                        max={15}
+                        className="pill-duration-input"
+                        placeholder={`${motionDurationSec}`}
+                        value={durationInputValue}
+                        autoFocus
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
+                          setDurationInputValue(raw);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            const n = parseInt(durationInputValue, 10);
+                            if (n >= 3 && n <= 15) onSetMotionDuration?.(n);
+                            setDurationInputOpen(false);
+                            setDurationInputValue("");
+                          } else if (e.key === "Escape") {
+                            setDurationInputOpen(false);
+                            setDurationInputValue("");
+                          }
+                        }}
+                        onBlur={() => {
+                          const n = parseInt(durationInputValue, 10);
+                          if (n >= 3 && n <= 15) onSetMotionDuration?.(n);
+                          setDurationInputOpen(false);
+                          setDurationInputValue("");
+                        }}
+                        style={{
+                          width: 32,
+                          border: "none",
+                          outline: "none",
+                          background: "transparent",
+                          color: "inherit",
+                          font: "inherit",
+                          textAlign: "center",
+                          padding: 0,
+                          MozAppearance: "textfield",
+                        }}
+                      />
+                      <span className="studio-pill-main" style={{ marginLeft: -4 }}>s</span>
                     </span>
-                  </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className={classNames("studio-pill", "pill-duration-toggle", hasRefMedia && "studio-pill--ghost")}
+                      style={pillBaseStyle(2)}
+                      onClick={() => {
+                        if (hasRefMedia) return;
+                        onToggleMotionDuration?.();
+                      }}
+                      onPointerDown={() => {
+                        if (hasRefMedia) return;
+                        durationLongPressTimer.current = setTimeout(() => {
+                          setDurationInputOpen(true);
+                          setDurationInputValue("");
+                        }, 500);
+                      }}
+                      onPointerUp={() => {
+                        if (durationLongPressTimer.current) {
+                          clearTimeout(durationLongPressTimer.current);
+                          durationLongPressTimer.current = null;
+                        }
+                      }}
+                      onPointerLeave={() => {
+                        if (durationLongPressTimer.current) {
+                          clearTimeout(durationLongPressTimer.current);
+                          durationLongPressTimer.current = null;
+                        }
+                      }}
+                      disabled={!onToggleMotionDuration || hasRefMedia}
+                      title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Tap to toggle, hold to type custom (3–15s)"}
+                    >
+                      <span className="studio-pill-main">
+                        {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : `${motionDurationSec}s`}
+                      </span>
+                    </button>
+                  )}
 
                   {/* Movement style */}
                   <button
