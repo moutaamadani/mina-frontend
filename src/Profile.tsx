@@ -686,8 +686,9 @@ function extractInputsForDisplay(row: Row, isMotionHint?: boolean) {
       null;
 
     const n = Number(raw);
-    if (n === 10) return 10 as const;
-    if (n === 5) return 5 as const;
+    if (n >= 3 && n <= 15) return n;
+    if (n === 10) return 10;
+    if (n === 5) return 5;
     return undefined;
   })();
 
@@ -757,7 +758,7 @@ type RecreateDraft = {
     aspect_ratio?: string;
     minaVisionEnabled?: boolean;
     stylePresetKeys?: string[];
-    motion_duration_sec?: 5 | 10;
+    motion_duration_sec?: number;
     generate_audio?: boolean;
   };
   assets: {
