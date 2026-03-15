@@ -694,7 +694,7 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [motionGenerating, setMotionGenerating] = useState(false);
   const [motionError, setMotionError] = useState<string | null>(null);
   const [motionAudioEnabled, setMotionAudioEnabled] = useState(true);
-  const [motionDurationSec, setMotionDurationSec] = useState<number>(5);
+  const [motionDurationSec, setMotionDurationSec] = useState<5 | 10 | 15>(5);
 
  
   const [activeMediaKind, setActiveMediaKind] = useState<"still" | "motion" | null>(null);
@@ -6231,9 +6231,6 @@ const headerOverlayClass =
               motionCostLabel={motionCostLabel}
               onToggleMotionDuration={() =>
                 setMotionDurationSec((v) => (v === 5 ? 10 : v === 10 ? 15 : 5))
-              }
-              onSetMotionDuration={(v: number) =>
-                setMotionDurationSec(Math.min(15, Math.max(3, v)))
               }
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}

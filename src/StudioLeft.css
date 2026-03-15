@@ -276,13 +276,6 @@ background-color 0s ease 0s,
   margin-left: 4px;
 }
 
-/* custom duration input — hide number spinners */
-.pill-duration-input::-webkit-outer-spin-button,
-.pill-duration-input::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
 /* keep aspect pill same height */
 .studio-pill--aspect {
   height: 28px;
