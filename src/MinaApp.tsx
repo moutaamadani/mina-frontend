@@ -2413,10 +2413,32 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Called after user opens Shopify checkout — reminds them to return
-  const onCheckoutOpened = useCallback(() => {
+  // Build a Shopify cart URL with quantity + passId cart attribute
+  const buildMatchaCheckoutUrl = useCallback((base: string, qty: number) => {
+    const q = Math.max(1, Math.min(100, Math.floor(Number(qty || 1))));
+    try {
+      const u = new URL(String(base || ""));
+      const m = u.pathname.match(/\/cart\/(\d+)(?::(\d+))?/);
+      if (m?.[1]) u.pathname = `/cart/${m[1]}:${q}`;
+      else if (u.pathname.includes("/cart/add")) u.searchParams.set("quantity", String(q));
+      else u.searchParams.set("quantity", String(q));
+      // Embed passId so the Shopify webhook can credit the right account
+      if (currentPassId) u.searchParams.set("attributes[mina_pass_id]", currentPassId);
+      return u.toString();
+    } catch {
+      return String(base || "");
+    }
+  }, [currentPassId]);
+
+  // Open Shopify checkout with passId baked in, then show reminder
+  const onConfirmCheckout = useCallback((qty: number) => {
+    const is5000 = qty === 100 && MATCHA_5000_URL;
+    const url = is5000
+      ? buildMatchaCheckoutUrl(MATCHA_5000_URL, 1)
+      : buildMatchaCheckoutUrl(MATCHA_URL, qty);
+    window.open(url, "_blank", "noopener");
     showMinaInfo("Complete your purchase on Shopify, then come back here — your matchas will appear automatically.");
-  }, [showMinaInfo]);
+  }, [buildMatchaCheckoutUrl, showMinaInfo]);
 
   // Admin numbering helpers
   const getEditorialNumber = (id: string, index: number) => {
@@ -6215,7 +6237,7 @@ const headerOverlayClass =
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
               matcha5000Url={MATCHA_5000_URL}
-              onCheckoutOpened={onCheckoutOpened}
+              onConfirmCheckout={onConfirmCheckout}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
               minaTone={minaTone}
@@ -6249,7 +6271,7 @@ const headerOverlayClass =
             feedbacks={historyFeedbacks as any}
             matchaUrl={MATCHA_URL}
             matcha5000Url={MATCHA_5000_URL}
-            onCheckoutOpened={onCheckoutOpened}
+            onConfirmCheckout={onConfirmCheckout}
             loading={historyLoading || creditsLoading}
             error={historyError}
             onLoadMore={() => void fetchHistoryMore()}

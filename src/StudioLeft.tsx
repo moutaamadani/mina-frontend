@@ -157,7 +157,7 @@ type StudioLeftProps = {
   credits?: number;
   matchaUrl: string;
   matcha5000Url?: string;
-  onCheckoutOpened?: () => void;
+  onConfirmCheckout?: (qty: number) => void;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -448,7 +448,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     credits: creditsProp,
     matchaUrl,
     matcha5000Url,
-    onCheckoutOpened,
+    onConfirmCheckout,
 
     minaMessage,
     minaTalking,
@@ -687,12 +687,15 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   };
 
   const confirmMatchaQty = (qty: number) => {
-    // 5000 pack uses its own Shopify product (MINA-5000)
-    const is5000 = qty === 100 && matcha5000Url;
-    const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
     setMatchaQtyOpen(false);
-    window.open(url, "_blank", "noopener");
-    onCheckoutOpened?.();
+    if (onConfirmCheckout) {
+      onConfirmCheckout(qty);
+    } else {
+      // Fallback if callback not provided
+      const is5000 = qty === 100 && matcha5000Url;
+      const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
+      window.open(url, "_blank", "noopener");
+    }
   };
 
   const styleClickTimerRef = useRef<number | null>(null);

@@ -788,7 +788,7 @@ type ProfileProps = {
   // ✅ for Matcha popup (same URL you pass to StudioLeft)
   matchaUrl?: string;
   matcha5000Url?: string;
-  onCheckoutOpened?: () => void;
+  onConfirmCheckout?: (qty: number) => void;
 
   onRefresh?: () => void;
 
@@ -817,7 +817,7 @@ export default function Profile({
   loadingMore = false,
   matchaUrl = "https://www.faltastudio.com/cart/43328351928403:1",
   matcha5000Url = "https://www.faltastudio.com/cart/44184397283411:1",
-  onCheckoutOpened,
+  onConfirmCheckout,
 }: ProfileProps) {
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
@@ -1298,12 +1298,14 @@ export default function Profile({
   };
 
   const confirmMatchaQty = (qty: number) => {
-    // 5000 pack uses its own Shopify product (MINA-5000)
-    const is5000 = qty === 100 && matcha5000Url;
-    const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
     setMatchaQtyOpen(false);
-    window.open(url, "_blank", "noopener,noreferrer");
-    onCheckoutOpened?.();
+    if (onConfirmCheckout) {
+      onConfirmCheckout(qty);
+    } else {
+      const is5000 = qty === 100 && matcha5000Url;
+      const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
   };
 
   useEffect(() => {
