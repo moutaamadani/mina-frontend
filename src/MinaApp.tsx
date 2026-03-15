@@ -2437,7 +2437,7 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
       ? buildMatchaCheckoutUrl(MATCHA_5000_URL, 1)
       : buildMatchaCheckoutUrl(MATCHA_URL, qty);
     window.open(url, "_blank", "noopener");
-    showMinaInfo("Complete your purchase on Shopify, then come back here — your matchas will appear automatically.");
+    showMinaInfo("Complete your purchase securily on Shopify, then come back here. Your matchas will appear automatically.");
   }, [buildMatchaCheckoutUrl, showMinaInfo]);
 
   // Admin numbering helpers
