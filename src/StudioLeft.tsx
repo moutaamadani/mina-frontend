@@ -157,6 +157,7 @@ type StudioLeftProps = {
   credits?: number;
   matchaUrl: string;
   matcha5000Url?: string;
+  onCheckoutOpened?: () => void;
 
   motionGenerating?: boolean;
   motionError?: string | null;
@@ -447,6 +448,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     credits: creditsProp,
     matchaUrl,
     matcha5000Url,
+    onCheckoutOpened,
 
     minaMessage,
     minaTalking,
@@ -690,6 +692,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
     setMatchaQtyOpen(false);
     window.open(url, "_blank", "noopener");
+    onCheckoutOpened?.();
   };
 
   const styleClickTimerRef = useRef<number | null>(null);

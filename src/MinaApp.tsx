@@ -2394,6 +2394,30 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPassId]);
 
+  // Handle ?checkout=complete redirect from Shopify
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("checkout") !== "complete") return;
+
+    // Clean the URL param so it doesn't re-trigger on refresh
+    params.delete("checkout");
+    const clean = params.toString();
+    const newUrl = window.location.pathname + (clean ? `?${clean}` : "") + window.location.hash;
+    window.history.replaceState(null, "", newUrl);
+
+    // Force credit refresh + show success message
+    creditsDirtyRef.current = true;
+    void fetchCredits();
+    showMinaInfo("Payment received — your matchas are on the way!");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Called after user opens Shopify checkout — reminds them to return
+  const onCheckoutOpened = useCallback(() => {
+    showMinaInfo("Complete your purchase on Shopify, then come back here — your matchas will appear automatically.");
+  }, [showMinaInfo]);
+
   // Admin numbering helpers
   const getEditorialNumber = (id: string, index: number) => {
     const fallback = padEditorialNumber(index + 1);
@@ -6191,6 +6215,7 @@ const headerOverlayClass =
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
               matcha5000Url={MATCHA_5000_URL}
+              onCheckoutOpened={onCheckoutOpened}
               minaMessage={minaMessage}
               minaTalking={minaTalking}
               minaTone={minaTone}
@@ -6224,6 +6249,7 @@ const headerOverlayClass =
             feedbacks={historyFeedbacks as any}
             matchaUrl={MATCHA_URL}
             matcha5000Url={MATCHA_5000_URL}
+            onCheckoutOpened={onCheckoutOpened}
             loading={historyLoading || creditsLoading}
             error={historyError}
             onLoadMore={() => void fetchHistoryMore()}

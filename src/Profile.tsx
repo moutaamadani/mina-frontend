@@ -788,6 +788,7 @@ type ProfileProps = {
   // ✅ for Matcha popup (same URL you pass to StudioLeft)
   matchaUrl?: string;
   matcha5000Url?: string;
+  onCheckoutOpened?: () => void;
 
   onRefresh?: () => void;
 
@@ -816,6 +817,7 @@ export default function Profile({
   loadingMore = false,
   matchaUrl = "https://www.faltastudio.com/cart/43328351928403:1",
   matcha5000Url = "https://www.faltastudio.com/cart/44184397283411:1",
+  onCheckoutOpened,
 }: ProfileProps) {
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
@@ -1301,6 +1303,7 @@ export default function Profile({
     const url = is5000 ? matcha5000Url : buildMatchaCheckoutUrl(matchaUrl, qty);
     setMatchaQtyOpen(false);
     window.open(url, "_blank", "noopener,noreferrer");
+    onCheckoutOpened?.();
   };
 
   useEffect(() => {
