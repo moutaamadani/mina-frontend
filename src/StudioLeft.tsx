@@ -1650,6 +1650,22 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">Frames</span>
                   </button>
 
+                  {/* Short / Story toggle */}
+                  <button
+                    type="button"
+                    className={classNames(
+                      "studio-pill",
+                      "pill-infinite-toggle",
+                      videoLane === "story" ? "is-niche" : "is-main"
+                    )}
+                    style={pillBaseStyle(1)}
+                    onClick={onToggleVideoLane}
+                    aria-label="Toggle video lane"
+                    title={videoLane === "story" ? "Story mode – always uses O3" : "Short mode – V3 for single image, O3 for multi"}
+                  >
+                    <span className="studio-pill-main">{videoLane === "story" ? "Story" : "Short"}</span>
+                  </button>
+
                   {/* ✅ Sound / Muted (now always visible) */}
                   <button
                     type="button"
@@ -1659,7 +1675,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       effectiveMotionAudioEnabled ? "is-sound" : "is-mute",
                       motionAudioLocked && "studio-pill--ghost"
                     )}
-                    style={pillBaseStyle(1)}
+                    style={pillBaseStyle(2)}
                     onClick={() => {
                       if (motionAudioLocked) return;
                       onToggleMotionAudio?.();
@@ -1674,7 +1690,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <button
                     type="button"
                     className={classNames("studio-pill", "pill-duration-toggle", hasRefMedia && "studio-pill--ghost")}
-                    style={pillBaseStyle(2)}
+                    style={pillBaseStyle(3)}
                     onClick={() => {
                       if (hasRefMedia) return;
                       onToggleMotionDuration?.();
@@ -1685,7 +1701,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     <span className="studio-pill-main">
                       {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : `${motionDurationSec}s`}
                     </span>
-                    <span className="studio-pill-sub">{motionCostLabel}</span>
                   </button>
 
                   {/* Movement style */}
@@ -1696,7 +1711,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       effectivePanel === "style" && "active",
                       !motionStyleThumb && "studio-pill--solo-plus"
                     )}
-                    style={pillBaseStyle(3)}
+                    style={pillBaseStyle(4)}
                     onClick={() => openPanel("style")}
                     onMouseEnter={() => openPanel("style")}
                   >
@@ -1708,7 +1723,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                   <button
                     type="button"
                     className={classNames("studio-pill", "studio-pill--aspect")}
-                    style={pillBaseStyle(4)}
+                    style={pillBaseStyle(5)}
                     disabled
                   >
                     <span className="studio-pill-icon">
@@ -1720,22 +1735,6 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     </span>
                     <span className="studio-pill-main">{motionAspectLabel}</span>
                     <span className="studio-pill-sub">{motionAspectSubtitle}</span>
-                  </button>
-
-                  {/* Short / Story toggle */}
-                  <button
-                    type="button"
-                    className={classNames(
-                      "studio-pill",
-                      "pill-infinite-toggle",
-                      videoLane === "story" ? "is-niche" : "is-main"
-                    )}
-                    style={pillBaseStyle(5)}
-                    onClick={onToggleVideoLane}
-                    aria-label="Toggle video lane"
-                    title={videoLane === "story" ? "Story mode – always uses O3" : "Short mode – V3 for single image, O3 for multi"}
-                  >
-                    <span className="studio-pill-main">{videoLane === "story" ? "Story" : "Short"}</span>
                   </button>
 
                   {/* ──────────────────────────────────────────────────────
