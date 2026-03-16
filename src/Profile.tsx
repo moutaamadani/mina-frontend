@@ -892,6 +892,12 @@ export default function Profile({
     // Only if already in select mode (at least one card confirmed)
     if (!isSelectMode) return;
 
+    // Don't hijack text-selectable elements (prompt text, detail rows, etc.)
+    const tag = (e.target as HTMLElement).tagName.toLowerCase();
+    const el = e.target as HTMLElement;
+    if (tag === "button" || tag === "input" || tag === "a" || tag === "textarea") return;
+    if (el.closest(".profile-card-prompt, .profile-card-details")) return;
+
     // Don't start drag immediately — wait for movement (threshold in mousemove)
     dragState.current = {
       active: false,
@@ -1477,7 +1483,7 @@ export default function Profile({
 
         if (removedIds[id]) return null;
 
-        const createdAt = safeString(pick(g, ["created_at", "mg_created_at", "ts", "timestamp"]), "").trim();
+        const createdAt = safeString(pick(g, ["createdAt", "created_at", "mg_created_at", "ts", "timestamp"]), "").trim();
 
         const outUrl = pick(g, ["mg_output_url", "outputUrl", "output_url"], "").trim();
         const imgUrl = pick(g, ["mg_image_url", "imageUrl", "image_url"], "").trim();
