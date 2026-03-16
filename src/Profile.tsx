@@ -142,6 +142,14 @@ function fmtDate(iso: string | null) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
+function fmtDateTime(iso: string | null) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }) +
+    " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
 async function downloadMedia(url: string, prompt: string, isMotion: boolean) {
   if (!url) return;
   try {
@@ -819,6 +827,13 @@ export default function Profile({
   matcha5000Url = "https://www.faltastudio.com/cart/44184397283411:1",
   onConfirmCheckout,
 }: ProfileProps) {
+  // Date range filter
+  const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d">("all");
+  const cycleDateRange = useCallback(() => {
+    setDateRange((prev) => prev === "all" ? "today" : prev === "today" ? "7d" : prev === "7d" ? "30d" : "all");
+  }, []);
+  const dateRangeLabel = dateRange === "all" ? "All time" : dateRange === "today" ? "Today" : dateRange === "7d" ? "7 days" : "30 days";
+
   const [deletingIds, setDeletingIds] = useState<Record<string, boolean>>({});
   const [removingIds, setRemovingIds] = useState<Record<string, boolean>>({});
   const [removedIds, setRemovedIds] = useState<Record<string, boolean>>({});
@@ -1437,7 +1452,7 @@ export default function Profile({
     return "profile-card--tall";
   }, []);
 
-  const { items, activeCount } = useMemo(() => {
+  const { items, activeCount, totalMatchas } = useMemo(() => {
     // liked generation ids from feedback events
     const likedGenIdSet = new Set<string>();
     for (const f of feedbacks) {
@@ -1554,6 +1569,13 @@ export default function Profile({
             }
           : null;
 
+        // Extract cost (matchas charged) from generation record
+        const matchasCost = Number(
+          pick(g, ["mg_credits_cost", "credits_cost", "matchas_charged", "cost"], "") ||
+          pick(meta, ["credits_cost", "matchas_charged", "cost"], "") ||
+          pick(payload, ["credits_cost", "matchas_charged"], "")
+        ) || 0;
+
         return {
           id,
           createdAt,
@@ -1567,6 +1589,7 @@ export default function Profile({
           inputs,
           canRecreate,
           draft,
+          matchasCost,
         };
       })
       .filter((x): x is NonNullable<typeof x> => Boolean(x && x.url));
@@ -1596,16 +1619,26 @@ export default function Profile({
     const deduped = Array.from(merged.values());
 
     // ✅ ACTUAL FILTERING (not just dimming)
+    const now = Date.now();
+    const dateThreshold = dateRange === "today" ? now - 86400000
+      : dateRange === "7d" ? now - 7 * 86400000
+      : dateRange === "30d" ? now - 30 * 86400000
+      : 0;
+
     const filtered = deduped.filter((it) => {
       const matchesMotion = motion === "all" ? true : motion === "motion" ? it.isMotion : !it.isMotion;
       const matchesAspect = !activeAspectFilter || it.aspectRatio === activeAspectFilter.ratio;
-      return matchesMotion && matchesAspect;
+      const matchesDate = dateRange === "all" || (it.createdAt && new Date(it.createdAt).getTime() >= dateThreshold);
+      return matchesMotion && matchesAspect && matchesDate;
     });
+
+    // Compute total matchas for the filtered set
+    const totalMatchas = filtered.reduce((sum, it) => sum + (it.matchasCost || 0), 0);
 
     const out = filtered.map((it, idx) => ({ ...it, sizeClass: sizeClassForIndex(idx) }));
 
-    return { items: out, activeCount: out.length };
-  }, [generations, feedbacks, likedUrlSet, motion, activeAspectFilter, onRecreate, removedIds, sizeClassForIndex]);
+    return { items: out, activeCount: out.length, totalMatchas };
+  }, [generations, feedbacks, likedUrlSet, motion, activeAspectFilter, dateRange, onRecreate, removedIds, sizeClassForIndex]);
 
   useEffect(() => {
     setVisibleCount(20);
@@ -1913,7 +1946,10 @@ const openPrompt = useCallback((id: string) => {
                 ) : loading ? (
                   "Loading…"
                 ) : items.length ? (
-                  `${activeCount} creation${activeCount === 1 ? "" : "s"}`
+                  <>
+                    {activeCount} creation{activeCount === 1 ? "" : "s"}
+                    {totalMatchas > 0 ? <span className="profile-cost-badge">{totalMatchas} matchas</span> : null}
+                  </>
                 ) : (
                   "No creations yet."
                 )}
@@ -1921,6 +1957,14 @@ const openPrompt = useCallback((id: string) => {
             </div>
 
             <div className="profile-filters">
+              <button
+                type="button"
+                className={`profile-filter-pill ${dateRange !== "all" ? "active" : ""}`}
+                onClick={cycleDateRange}
+              >
+                {dateRangeLabel}
+              </button>
+
               <button
                 type="button"
                 className={`profile-filter-pill ${motion !== "all" ? "active" : ""}`}
@@ -2475,6 +2519,22 @@ const openPrompt = useCallback((id: string) => {
                               <div className="profile-card-detailrow">
                                 <span className="k">Sound</span>
                                 <span className="v">{inputs.generateAudio ? "Sound" : "Muted"}</span>
+                              </div>
+                            ) : null}
+
+                            {/* Cost (matchas) */}
+                            {it.matchasCost > 0 ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Cost</span>
+                                <span className="v">{it.matchasCost} matchas</span>
+                              </div>
+                            ) : null}
+
+                            {/* Date & time */}
+                            {it.createdAt ? (
+                              <div className="profile-card-detailrow">
+                                <span className="k">Created</span>
+                                <span className="v">{fmtDateTime(it.createdAt)}</span>
                               </div>
                             ) : null}
                           </div>

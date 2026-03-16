@@ -139,6 +139,9 @@ type StudioLeftProps = {
   motionCostLabel?: string;
   onToggleMotionDuration?: () => void;
 
+  sessionMatchasSpent?: number;
+  sessionStartTime?: string;
+
   motionAudioEnabled?: boolean; // true = sound on
   motionAudioLocked?: boolean;
   effectiveMotionAudioEnabled?: boolean;
@@ -441,6 +444,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     motionDurationSec,
     motionCostLabel: motionCostLabelProp,
     onToggleMotionDuration,
+
+    sessionMatchasSpent,
+    sessionStartTime,
 
     motionAudioEnabled,
     motionAudioLocked: motionAudioLockedProp,
@@ -981,6 +987,11 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
   const motionCostLabel = motionCostLabelProp ?? computedMotionCostLabel;
 
   const briefLen = brief.trim().length;
+
+  // Smooth font-size shrink: 32px at <=500 chars, scales down to 16px (50%) at 2500 chars
+  const briefFontSize = briefLen <= 500
+    ? 32
+    : Math.max(16, 32 - ((briefLen - 500) / 2000) * 16);
 
   const hoverAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
@@ -1669,11 +1680,12 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                       onToggleMotionDuration?.();
                     }}
                     disabled={!onToggleMotionDuration || hasRefMedia}
-                    title={hasRefMedia ? "Duration is taken from your reference video/audio" : "Toggle duration"}
+                    title={motionCostLabel}
                   >
                     <span className="studio-pill-main">
                       {hasRefMedia ? `${Math.round(refSeconds || 5)}s` : `${motionDurationSec}s`}
                     </span>
+                    <span className="studio-pill-sub">{motionCostLabel}</span>
                   </button>
 
                   {/* Movement style */}
@@ -1775,7 +1787,18 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
             </div>
           </div>
 
-          {/* no extra cost UI here (duration pill is the only indicator) */}
+          {/* Session cost bar */}
+          {isMotion && typeof sessionMatchasSpent === "number" && sessionMatchasSpent > 0 ? (
+            <div className="studio-session-cost">
+              <span className="studio-session-cost-label">Session</span>
+              <span className="studio-session-cost-value">{sessionMatchasSpent} matchas</span>
+              {sessionStartTime ? (
+                <span className="studio-session-cost-time">
+                  {new Date(sessionStartTime).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Textarea */}
           <div className="studio-brief-block">
@@ -1783,7 +1806,8 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
               <textarea
                 ref={briefInputRef}
                 className="studio-brief-input"
-                maxLength={1000}
+                maxLength={2500}
+                style={{ fontSize: `${briefFontSize}px` }}
                 placeholder={
                   isMotion ? "Describe the motion, the sound and the scene" : "Describe how you want your image"
                 }

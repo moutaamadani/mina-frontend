@@ -564,6 +564,10 @@ const MinaApp: React.FC<MinaAppProps> = () => {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState("Mina Studio session");
 
+  // Session cost tracking
+  const [sessionMatchasSpent, setSessionMatchasSpent] = useState(0);
+  const sessionStartTimeRef = useRef(new Date().toISOString());
+
   // =====================
   // Health / credits / loading
   // =====================
@@ -2154,6 +2158,19 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
 
     const parsed = Number(resp.balance);
     const prevBalance = creditsCacheRef.current[currentPassId || ""]?.balance ?? credits?.balance;
+
+    // Track session cost from explicit cost field or balance diff
+    const costFromResp = Number(resp.cost);
+    if (Number.isFinite(costFromResp) && costFromResp > 0) {
+      setSessionMatchasSpent((prev) => prev + costFromResp);
+    } else if (
+      Number.isFinite(parsed) &&
+      typeof prevBalance === "number" &&
+      Number.isFinite(prevBalance) &&
+      prevBalance > parsed
+    ) {
+      setSessionMatchasSpent((prev) => prev + (prevBalance - parsed));
+    }
 
     const looksValid = Number.isFinite(parsed) && parsed >= 0;
 
@@ -6233,6 +6250,8 @@ const headerOverlayClass =
               onToggleMotionDuration={() =>
                 setMotionDurationSec((v) => (v === 5 ? 10 : v === 10 ? 15 : 5))
               }
+              sessionMatchasSpent={sessionMatchasSpent}
+              sessionStartTime={sessionStartTimeRef.current}
               imageCreditsOk={imageCreditsOk}
               matchaUrl={MATCHA_URL}
               matcha5000Url={MATCHA_5000_URL}
