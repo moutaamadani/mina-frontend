@@ -892,12 +892,6 @@ export default function Profile({
     // Only if already in select mode (at least one card confirmed)
     if (!isSelectMode) return;
 
-    // Don't hijack text-selectable elements (prompt text, detail rows, etc.)
-    const tag = (e.target as HTMLElement).tagName.toLowerCase();
-    const el = e.target as HTMLElement;
-    if (tag === "button" || tag === "input" || tag === "a" || tag === "textarea") return;
-    if (el.closest(".profile-card-prompt, .profile-card-details")) return;
-
     // Don't start drag immediately — wait for movement (threshold in mousemove)
     dragState.current = {
       active: false,
@@ -1993,6 +1987,7 @@ const openPrompt = useCallback((id: string) => {
         <div
           ref={gridRef}
           className="profile-grid"
+          style={isSelectMode ? { userSelect: "none" } : undefined}
           onMouseDown={onGridMouseDown}
           onMouseMove={onGridMouseMove}
           onMouseUp={onGridMouseUp}
