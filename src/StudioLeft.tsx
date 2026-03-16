@@ -1661,7 +1661,7 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
                     style={pillBaseStyle(1)}
                     onClick={onToggleVideoLane}
                     aria-label="Toggle video lane"
-                    title={videoLane === "story" ? "Story mode – always uses O3" : "Short mode – V3 for single image, O3 for multi"}
+                    title={videoLane === "story" ? "Story mode – cinematic multi-frame" : "Short mode – quick single or multi-frame"}
                   >
                     <span className="studio-pill-main">{videoLane === "story" ? "Story" : "Short"}</span>
                   </button>
