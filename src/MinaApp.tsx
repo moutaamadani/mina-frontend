@@ -1132,44 +1132,37 @@ const frame2Kind = frame2Item?.mediaType || inferMediaTypeFromUrl(frame2Url) || 
   // Matcha rules
   // - Still niche:    2
   // - Still main:     1
-  // - Motion(video):  5s => 10, 10s => 20, 15s => 30
+  // - Motion(video):  1 second = 2 matchas
   // ==========================
   const imageCost = stillLane === "niche" ? 2 : 1;
-  const roundUpTo5 = (sec: number) => Math.max(5, Math.ceil(sec / 5) * 5);
-  const roundUpTo10Per5s = (sec: number) => Math.max(10, Math.ceil(sec / 5) * 10);
+  const matchasPerSec = 2;
 
   const frame2Duration = Number(frame2Item?.durationSec || 0);
 
   const videoSecRaw = hasFrame2Video ? Math.min(30, Math.max(0, frame2Duration || 0)) : 0;
   const audioSecRaw = hasFrame2Audio ? Math.min(60, Math.max(0, frame2Duration || 0)) : 0;
 
-  // normalize float metadata (e.g. 5.04s) to avoid accidental extra 5s billing block
+  // normalize float metadata (e.g. 5.04s) to avoid fractional billing
   const videoSec = hasFrame2Video ? Math.min(30, Math.max(3, Math.round(videoSecRaw || 5))) : 0;
   const audioSec = hasFrame2Audio ? Math.min(60, Math.max(1, Math.round(audioSecRaw || 5))) : 0;
 
-  const videoCost = hasFrame2Video ? roundUpTo10Per5s(videoSec || 5) : 0;
-  const audioCost = hasFrame2Audio ? roundUpTo10Per5s(audioSec || 5) : 0;
+  const videoCost = hasFrame2Video ? (videoSec || 5) * matchasPerSec : 0;
+  const audioCost = hasFrame2Audio ? (audioSec || 5) * matchasPerSec : 0;
 
   const motionCost = hasFrame2Video
     ? videoCost
     : hasFrame2Audio
     ? audioCost
-    : Math.max(10, Math.ceil(motionDurationSec / 5) * 10);
+    : motionDurationSec * matchasPerSec;
 
   const motionCostLabel = (() => {
     if (hasFrame2Video) {
-      const blocks = Math.ceil((videoSec || 5) / 5);
-      const cost = blocks * 10;
       const shownSec = Math.round(videoSec || 5);
-      if (blocks <= 1) return `${cost} matchas (${shownSec}s video)`;
-      return `${blocks}×10 = ${cost} matchas (${shownSec}s video)`;
+      return `${videoCost} matchas (${shownSec}s video)`;
     }
     if (hasFrame2Audio) {
-      const blocks = Math.ceil((audioSec || 5) / 5);
-      const cost = blocks * 10;
       const shownSec = Math.round(audioSec || 5);
-      if (blocks <= 1) return `${cost} matchas (${shownSec}s audio)`;
-      return `${blocks}×10 = ${cost} matchas (${shownSec}s audio)`;
+      return `${audioCost} matchas (${shownSec}s audio)`;
     }
     return `${motionCost} matchas (${motionDurationSec}s)`;
   })();

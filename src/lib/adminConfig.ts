@@ -37,7 +37,7 @@ export type AdminConfig = {
 const LS_KEY = "minaAdminConfig";
 
 export const DEFAULT_ADMIN_CONFIG: AdminConfig = {
-  pricing: { imageCost: 1, motionCost: 5 },
+  pricing: { imageCost: 1, motionCost: 10 },
   ai: { personality: { thinking: [], filler: [] } },
   styles: { movementKeywords: ["fix_camera"], presets: [] },
 };

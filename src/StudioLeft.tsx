@@ -942,9 +942,9 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
     forcedAudioSyncRef.current = true;
   }, [motionAudioLocked, onToggleMotionAudio]);
 
-  // ✅ Motion cost (5s blocks when video/audio is used)
-  const roundUpTo10Per5s = (sec: number) => Math.max(10, Math.ceil(sec / 5) * 10);
-  const MOTION_COST_BASE = Math.max(10, Math.ceil(motionDurationSec / 5) * 10);
+  // ✅ Motion cost: 1 second = 2 matchas
+  const matchasPerSec = 2;
+  const MOTION_COST_BASE = motionDurationSec * matchasPerSec;
 
   const frame2DurationSec = Number((frame2Item as any)?.durationSec || 0);
   const refSecondsRaw = hasFrame2Video
@@ -960,17 +960,14 @@ const StudioLeft: React.FC<StudioLeftProps> = (props) => {
       : Math.min(60, Math.max(1, Math.round(refSecondsRaw || 5)))
     : 0;
 
-  const MOTION_COST = hasRefMedia ? roundUpTo10Per5s(refSeconds) : MOTION_COST_BASE;
+  const MOTION_COST = hasRefMedia ? (refSeconds || 5) * matchasPerSec : MOTION_COST_BASE;
 
   const computedMotionCostLabel = (() => {
-    const blocks = Math.ceil((refSeconds || 5) / 5);
     if (hasFrame2Video) {
-      if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
-      return `${blocks}×10 = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
+      return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s video)`;
     }
     if (hasFrame2Audio) {
-      if (blocks <= 1) return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
-      return `${blocks}×10 = ${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
+      return `${MOTION_COST} matchas (${Math.round(refSeconds || 5)}s audio)`;
     }
     return `${MOTION_COST} matchas (${motionDurationSec}s)`;
   })();
